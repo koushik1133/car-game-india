@@ -193,7 +193,7 @@
     // ------ stepped "ziggurat" parapet: white merlons ~0.6 m tall, 1.2 m apart, dark grey outlines
     const PY = ROOF + 0.15;
     const runA = (b, a0, a1) => { B.box(a0, a1, PY, PY + 0.22, b - 0.08, b + 0.08, C.white); boxEdges(edges, a0, a1, PY, PY + 0.22, b - 0.09, b + 0.09); for (let a = a0 + 0.6; a < a1 - 0.3; a += 1.2) merlon(a, b, true); };
-    const runB = (a, b0, b1) => { B.box(a - 0.08, a + 0.08, PY, PY + 0.22, b0, b1, C.white); boxEdges(edges, a - 0.09, a + 0.09, PY, PY + 0.22, b0, b1); for (let b = b0 + 0.6; b < b1 - 0.3; b += 1.2) merlon(a, b, false); };
+    const runB = (a, b0, b1) => { B.box(a - 0.08, a + 0.08, PY, PY + 0.22, b0, b1, C.white); boxEdges(edges, a - 0.09, a + 0.09, PY, PY + 0.22, b0, b1); for (let b = b0 + 0.6; b < b1 - 0.3; b += 1.2) merlon(b, a, false); };   // merlon(centre along the wall, wall position)
     function merlon(c, at, axisA) {
       const steps = [[0.78, 0.22, 0.36], [0.5, 0.36, 0.5], [0.24, 0.5, 0.62]];
       for (const [w, y0, y1] of steps) {
@@ -261,14 +261,19 @@
     col(13.4, 14.4, 7.6, 10.4);
 
     // ------ plants: shrubs along the wall, bougainvillea over the east wall, a tree in the front yard
-    const ico = r => new THREE.IcosahedronGeometry(r, 1);
+    // leaf-card foliage (shared LeafCards helper from safehouse2.js) instead of smooth spheres
     let sd = 7; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
-    for (let a = 3.3; a < 15.5; a += 1.1) B.geo(ico(0.45 + rnd() * 0.25), a, 0.4, Y0 + 0.75, 0, rnd() * 3, 0, rnd() > 0.5 ? C.green : C.green2);
-    for (let b = Y0 + 0.6; b < 6.5; b += 1.0) B.geo(ico(0.5 + rnd() * 0.3), X1 - 0.6, 1.2 + rnd() * 0.6, b, 0, 0, 0, rnd() > 0.35 ? C.bougain : C.green);
-    for (let a = 21.2; a < X1; a += 0.9) B.geo(ico(0.5), a, 1.75, Y0 + 0.1, 0, 0, 0, C.bougain);
-    for (let b = 2; b < 12; b += 1.3) B.geo(ico(0.55 + rnd() * 0.3), X0 + 0.5, 0.6, b, 0, 0, 0, C.green2);
+    const FO = window.LeafCards ? window.LeafCards() : null;
+    const GL = [['#3f6b2a', 3], ['#4f7f32', 3], ['#2f5520', 2]], BOUG = GL.concat([['#c2185b', 2.2], ['#e0408a', 1.4]]);
+    if (FO) {
+      for (let a = 3.3; a < 15.5; a += 1.1) FO.blob(a, 0.4, Y0 + 0.75, 0.45, 0.4, 0.4, 50, GL.concat([['#b6c43a', 1]]), 0.28);   // shrubs along the front wall
+      for (let b = Y0 + 0.6; b < 6.5; b += 1.0) FO.blob(X1 - 0.6, 1.3 + rnd() * 0.5, b, 0.55, 0.6, 0.6, 70, BOUG, 0.3);            // bougainvillea over the east wall
+      for (let a = 21.2; a < X1; a += 0.9) FO.blob(a, 1.75, Y0 + 0.1, 0.5, 0.35, 0.45, 50, BOUG, 0.28);
+      for (let b = 2; b < 12; b += 1.3) FO.blob(X0 + 0.5, 0.6, b, 0.6, 0.55, 0.6, 50, GL, 0.3);
+      FO.blob(-0.4, 3.0, Y0 + 1.0, 1.4, 1.1, 1.4, 260, GL, 0.42);                                                                   // front-yard tree canopy
+      root.add(FO.mesh());
+    }
     B.geo(new THREE.CylinderGeometry(0.12, 0.16, 2.6, 8), -0.5 + 0.1, 1.3, Y0 + 1.0, 0, 0, 0, '#5b4630');
-    B.geo(ico(1.3), -0.4, 3.0, Y0 + 1.0, 0, 0, 0, C.green);
     // drain cover slabs outside the front wall + open drain stretch (the lane's own drain is drawn by the world)
     B.box(X0, X1, -0.05, 0.02, Y0 - 1.0, Y0 - 0.5, '#5d5a52');
 

@@ -685,20 +685,32 @@ const Player = (function () {
       R.py = gy + h; R.pyv = 0; R.dist = dist; R.dv = 0; R.lx = px.x; R.lz = px.z; R.vx = R.vz = 0;
     }
     R.idle += dt;
-    // smoothed travel velocity from the final positions
-    if (dt > 0) { const k = 1 - Math.exp(-dt * 10); R.vx += ((px.x - R.lx) / dt - R.vx) * k; R.vz += ((px.z - R.lz) / dt - R.vz) * k; }
+    // travel velocity: the Crysta's physics velocity directly; other vehicles from the final positions (smoothed,
+    // and reset on a teleport / respawn so a jump never swings the view)
+    if (mode === 'crysta' && typeof vel !== 'undefined') { R.vx = vel.x; R.vz = vel.z; }
+    else if (dt > 0) {
+      const ix = (px.x - R.lx) / dt, iz = (px.z - R.lz) / dt;
+      if (Math.hypot(px.x - R.lx, px.z - R.lz) > 15) { R.vx = R.vz = 0; }
+      else { const k = 1 - Math.exp(-dt * 12); R.vx += (ix - R.vx) * k; R.vz += (iz - R.vz) * k; }
+    }
     R.lx = px.x; R.lz = px.z;
     const spd = Math.hypot(R.vx, R.vz);
     if (typeof R.ret === 'number') {                                           // Alt released: swing back
       [R.yaw, R.yv] = spring(R.yaw, R.yv, R.yaw + wrap(R.ret - R.yaw), 14, dt);
       if (Math.abs(wrap(R.ret - R.yaw)) < 0.01) { R.yaw = R.ret; R.ret = false; R.yv = 0; }
-    } else if (mode !== 'foot' && R.idle > 1.5 && R.ptrs.size === 0) {
-      // ease back behind the direction of travel; reversing / crawling keeps the current angle (no swing)
+    } else if (mode !== 'foot' && R.idle > 1.0 && R.ptrs.size === 0) {
+      // follow behind the direction of travel (velocity, so a drift shows the slide) with a slight, constant lag:
+      // steady-state lag of a critically damped spring = 2 * turn rate / w, i.e. ~6 deg at 30 deg/s.
+      // Reversing / crawling keeps the current angle (no swing). The pull fades in over 0.6 s after mouse input.
       const fx = Math.sin(carRot), fz = Math.cos(carRot), fwdV = R.vx * fx + R.vz * fz;
-      if (fwdV > 1.5) {
-        const tgt = spd > 4 ? Math.atan2(R.vx, R.vz) : carRot, w = 2.2 + Math.min(2.5, spd * 0.08);
+      const ease = Math.min(1, (R.idle - 1.0) / 0.6);
+      if (fwdV > 1.0) {
+        // heading at walking pace, velocity direction once moving; a slide is followed up to 50 deg off the nose
+        const a = Math.min(1, Math.max(0, (spd - 2) / 4));
+        const slip = THREE.MathUtils.clamp(wrap(Math.atan2(R.vx, R.vz) - carRot), -0.87, 0.87);
+        const tgt = carRot + slip * a, w = (7 + Math.min(3, spd * 0.12)) * ease;
         [R.yaw, R.yv] = spring(R.yaw, R.yv, R.yaw + wrap(tgt - R.yaw), w, dt);
-        [R.pitch, R.pv] = spring(R.pitch, R.pv, 0.2, w, dt);
+        [R.pitch, R.pv] = spring(R.pitch, R.pv, 0.2, w * 0.6, dt);
       } else { R.yv *= Math.exp(-dt * 8); R.pv *= Math.exp(-dt * 8); }
     }
     R.yaw = wrap(R.yaw);
