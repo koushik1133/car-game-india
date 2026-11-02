@@ -5,9 +5,9 @@
 (function () {
   const KEY = 'nellutla.quality';
   const TIERS = {
-    low:    { name: 'Low',    pixelRatio: 1,   shadows: false, shadowSize: 512,  fogNear: 120, fogFar: 520,  camFar: 650,  peopleFrac: 0.35, antialias: false },
-    medium: { name: 'Medium', pixelRatio: 1.5, shadows: true,  shadowSize: 1024, fogNear: 200, fogFar: 1100, camFar: 2200, peopleFrac: 0.7,  antialias: true },
-    high:   { name: 'High',   pixelRatio: 2,   shadows: true,  shadowSize: 2048, fogNear: 250, fogFar: 1700, camFar: 6000, peopleFrac: 1,    antialias: true },
+    low:    { name: 'Low',    pixelRatio: 1,   shadows: false, shadowSize: 512,  fogNear: 120, fogFar: 520,  camFar: 650,  peopleFrac: 0.35, antialias: false, fps: 30 },
+    medium: { name: 'Medium', pixelRatio: 1,   shadows: true,  shadowSize: 1024, fogNear: 200, fogFar: 1000, camFar: 1600, peopleFrac: 0.6,  antialias: true,  fps: 60 },
+    high:   { name: 'High',   pixelRatio: 1.5, shadows: true,  shadowSize: 2048, fogNear: 250, fogFar: 1500, camFar: 3000, peopleFrac: 1,    antialias: true,  fps: 60 },
   };
   const ORDER = ['low', 'medium', 'high'];
   const isTouch = window.Device ? Device.isMobile : ((matchMedia && matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0);
@@ -17,6 +17,7 @@
     if (isTouch && minSide < 600) return 'low';                       // phones
     if (mem <= 2 || cores <= 2) return 'low';
     if (isTouch || mem <= 4 || cores <= 4) return 'medium';            // tablets, low-end laptops
+    if (/Mac/.test(navigator.platform || navigator.userAgent) && (devicePixelRatio || 1) >= 2) return 'medium';   // Retina laptops: keeps them cool
     return 'high';
   }
   let saved = null; try { saved = localStorage.getItem(KEY); } catch (e) {}
@@ -27,6 +28,10 @@
     TIERS, isTouch, mode, get tier() { return tier; }, detected: detect(),
     initial: { antialias: TIERS[tier].antialias, pixelRatio: Math.min(devicePixelRatio || 1, TIERS[tier].pixelRatio) },
     applied: {}, ctx: null, frameMs: 0, onChange: [],
+    // frame-rate cap: tier default, or 30 when Battery saver is on (saved separately)
+    get fpsCap() { let b = false; try { b = localStorage.getItem('nellutla.battery') === '1'; } catch (e) {} return b ? 30 : (TIERS[tier].fps || 60); },
+    setBattery(on) { try { localStorage.setItem('nellutla.battery', on ? '1' : '0'); } catch (e) {} },
+    get battery() { try { return localStorage.getItem('nellutla.battery') === '1'; } catch (e) { return false; } },
   };
   const aaAtStart = Q.initial.antialias;
 

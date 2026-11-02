@@ -224,6 +224,7 @@
   <div>Graphics quality</div>
   <div class="seg" id="qSeg"><button data-q="auto">Auto</button><button data-q="low">Low</button><button data-q="medium">Medium</button><button data-q="high">High</button></div>
   <div class="muted" id="qInfo"></div>
+  <label style="display:flex;gap:8px;align-items:center;margin-top:10px;cursor:pointer"><input type="checkbox" id="batterySaver"> Battery saver (30 fps, keeps the laptop cool)</label>
   <div style="margin-top:12px">Controls <span class="muted" id="devInfo"></span></div>
   <div class="seg" id="ctrlSeg"><button data-c="auto">Auto</button><button data-c="touch">Touch</button><button data-c="keyboard">Keyboard</button></div>
   <div class="touch-only" style="display:none;flex-direction:column;margin-top:12px">Touch steering
@@ -285,29 +286,29 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>window.NELLUTLA_EXCLUDE = window.NELLUTLA_EXCLUDE || [];   // [{x, z, r}]: buildings whose centre is inside are skipped (custom-modelled by a feature module)</script>
-<script src="../nellutla-map/map-data.js?v=1793650446"></script>
-<script src="../nellutla-map/nellutla-world.js?v=1793650446"></script>
+<script src="../nellutla-map/map-data.js?v=1793659491"></script>
+<script src="../nellutla-map/nellutla-world.js?v=1793659491"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-<script src="crysta-body.js?v=1793650446"></script>
-<script src="crysta-detail.js?v=1793650446"></script>
-<script src="crysta.js?v=1793650446"></script>
-<script src="device.js?v=1793653556"></script>
-<script src="quality.js?v=1793653556"></script>
-<script src="ambient.js?v=1793650446"></script>
-<script src="engine-audio.js?v=1793650446"></script>
-<script src="traffic-models.js?v=1793650446"></script>
-<script src="glb-car.js?v=1793650446"></script>
-<script src="multiplayer/mp.js?v=1793650446"></script>
-<script src="people-models.js?v=1793650446"></script>
-<script src="player.js?v=1793650446"></script>
+<script src="crysta-body.js?v=1793659491"></script>
+<script src="crysta-detail.js?v=1793659491"></script>
+<script src="crysta.js?v=1793659491"></script>
+<script src="device.js?v=1793659491"></script>
+<script src="quality.js?v=1793659491"></script>
+<script src="ambient.js?v=1793659491"></script>
+<script src="engine-audio.js?v=1793659491"></script>
+<script src="traffic-models.js?v=1793659491"></script>
+<script src="glb-car.js?v=1793659491"></script>
+<script src="multiplayer/mp.js?v=1793659491"></script>
+<script src="people-models.js?v=1793659491"></script>
+<script src="player.js?v=1793659491"></script>
 <!-- Feature modules. Each registers itself on GameHooks (init/update/key) and owns its own file. -->
 <script>window.GameHooks = { init: [], update: [], key: [] };</script>
-<script src="parked.js?v=1793650446"></script>
-<script src="character-creator.js?v=1793650446"></script>
-<script src="properties.js?v=1793650446"></script>
-<script src="safehouse.js?v=1793657508"></script>
-<script src="touch-controls.js?v=1793653556"></script>
-<script src="auto-rides.js?v=1793660000"></script>
+<script src="parked.js?v=1793659491"></script>
+<script src="character-creator.js?v=1793659491"></script>
+<script src="properties.js?v=1793659491"></script>
+<script src="safehouse.js?v=1793659491"></script>
+<script src="touch-controls.js?v=1793659491"></script>
+<script src="auto-rides.js?v=1793659491"></script>
 <script>
 // ---------------------------------------------------------------- scene
 // antialias and the pixel-ratio cap come from the performance tier (quality.js)
@@ -495,7 +496,11 @@ function updateTraffic(dt) {
     const off = Math.min(2.2, t.r.w / 4);           // keep left
     { const gx = x + Math.cos(rot) * off, gz = z - Math.sin(rot) * off; t.g.position.set(gx, groundY(gx, gz), gz); }
     t.g.rotation.y += Math.atan2(Math.sin(rot - t.g.rotation.y), Math.cos(rot - t.g.rotation.y)) * Math.min(1, dt * 6);
-    for (const w of t.wheels) w.rotation.x += t.cur * dt / t.wheelR;
+    const farAway = Math.abs(t.g.position.x - camera.position.x) + Math.abs(t.g.position.z - camera.position.z) > 600;
+    t.g.visible = !farAway;                                                   // far traffic isn't drawn (or shadowed)
+    const near = !farAway && Math.abs(t.g.position.x - camera.position.x) + Math.abs(t.g.position.z - camera.position.z) < 160;
+    if (t._peopleShown !== near) { t._peopleShown = near; t.g.children.forEach(c => { if (c.userData && c.userData.human) c.visible = near; }); }   // drivers/passengers only up close
+    if (!farAway) for (const w of t.wheels) w.rotation.x += t.cur * dt / t.wheelR;
     if (t.night !== night) {
       t.night = night;
       t.head.forEach(m => m.material.color.setHex(night ? 0xfff2c0 : 0x777766));
@@ -855,6 +860,7 @@ function toggleSettings(on) {
 }
 function renderSettings() {
   setEl.querySelectorAll('#qSeg button').forEach(b => b.classList.toggle('on', b.dataset.q === Quality.mode));
+  document.getElementById('batterySaver').checked = Quality.battery;
   setEl.querySelectorAll('#steerSeg button').forEach(b => b.classList.toggle('on', b.dataset.s === TouchControls.steerMode));
   let cm = 'auto'; try { cm = localStorage.getItem('nellutla.controls') || 'auto'; } catch (e) {}
   setEl.querySelectorAll('#ctrlSeg button').forEach(b => b.classList.toggle('on', b.dataset.c === cm));
@@ -866,6 +872,7 @@ function renderSettings() {
 document.getElementById('btnHelp').addEventListener('click', e => { e.stopPropagation(); toggleHelp(); e.currentTarget.blur(); });
 document.getElementById('btnSettings').addEventListener('click', e => { e.stopPropagation(); toggleSettings(); e.currentTarget.blur(); });
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => { toggleHelp(false); toggleSettings(false); }));
+document.getElementById('batterySaver').addEventListener('change', e => { Quality.setBattery(e.target.checked); renderSettings(); });
 document.getElementById('qSeg').addEventListener('click', e => { const q = e.target.closest('button'); if (q) { Quality.set(q.dataset.q); renderSettings(); } });
 document.getElementById('ctrlSeg').addEventListener('click', e => { const q = e.target.closest('button'); if (q) Device.setControls(q.dataset.c === 'auto' ? null : q.dataset.c); });
 document.getElementById('steerSeg').addEventListener('click', e => { const q = e.target.closest('button'); if (q) { TouchControls.setSteerMode(q.dataset.s); renderSettings(); } });
@@ -936,8 +943,13 @@ const GAME = { scene, world, camera, renderer, traffic, get carPos() { return ca
   get cash() { return cash; }, set cash(v) { if (typeof v === 'number' && isFinite(v)) cash = Math.round(v); }, get playerMode() { return Player.mode; } };
 window.GAME = GAME;
 GameHooks.init.forEach(f => { try { f(GAME); } catch (e) { console.error('feature init failed', e); } });
-(function loop() {
+let lastFrameAt = 0;
+(function loop(now) {
   requestAnimationFrame(loop);
+  // frame-rate cap (60, or 30 on Low / Battery saver): 120 Hz screens and laptops don't render twice as much for nothing
+  const cap = (window.Quality && Quality.fpsCap) || 60;
+  if (now && now - lastFrameAt < 1000 / cap - 2) return;
+  lastFrameAt = now || performance.now();
   const dt = Math.min(0.05, clock.getDelta());
   if (isPlaying) {
     if (Player.mode === 'crysta') { updatePhysics(dt); Player.crystaCollide(); } else { pollGamepad(); Player.update(dt); }

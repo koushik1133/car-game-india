@@ -516,5 +516,54 @@ const TrafficModels = (function () {
     person(k, 0, 1.1, 0.45, { outfit: 'lungi', color: 0xffffff }, 'bench');
     return { g: k.g, wheels: k.wheels, head: k.head, tail: k.tail, len: 4.5, kind: 'cart' };
   }
-  return { auto, bike, hatch, suv, tractor, lorry, bus, bullockCart };
+  // ---------------------------------------------------------------- performance: merge static parts
+  // A vehicle is built from ~100 small meshes; 52 of them were 5,000+ draw calls (twice, with the shadow pass).
+  // Merge every static mesh into one mesh per material. Wheels (spin), head/tail lamps (colour changes) and
+  // seated people (carjacking) stay separate objects so the game can still animate them.
+  const _inv = new THREE.Matrix4(), _m = new THREE.Matrix4();
+  // merge static meshes under `root` (skipping anything in `keep` or inside a seated person) into one mesh per material
+  function mergeUnder(root, keep) {
+    root.updateMatrixWorld(true); _inv.copy(root.matrixWorld).invert();
+    const buckets = new Map(), victims = [];
+    root.traverse(o => {
+      if (!o.isMesh || Array.isArray(o.material) || o.isInstancedMesh) return;
+      for (let q = o; q && q !== root; q = q.parent) if (keep.has(q) || (q.userData && q.userData.human)) return;
+      const geo = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone());
+      geo.applyMatrix4(_m.multiplyMatrices(_inv, o.matrixWorld));
+      const b = buckets.get(o.material) || buckets.set(o.material, { geos: [], shadow: false }).get(o.material);
+      b.geos.push(geo); b.shadow = b.shadow || o.castShadow; victims.push(o);
+    });
+    if (victims.length < 2) { victims.length = 0; return; }
+    for (const o of victims) o.parent.remove(o);
+    for (const [mat, b] of buckets) {
+      const names = ['position', 'normal', 'uv', 'color'].filter(n => b.geos.some(g => g.attributes[n]));
+      const total = b.geos.reduce((s2, g) => s2 + g.attributes.position.count, 0);
+      const out = new THREE.BufferGeometry();
+      for (const n of names) {
+        const size = n === 'uv' ? 2 : 3, arr = new Float32Array(total * size); let off = 0;
+        for (const g of b.geos) {
+          const at = g.attributes[n], c = g.attributes.position.count;
+          if (at) arr.set(at.array.subarray(0, c * size), off * size);
+          else if (n === 'color') arr.fill(1, off * size, (off + c) * size);
+          off += c;
+        }
+        out.setAttribute(n, new THREE.BufferAttribute(arr, size));
+      }
+      if (!out.attributes.normal) out.computeVertexNormals();
+      out.computeBoundingSphere();
+      const mesh = new THREE.Mesh(out, mat); mesh.castShadow = b.shadow; mesh.receiveShadow = true;
+      root.add(mesh);
+      b.geos.forEach(g => g.dispose());
+    }
+  }
+  function bake(v) {
+    const lamps = new Set([...(v.head || []), ...(v.tail || [])]);
+    mergeUnder(v.g, new Set([...(v.wheels || []), ...lamps]));          // body: everything static
+    for (const w of v.wheels || []) mergeUnder(w, lamps);               // each wheel spins as one piece
+    // seated people are small: no shadows from them (their joints stay intact for carjacking)
+    v.g.children.forEach(c => { if (c.userData && c.userData.human) c.traverse(o => { if (o.isMesh) o.castShadow = false; }); });
+    return v;
+  }
+  const baked = f => (...args) => bake(f(...args));
+  return { auto: baked(auto), bike: baked(bike), hatch: baked(hatch), suv: baked(suv), tractor: baked(tractor), lorry: baked(lorry), bus: baked(bus), bullockCart: baked(bullockCart), bake };
 })();

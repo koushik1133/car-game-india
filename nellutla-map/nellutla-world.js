@@ -1256,13 +1256,17 @@
       for (let i = 0; i < n; i++) {
         const a = p[i], d = p[(i+1)%n], ex = d[0]-a[0], ez = d[1]-a[1], el = Math.hypot(ex, ez) || 1;
         let nx = ez/el, nz = -ex/el;
-        if (inside([(a[0]+d[0])/2 + nx*0.3, (a[1]+d[1])/2 + nz*0.3], p)) { nx = -nx; nz = -nz; }
+        let flip = false;
+        if (inside([(a[0]+d[0])/2 + nx*0.3, (a[1]+d[1])/2 + nz*0.3], p)) { nx = -nx; nz = -nz; flip = true; }
         const r = hash(a[0], a[1]);
         let vIdx = r < 0.45 ? 0 : r < 0.62 ? 1 : r < 0.82 ? 2 : 3;     // window, door, blank, ventilator
         if (shop && el > 2.5 && r < 0.6) vIdx = 4;                       // rolling-shutter shops on main roads
         if (b.r === 'sheet' || b.a > 600) vIdx = 2;
         const u = Math.max(1, Math.round(el / 3.2));
-        wallB[vIdx].quad([a[0],0,a[1]],[d[0],0,d[1]],[d[0],h,d[1]],[a[0],h,a[1]],[nx,0,nz],[[0,0],[u,0],[u,h/3.2],[0,h/3.2]],c);
+        // u must run left-to-right as seen from outside, or shop boards read in mirror writing:
+        // with the unflipped normal, a->d runs to the viewer's left, so the texture is reversed there
+        const uvs = flip ? [[0,0],[u,0],[u,h/3.2],[0,h/3.2]] : [[u,0],[0,0],[0,h/3.2],[u,h/3.2]];
+        wallB[vIdx].quad([a[0],0,a[1]],[d[0],0,d[1]],[d[0],h,d[1]],[a[0],h,a[1]],[nx,0,nz],uvs,c);
         segs.push([a[0], a[1], d[0], d[1]]);
         EI.push({ a, d, nx, nz, el, vIdx, u });
         // window surrounds, door frames and a door step, aligned with the facade texture

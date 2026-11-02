@@ -448,6 +448,8 @@ function updateCarAnimations(dt) {
 // ======================================================================
 function updateCamera(dt) {
   if (!playerCarGroup) return;
+  // PUBG-style chase rig shared with every other vehicle and on foot (player.js)
+  if (typeof isPlaying !== 'undefined' && isPlaying && typeof Player !== 'undefined' && Player.crystaRig && Player.crystaRig(dt)) return;
 
   if (cameraIndex === 0) {
     // chase cam: follows a smoothed heading (not the raw body yaw), so steering wobble and collision

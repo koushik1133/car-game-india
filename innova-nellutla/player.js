@@ -119,12 +119,49 @@ const Player = (function () {
   function setTail(v, on) { v.tail.forEach(m => m.material.color.setHex(on ? 0xff1a1a : 0x661111)); }
 
   // ---------------------------------------------------------------- get in / out
-  function exitTo(rot, hw) {
-    // stand beside the driver's door: right-hand drive, so the right of the heading
-    const rx = -Math.cos(rot), rz = Math.sin(rot), off = hw + 0.7;
-    carPos.set(carPos.x + rx * off, 0, carPos.z + rz * off);
-    const p = { x: carPos.x, z: carPos.z }; world.collide(p, 0.35); carPos.x = p.x; carPos.z = p.z;
-    carRot = rot; carSpeed = 0; ped.y = 0; ped.vy = 0;
+  // a spot where the walker (radius WALK_R) can stand: no wall within reach, not in a building footprint, not
+  // in any vehicle, and reachable from the vehicle without crossing a wall (so never the far side of a compound wall)
+  const WALK_R = 0.4;
+  function vehicleAt(x, z, r, skip) {
+    for (const v of parked) if (v !== skip && v.g && axisDist(x, z, v).d < v.hw + r) return v;
+    for (const v of traffic) if (v !== skip && v.g && v.hw && axisDist(x, z, v).d < v.hw + r) return v;
+    const P = window.Parked && Parked.vehicles;
+    if (P) for (const it of P) { if (it.claimed || Math.abs(it.x - x) > 8 || Math.abs(it.z - z) > 8) continue; if (pkDist(x, z, it) < r) return it; }
+    return null;
+  }
+  function spotFree(x, z, fx, fz, skip) {
+    const q = { x, z }, c = world.collide(q, WALK_R);
+    if (c && c.hit) return false;
+    if (world.insideBuilding && world.insideBuilding(x, z, 0.25)) return false;
+    if (vehicleAt(x, z, WALK_R, skip)) return false;
+    // line of sight from the seat to the spot: no wall segment or building edge in between
+    const L = Math.hypot(x - fx, z - fz), n = Math.max(2, Math.ceil(L / 0.2));
+    for (let i = 1; i < n; i++) {
+      const k = i / n, s2 = { x: fx + (x - fx) * k, z: fz + (z - fz) * k }, c2 = world.collide(s2, 0.06);
+      if (c2 && c2.hit) return false;
+      if (world.insideBuilding && world.insideBuilding(s2.x, s2.z, 0)) return false;
+    }
+    return true;
+  }
+  // GTA order: driver door (right-hand drive = right side), passenger door, behind, in front, then hop over
+  // the roof / slide out further away. null = nowhere to stand.
+  function findExit(cx, cz, rot, hw, len, self) {
+    const f = fwdOf(rot), rt = { x: -Math.cos(rot), z: Math.sin(rot) }, side = hw + WALK_R + 0.2, end = len / 2 + WALK_R + 0.25;
+    const C = [];
+    for (const sd of [1, -1]) for (const t of [0, -0.6, 0.6, -1.2]) C.push([sd * side, t]);
+    for (const t of [-end, end]) for (const l of [0, 0.6, -0.6]) C.push([l, t]);
+    for (const sd of [1, -1]) for (const t of [0, -0.8, 0.8]) C.push([sd * (side + 1.0), t]);   // roof-hop / further out
+    for (const [l, t] of C) {
+      const x = cx + rt.x * l + f.x * t, z = cz + rt.z * l + f.z * t;
+      if (Math.abs(t) > 0.01 && Math.abs(l) > 0.01 && Math.abs(t) > len / 2) continue;
+      if (spotFree(x, z, cx, cz, self)) return { x, z };
+    }
+    return null;
+  }
+  function exitTo(rot, spot) {
+    carPos.set(spot.x, 0, spot.z);
+    carRot = rot; ped.dir = rot; carSpeed = 0; ped.vy = 0; ped.air = false; ped.jumpHeld = true;
+    ped.y = groundAt(spot.x, spot.z); lastSafe.x = spot.x; lastSafe.z = spot.z;
     unseatBody();
     mode = 'foot'; body.visible = true; isReversing = false; currentGear = '-'; engineRPM = 800;
     camSnap = true;
@@ -134,37 +171,82 @@ const Player = (function () {
     if (mode === 'passenger') { const v = active; if (passengerExit) passengerExit(v); leavePassenger(); return; }
     if (Math.abs(carSpeed) > 15) { showComboPopup('SLOW DOWN TO GET OUT'); return; }
     if (mode === 'crysta') {
+      const spot = findExit(playerCarGroup.position.x, playerCarGroup.position.z, carRot, CRYSTA_HW, CRYSTA_LEN, null);
+      if (!spot) { showComboPopup('NO SPACE TO GET OUT'); return; }
       crystaState.rot = carRot; vel.x = vel.z = 0; yawRate = 0;
       const c = { g: playerCarGroup, len: CRYSTA_LEN, hw: CRYSTA_HW, crysta: true };
       parked.push(c); lastLeft = c;
-      exitTo(carRot, CRYSTA_HW);
+      exitTo(carRot, spot);
     } else {
-      setTail(active, false);
-      active.g.rotation.z = 0;
-      parked.push(active); const v = active; active = null; lastLeft = v;
-      exitTo(v.g.rotation.y, v.hw);
+      const v = active, spot = findExit(v.g.position.x, v.g.position.z, v.g.rotation.y, v.hw, v.len || 4, v);
+      if (!spot) { showComboPopup('NO SPACE TO GET OUT'); return; }
+      setTail(v, false);
+      v.g.rotation.z = 0;
+      parked.push(v); active = null; lastLeft = v;
+      exitTo(v.g.rotation.y, spot);
     }
     setHud();
   }
-  // candidates within ~3 m of their body; the one you face wins, and the vehicle you just left only wins when
-  // nothing else is close (so stepping out of the Crysta next to a bike and pressing F takes the bike)
+  // parked.js instanced vehicles (not yet in any list): distance from a point to their body
+  function pkDist(x, z, it) {
+    const fx = Math.sin(it.rot), fz = Math.cos(it.rot), half = Math.max(0, it.hl - it.hw);
+    const t = THREE.MathUtils.clamp((x - it.x) * fx + (z - it.z) * fz, -half, half);
+    return Math.hypot(x - it.x - fx * t, z - it.z - fz * t) - it.hw;
+  }
+  // ONE candidate search for both the on-screen hint and F: Player's parked list (Crysta, vehicles you left,
+  // property garages), traffic (carjack) and parked.js's instanced vehicles. Anything within PICK_R of its
+  // body counts; the one you face wins, the vehicle you just left only when nothing else is close.
+  const PICK_R = 2.5;
   function pickVehicle() {
     let best = null;
     const fx = Math.sin(carRot), fz = Math.cos(carRot);
-    const consider = (v, list) => {
-      const a = axisDist(carPos.x, carPos.z, v), d = a.d - v.hw; if (d > 3) return;
-      const dx = a.cx - carPos.x, dz = a.cz - carPos.z, n = Math.hypot(dx, dz) || 1;
+    const score = (d, cx, cz, extra) => {
+      const dx = cx - carPos.x, dz = cz - carPos.z, n = Math.hypot(dx, dz) || 1;
       const facing = (dx * fx + dz * fz) / n;                 // 1 = straight ahead, -1 = behind
-      const score = Math.max(0, d) + (1 - facing) * 0.6 + (v === lastLeft ? 1.2 : 0);
-      if (!best || score < best.score) best = { v, d, list, score };
+      return Math.max(0, d) + (1 - facing) * 0.6 + extra;
+    };
+    const consider = (v, list) => {
+      if (!v || !v.g) return;
+      const a = axisDist(carPos.x, carPos.z, v), d = a.d - v.hw; if (d > PICK_R) return;
+      const sc = score(d, a.cx, a.cz, v === lastLeft ? 1.2 : 0);
+      if (!best || sc < best.score) best = { v, d, list, score: sc };
     };
     parked.forEach(v => consider(v, parked));
-    traffic.forEach(t => { if (!t.hw) t.hw = (PARAMS[t.model] || PARAMS.hatch).hw; if (t.noJack) return; consider(t, traffic); });
+    traffic.forEach(t => { if (!t.g) return; if (!t.hw) t.hw = (PARAMS[t.model] || PARAMS.hatch).hw; if (t.noJack) return; consider(t, traffic); });
+    // parked.js claims its own nearest item by plain distance on F, so rank those by plain distance (+ a
+    // constant): whichever of them wins here is exactly the one parked.js hands over
+    const P = window.Parked && Parked.vehicles;
+    if (P) {
+      let pb = null;
+      for (const it of P) { if (it.claimed || Math.abs(it.x - carPos.x) > 12 || Math.abs(it.z - carPos.z) > 12) continue;
+        const d = pkDist(carPos.x, carPos.z, it); if (d < PICK_R && (!pb || d < pb.d)) pb = { it, d }; }
+      if (pb) { const sc = Math.max(0, pb.d) + 0.3; if (!best || sc < best.score) best = { v: null, pk: pb.it, d: pb.d, list: null, score: sc }; }
+    }
     return best;
   }
+  // parked.js's F hook turns the instanced vehicle into a traffic item; find it (or run the hooks ourselves when
+  // F came from the gamepad / another path that skipped them)
+  function claimedParked(it) {
+    const find = () => traffic.find(t => t.parked && t.g && Math.abs(t.g.position.x - it.x) < 0.01 && Math.abs(t.g.position.z - it.z) < 0.01);
+    let t = find();
+    if (!t && typeof GameHooks !== 'undefined') {
+      const e = { code: 'KeyF', key: 'f', repeat: false, shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, preventDefault() {}, stopPropagation() {} };
+      for (const f of GameHooks.key) { try { f(e, window.GAME); } catch (err) {} }
+      t = find();
+    }
+    return t;
+  }
+  let hintPick = null, hintAt = 0;
   function getIn() {
-    const best = pickVehicle();
-    if (!best) { showComboPopup('NO VEHICLE NEARBY'); return; }
+    let best = pickVehicle();
+    // the hint said a vehicle was there a moment ago: honour it (the player only shuffled a few cm since)
+    if (!best && hintPick && performance.now() - hintAt < 1000) best = hintPick;
+    if (best && best.pk) {
+      const t = claimedParked(best.pk);
+      best = t ? { v: t, list: traffic } : null;
+    }
+    if (!best || !best.v) { showComboPopup('NO VEHICLE NEARBY'); return; }
+    hintPick = null;
     const v = best.v;
     // a vehicle can sit in both lists (properties.js stored vehicles): take it out of both
     for (const L of [parked, traffic]) { const i = L.indexOf(v); if (i >= 0) L.splice(i, 1); }
@@ -193,7 +275,7 @@ const Player = (function () {
     showComboPopup(mode === 'crysta' ? 'INNOVA CRYSTA' : v.p.name);
     setHud();
   }
-  function toggle() { if (mode === 'foot') getIn(); else getOut(); }
+  function toggle() { if (mode === 'foot') getIn(); else getOut(); hintT = 1; if (hintEl && mode !== 'foot') hintEl.style.display = 'none'; }
 
   // ---------------------------------------------------------------- riding as a passenger (auto-rides.js drives)
   function enterPassenger(v, seat) {
@@ -209,8 +291,11 @@ const Player = (function () {
   function leavePassenger() {
     if (mode !== 'passenger') return;
     const v = active; active = null;
-    carPos.set(v.g.position.x, 0, v.g.position.z);
-    exitTo(v.g.rotation.y, v.hw || 0.75);
+    const x = v.g.position.x, z = v.g.position.z, r = v.g.rotation.y;
+    // auto-rides.js has already let us go: take the best free spot, else the kerb side (the safety net in walk()
+    // then pushes us clear of anything solid)
+    const spot = findExit(x, z, r, v.hw || 0.75, v.len && v.len < 20 ? v.len : 2.8, v) || { x: x - Math.cos(r) * ((v.hw || 0.75) + 0.6), z: z + Math.sin(r) * ((v.hw || 0.75) + 0.6) };
+    exitTo(r, spot);
     setHud();
   }
 
@@ -297,45 +382,134 @@ const Player = (function () {
 
   // ---------------------------------------------------------------- walking
   // floors you can stand on: feature modules (safehouse.js interiors, steps, plinths) push meshes into
-  // window.WALKABLES; the walker steps up to STEP_UP and falls down to anything lower. Ground is 0.
+  // window.WALKABLES; the walker steps up to STEP_UP and falls down to anything lower. Ground is groundY().
   const STEP_UP = 0.25, rayDown = new THREE.Raycaster(), DOWN = new THREE.Vector3(0, -1, 0), rayO = new THREE.Vector3();
   function floorAt(x, z, y) {
-    const W = window.WALKABLES; if (!W || !W.length) return 0;
+    const W = window.WALKABLES; if (!W || !W.length) return -1e9;
     const near = W.filter(m => m && m.parent && (!m.userData.bx || Math.abs(m.userData.bx - x) + Math.abs(m.userData.bz - z) < 60));
-    if (!near.length) return 0;
-    rayO.set(x, y + STEP_UP + 0.05, z); rayDown.set(rayO, DOWN); rayDown.far = y + STEP_UP + 0.1;
+    if (!near.length) return -1e9;
+    rayO.set(x, y + STEP_UP + 0.05, z); rayDown.set(rayO, DOWN); rayDown.far = y + STEP_UP + 0.6;
     const h = rayDown.intersectObjects(near, true)[0];
-    return h ? Math.max(0, h.point.y) : 0;
+    return h ? h.point.y : -1e9;
   }
+  function groundAt(x, z) { return typeof groundY === 'function' ? groundY(x, z) : 0; }
+
+  // safety net: standing in a building footprint (bad exit, teleport, reload, glitch) -> out through the nearest
+  // wall; otherwise remember the spot as the last good one
+  const lastSafe = { x: 0, z: 0 };
+  function unstick(p) {
+    if (!world.insideBuilding) return false;
+    let moved = false;
+    for (let k = 0; k < 4; k++) {
+      const b = world.insideBuilding(p.x, p.z, 0); if (!b || !b.p) break;
+      // a walkable interior (safehouse) is meant to be walked in
+      if (ped.y > groundAt(p.x, p.z) + 0.08 || floorAt(p.x, p.z, ped.y) > -1e8) break;
+      let best = null;
+      for (let i = 0; i < b.p.length; i++) {
+        const A = b.p[i], B = b.p[(i + 1) % b.p.length], dx = B[0] - A[0], dz = B[1] - A[1], L2 = dx * dx + dz * dz || 1e-6;
+        const t = Math.max(0, Math.min(1, ((p.x - A[0]) * dx + (p.z - A[1]) * dz) / L2));
+        const ex = A[0] + dx * t, ez = A[1] + dz * t, d = Math.hypot(p.x - ex, p.z - ez);
+        if (!best || d < best.d) { const L = Math.sqrt(L2); best = { d, ex, ez, nx: dz / L, nz: -dx / L }; }
+      }
+      // outward = away from the inside point; fall back to the edge normal pointing away from the centroid
+      let ox = best.ex - p.x, oz = best.ez - p.z, ol = Math.hypot(ox, oz);
+      if (ol < 1e-3) { let cx = 0, cz = 0; b.p.forEach(q => { cx += q[0]; cz += q[1]; }); cx /= b.p.length; cz /= b.p.length;
+        ox = best.nx; oz = best.nz; if ((best.ex - cx) * ox + (best.ez - cz) * oz < 0) { ox = -ox; oz = -oz; } ol = 1; }
+      p.x = best.ex + ox / ol * (WALK_R + 0.15); p.z = best.ez + oz / ol * (WALK_R + 0.15);
+      world.collide(p, WALK_R); moved = true;
+    }
+    if (moved && (lastSafe.x || lastSafe.z) && world.insideBuilding(p.x, p.z, 0) && !(floorAt(p.x, p.z, ped.y) > -1e8)) { p.x = lastSafe.x; p.z = lastSafe.z; }
+    return moved;
+  }
+
+  // jump: edge-triggered (holding Space doesn't bunny-hop), a short jump buffer and coyote time like GTA
+  const JUMP_V = 4.6, GRAV = 11, COYOTE = 0.12, BUFFER = 0.12;
+  // latch the key press itself, so a tap shorter than a frame still jumps (inputState only shows held keys)
+  addEventListener('keydown', e => {
+    if (e.code !== 'Space' || e.repeat || mode !== 'foot') return;
+    const t = e.target; if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    ped.buffer = BUFFER; ped.jumpHeld = true;
+  });
   function walk(dt) {
     surface = world.surfaceAt(carPos.x, carPos.z);
     const turn = (typeof padIn !== 'undefined' && Math.abs(padIn.steer) > 0.12) ? padIn.steer : (inputState.left ? 1 : 0) - (inputState.right ? 1 : 0);
-    ped.turn = (ped.turn || 0) + (turn - (ped.turn || 0)) * (1 - Math.exp(-dt * 12));   // eased turning, no snap
-    carRot += ped.turn * 2.6 * dt;
     const move = (inputState.gas ? 1 : 0) - (inputState.brake ? 1 : 0);
-    const want = move * (inputState.nos ? 5.6 : 2.2) * (move < 0 ? 0.6 : 1);
-    ped.speed += (want - ped.speed) * (1 - Math.exp(-dt * (want ? 8 : 12)));
-    const f = fwdOf(carRot);
-    const p = { x: carPos.x + f.x * ped.speed * dt, z: carPos.z + f.z * ped.speed * dt };
-    world.collide(p, 0.35); pushOutParked(p, 0.35);
+    let want, f;
+    if (rigView()) {
+      // PUBG: W/A/S/D relative to the camera; the body turns smoothly to face where it's going
+      const ix = -turn, iz = move, m = Math.min(1, Math.hypot(ix, iz));
+      if (m > 0.01) {
+        ped.dir = moveYaw() + Math.atan2(ix, iz);
+        const dd = wrap(ped.dir - carRot); carRot += dd * (1 - Math.exp(-dt * 12));
+      }
+      want = m * (inputState.nos ? 5.6 : 2.2) * (ped.land > 0 ? 0.5 : 1);
+      f = m > 0.01 ? fwdOf(ped.dir) : fwdOf(ped.dir !== undefined ? ped.dir : carRot);
+    } else {
+      // first person / low / top-down: tank controls
+      ped.turn = (ped.turn || 0) + (turn - (ped.turn || 0)) * (1 - Math.exp(-dt * 12));
+      carRot += ped.turn * 2.6 * dt; ped.dir = carRot;
+      want = move * (inputState.nos ? 5.6 : 2.2) * (move < 0 ? 0.6 : 1) * (ped.land > 0 ? 0.5 : 1);
+      f = fwdOf(carRot);
+    }
+    ped.speed += (want - ped.speed) * (1 - Math.exp(-dt * (ped.air ? 3 : want ? 10 : 12)));   // little air control
+    // move in slices no longer than half the walker radius: a thin compound wall can never be skipped
+    const sx = f.x * ped.speed * dt, sz = f.z * ped.speed * dt, n = Math.max(1, Math.ceil(Math.hypot(sx, sz) / (WALK_R * 0.5)));
+    const p = { x: carPos.x, z: carPos.z };
+    for (let i = 0; i < n; i++) { p.x += sx / n; p.z += sz / n; world.collide(p, WALK_R); pushOutParked(p, WALK_R); }
+    unstick(p);
+    if (!world.insideBuilding || !world.insideBuilding(p.x, p.z, 0)) { lastSafe.x = p.x; lastSafe.z = p.z; }
     // against a wall: keep only the actual movement so the walk cycle and camera don't jitter
     const moved = Math.hypot(p.x - carPos.x, p.z - carPos.z) / Math.max(dt, 1e-4);
     if (moved < Math.abs(ped.speed) * 0.5) ped.speed *= 0.8;
     carPos.x = p.x; carPos.z = p.z;
-    // jump: small hop with gravity
-    const floor = floorAt(carPos.x, carPos.z, ped.y);
-    if (floor > ped.y && floor - ped.y <= STEP_UP) ped.y = floor;      // step up onto plinths / stairs
-    if (inputState.drift && ped.y <= floor + 1e-3) ped.vy = 4.2;
-    ped.vy -= 14 * dt; ped.y = Math.max(floor, ped.y + ped.vy * dt); if (ped.y <= floor + 1e-4 && ped.vy < 0) ped.vy = 0;
+
+    // vertical: ground (road / bund height) or the highest walkable under the feet
+    const floor = Math.max(groundAt(carPos.x, carPos.z), floorAt(carPos.x, carPos.z, ped.y));
+    if (!ped.air && ped.y < floor && floor - ped.y <= STEP_UP + 0.02) ped.y = floor;          // step up onto plinths / stairs
+    const grounded = !ped.air && ped.y <= floor + 0.03;
+    ped.coyote = grounded ? COYOTE : (ped.coyote || 0) - dt;
+    const jumpKey = !!inputState.drift;
+    ped.buffer = jumpKey && !ped.jumpHeld ? BUFFER : (ped.buffer || 0) - dt;
+    ped.jumpHeld = jumpKey;
+    if (ped.buffer > 0 && ped.coyote > 0 && !(ped.land > 0.1)) { ped.vy = JUMP_V; ped.air = true; ped.coyote = 0; ped.buffer = 0; }
+    if (grounded && !ped.air) { ped.y = floor; ped.vy = 0; }
+    else {
+      ped.vy -= GRAV * dt; ped.y += ped.vy * dt; ped.air = true;
+      if (ped.y <= floor && ped.vy <= 0) {                                   // land (on the ground, a step, a roof)
+        if (ped.vy < -2) ped.land = Math.min(0.3, 0.1 + -ped.vy * 0.03);
+        ped.y = floor; ped.vy = 0; ped.air = false;
+      } else if (ped.y < floor) ped.y = floor;                               // brushing a step edge on the way up
+    }
+    if (ped.land > 0) ped.land -= dt;
     carPos.y = ped.y;
     carSpeed = ped.speed * 3.6;
-    // walk cycle
+    // walk cycle, then the jump / landing pose on top
     ped.phase += Math.abs(ped.speed) * dt * 3.2;
-    if (Math.abs(ped.speed) > 0.05 || ped.y > floor + 0.01) HumanModel.animateWalk(hp, ped.phase, ped.y > floor + 0.01 ? Math.abs(ped.speed) * 0.4 : ped.speed);
+    if (ped.air) jumpPose(ped.vy);
+    else if (Math.abs(ped.speed) > 0.05) HumanModel.animateWalk(hp, ped.phase, ped.speed);
     else HumanModel.animateIdle(hp, performance.now() / 1000);
-    body.position.set(carPos.x, ped.y + Math.abs(Math.sin(ped.phase)) * 0.04 * Math.min(1, Math.abs(ped.speed)), carPos.z);
+    if (!ped.air && ped.land > 0) landPose(ped.land);
+    body.position.set(carPos.x, ped.y + (ped.air ? 0 : Math.abs(Math.sin(ped.phase)) * 0.04 * Math.min(1, Math.abs(ped.speed))), carPos.z);
     body.rotation.y = carRot;
     engineRPM = 800; currentGear = '-'; isReversing = false;
+  }
+  // airborne: knees tucked on the way up, legs reaching for the ground on the way down, arms out for balance
+  function jumpPose(vy) {
+    const up = THREE.MathUtils.clamp(vy / JUMP_V, -1, 1), tuck = 0.5 + up * 0.35;
+    hp.hips.position.set(0, 0.92, 0); hp.hips.rotation.set(0, 0, 0);
+    hp.legL.rotation.set(-0.35 - tuck * 0.5, 0, 0.05); hp.legR.rotation.set(-0.1 - tuck * 0.2, 0, -0.05);
+    hp.shinL.rotation.x = 0.5 + tuck * 0.9; hp.shinR.rotation.x = 0.3 + tuck * 0.6;
+    hp.armL.rotation.set(-0.5 - up * 0.4, 0, 0.45); hp.armR.rotation.set(-0.3 - up * 0.3, 0, -0.45);
+    hp.foreL.rotation.x = -0.6; hp.foreR.rotation.x = -0.6;
+    hp.torso.rotation.set(0.12 - up * 0.08, 0, 0); hp.head.rotation.set(-0.08, 0, 0);
+  }
+  // landing: a short knee bend that springs back
+  function landPose(t) {
+    const k = Math.min(1, t / 0.15);
+    hp.hips.position.y = 0.92 - 0.14 * k;
+    hp.legL.rotation.x = -0.55 * k; hp.legR.rotation.x = -0.55 * k;
+    hp.shinL.rotation.x = 1.0 * k; hp.shinR.rotation.x = 1.0 * k;
+    hp.torso.rotation.x = 0.3 * k; hp.armL.rotation.x = -0.3 * k; hp.armR.rotation.x = -0.3 * k;
   }
 
   // ---------------------------------------------------------------- cameras for walking and non-Crysta vehicles
@@ -347,7 +521,21 @@ const Player = (function () {
     const s = body.userData.pose && body.parent === v.g ? [body.position.x, body.position.y + human.hipHeight, body.position.z] : (SEATS[v.model] || SEATS.hatch);
     return { x: s[0], y: s[1] + (s[3] === 'bike' ? 0.72 : 0.68), z: s[2] };
   }
+  // local bounding box of a vehicle (without the player's body), cached
+  const _bx = new THREE.Box3();
+  function boxOf(v) {
+    if (v._box) return v._box;
+    const g = v.g, pos = g.position.clone(), rot = g.rotation.clone(), vis = body.visible, par = body.parent === g;
+    if (par) g.remove(body);
+    g.position.set(0, 0, 0); g.rotation.set(0, 0, 0); g.updateMatrixWorld(true);
+    _bx.setFromObject(g); v._box = _bx.clone();
+    g.position.copy(pos); g.rotation.copy(rot); g.updateMatrixWorld(true);
+    if (par) g.add(body); body.visible = vis;
+    if (!isFinite(v._box.max.z)) v._box = new THREE.Box3(new THREE.Vector3(-1, 0, -2), new THREE.Vector3(1, 1.5, 2));
+    return v._box;
+  }
   function updateCam(dt) {
+    if (rigView() && (mode === 'foot' || active)) { lastCamIdx = (typeof cameraIndex === 'number' ? cameraIndex : 0) % 5; rig(dt, lastCamIdx === 1); return; }
     const f = fwdOf(carRot), r = { x: Math.cos(carRot), z: -Math.sin(carRot) };   // r = model local +x
     const idx = typeof cameraIndex === 'number' ? cameraIndex % 5 : 0;
     if (idx !== lastCamIdx) { lastCamIdx = idx; camSnap = true; }
@@ -370,8 +558,10 @@ const Player = (function () {
         camT.set(carPos.x + r.x * e.x + f.x * (e.z + 0.12), gy + e.y, carPos.z + r.z * e.x + f.z * (e.z + 0.12));
         look.set(camT.x + f.x * 30, camT.y - 1.2, camT.z + f.z * 30);
       } else if (idx === 3) {
-        const front = L / 2 * 0.85, h = active.model === 'bike' ? 1.05 : active.model === 'bus' || active.model === 'lorry' ? 2.6 : active.model === 'tractor' ? 1.9 : 1.25;
-        camT.set(carPos.x + f.x * (front - (active.model === 'bike' ? 0.6 : 0.2)), gy + h, carPos.z + f.z * (front - (active.model === 'bike' ? 0.6 : 0.2)));
+        // bike: over the handlebars at rider eye level; everything else: on the bonnet / front, scaled to its height
+        const bx = boxOf(active), e = seatEye(active);
+        const front = active.model === 'bike' ? e.z + 0.55 : bx.max.z - 0.25, h = active.model === 'bike' ? e.y - 0.05 : Math.max(1.0, bx.max.y * 0.62);
+        camT.set(carPos.x + f.x * front, gy + h, carPos.z + f.z * front);
         look.set(camT.x + f.x * 30, camT.y - 1.6, camT.z + f.z * 30); smooth = 40;
       } else if (idx === 4) {
         camT.set(carPos.x, gy + 40 + L, carPos.z - 9); look.set(carPos.x, gy, carPos.z);
@@ -381,7 +571,7 @@ const Player = (function () {
       }
     }
     // the player's own body would fill a first-person view
-    body.visible = mode !== 'crysta' && !(firstPerson && !FL.on);
+    body.visible = mode !== 'crysta' && !firstPerson;
     const back = typeof lookBack !== 'undefined' && !!lookBack;   // C / RB: look behind
     if (back) {
       if (firstPerson || idx === 3) { look.set(2 * camT.x - look.x, look.y, 2 * camT.z - look.z); }
@@ -409,62 +599,138 @@ const Player = (function () {
   }
   function cameraName() { const i = (typeof cameraIndex === 'number' ? cameraIndex : 0) % 5; return (mode === 'foot' ? FOOT_CAM_NAMES : CAM_NAMES)[i]; }
 
-  // ---------------------------------------------------------------- GTA-style free-look orbit (all modes)
-  // Left- or right-drag on the 3D view (mouse), one-finger drag on the view (touch) orbits 360° around the
-  // player; wheel / pinch zooms. Driving, it eases back behind the vehicle 2 s after the last input; on foot
-  // it stays where you left it. Middle-click stays the multiplayer ping; the big map and touch buttons are
-  // separate elements so they never reach this.
-  const FL = { yaw: 0, pitch: 0, zoom: 1, idle: 99, on: false, ptrs: new Map(), pinch0: 0, zoom0: 1 };
-  function isView(t) { return t && t.tagName === 'CANVAS' && (t === (typeof renderer !== 'undefined' && renderer.domElement) || t.id === 'gl'); }
-  function flInput() { FL.idle = 0; FL.on = true; }
+  // ---------------------------------------------------------------- PUBG-style third-person camera rig (all modes)
+  // R.yaw / R.pitch are the camera's own world angles (yaw = the direction the camera looks along, like carRot;
+  // pitch > 0 = looking down from above). Mouse (pointer lock), drag fallback and touch drag set them directly.
+  // On foot the camera sits over the right shoulder and WASD moves relative to it; in vehicles it orbits freely
+  // and eases back behind the direction of travel 1.5 s after the last input. The pivot is the FINAL position
+  // after physics (no lag, no jitter); only the jump height and collision distance are spring-smoothed.
+  const DEG = Math.PI / 180, PITCH_MIN = -60 * DEG, PITCH_MAX = 70 * DEG, SENS = 0.0022;
+  const R = { yaw: 0, pitch: 0.15, yv: 0, pv: 0, idle: 99, zoom: 1, altYaw: null, ret: false, init: false, py: 0, pyv: 0, dist: 0, dv: 0,
+    lx: 0, lz: 0, vx: 0, vz: 0, fov: 65, key: '', ptrs: new Map(), pinch0: 0, zoom0: 1 };
+  const FL = { get on() { return R.idle < 1.5; } };
+  const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
+  // critically damped spring (exact for constant target): x toward t with angular frequency w
+  function spring(x, v, t, w, dt) { const d = x - t, e = Math.exp(-w * dt), nx = t + (d + (v + w * d) * dt) * e, nv = (v - w * (v + w * d) * dt) * e; return [nx, nv]; }
+  function lookInput(dx, dy) { R.yaw -= dx; R.pitch = THREE.MathUtils.clamp(R.pitch + dy, PITCH_MIN, PITCH_MAX); R.idle = 0; R.yv = R.pv = 0; R.ret = false; }
+  const canvasEl = () => (typeof renderer !== 'undefined' && renderer.domElement) || document.getElementById('gl');
+  function isView(t) { return t && t.tagName === 'CANVAS' && (t === canvasEl() || t.id === 'gl'); }
+  const playing = () => typeof isPlaying === 'undefined' || isPlaying;
+  // anything that needs the cursor: map, help, settings, chat / creator / property panels (anything covering the
+  // middle of the screen), a focused text field, the start menu
+  function uiOpen() {
+    if (!playing()) return true;
+    if (document.body.classList.contains('map-open')) return true;
+    const ae = document.activeElement; if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)) return true;
+    for (const id of ['info', 'settings']) { const el = document.getElementById(id); if (el && el.classList.contains('open')) return true; }
+    const c = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+    return !!c && !isView(c) && c !== document.body && c !== document.documentElement;
+  }
+  const locked = () => document.pointerLockElement === canvasEl();
   addEventListener('pointerdown', e => {
-    if (!isView(e.target) || (typeof isPlaying !== 'undefined' && !isPlaying)) return;
-    if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;     // middle = ping
-    FL.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (!isView(e.target) || !playing()) return;
+    if (e.pointerType === 'mouse') {
+      if (e.button !== 0 && e.button !== 2) return;                          // middle = multiplayer ping
+      if (!locked() && !uiOpen() && e.target.requestPointerLock) { try { const r = e.target.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (err) {} }
+    }
+    R.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try { e.target.setPointerCapture(e.pointerId); } catch (err) {}
-    if (FL.ptrs.size === 2) { const [a, b] = [...FL.ptrs.values()]; FL.pinch0 = Math.hypot(a.x - b.x, a.y - b.y) || 1; FL.zoom0 = FL.zoom; }
+    if (R.ptrs.size === 2) { const [a, b] = [...R.ptrs.values()]; R.pinch0 = Math.hypot(a.x - b.x, a.y - b.y) || 1; R.zoom0 = R.zoom; }
   });
   addEventListener('pointermove', e => {
-    const p = FL.ptrs.get(e.pointerId); if (!p) return;
+    if (e.pointerType === 'mouse' && locked()) { lookInput(e.movementX * SENS, e.movementY * SENS); return; }   // no drag needed
+    const p = R.ptrs.get(e.pointerId); if (!p) return;
     const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
-    if (FL.ptrs.size >= 2) {
-      const [a, b] = [...FL.ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
-      FL.zoom = THREE.MathUtils.clamp(FL.zoom0 * FL.pinch0 / d, 0.4, 3); flInput(); return;
-    }
+    if (R.ptrs.size >= 2) { const [a, b] = [...R.ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y) || 1; R.zoom = THREE.MathUtils.clamp(R.zoom0 * R.pinch0 / d, 0.5, 2.5); R.idle = 0; return; }
     if (Math.abs(dx) + Math.abs(dy) < 0.5) return;
-    const k = e.pointerType === 'touch' ? 0.009 : 0.006;
-    FL.yaw -= dx * k; FL.pitch = THREE.MathUtils.clamp(FL.pitch + dy * k * 0.7, -0.45, 1.15); flInput();
+    const k = e.pointerType === 'touch' ? 0.009 : 0.005;                       // drag fallback / touch
+    lookInput(dx * k, dy * k * 0.8);
   });
-  const flUp = e => { FL.ptrs.delete(e.pointerId); };
+  const flUp = e => { R.ptrs.delete(e.pointerId); };
   addEventListener('pointerup', flUp); addEventListener('pointercancel', flUp);
   addEventListener('wheel', e => {
-    if (!isView(e.target) || (typeof isPlaying !== 'undefined' && !isPlaying)) return;
-    e.preventDefault();
-    FL.zoom = THREE.MathUtils.clamp(FL.zoom * (e.deltaY > 0 ? 1.1 : 1 / 1.1), 0.4, 3); flInput();
+    if (!isView(e.target) || !playing()) return;
+    e.preventDefault(); R.zoom = THREE.MathUtils.clamp(R.zoom * (e.deltaY > 0 ? 1.1 : 1 / 1.1), 0.5, 2.5);
   }, { passive: false });
   addEventListener('contextmenu', e => { if (isView(e.target)) e.preventDefault(); });
-  function freeLook(dt) {
-    FL.idle += dt;
-    if (!FL.on) return;
-    const driving = mode !== 'foot';
-    if (driving && FL.idle > 2 && !FL.ptrs.size) {
-      // ease back behind the vehicle
-      const k = 1 - Math.exp(-dt * 2.2);
-      FL.yaw = Math.atan2(Math.sin(FL.yaw), Math.cos(FL.yaw)); FL.yaw -= FL.yaw * k; FL.pitch -= FL.pitch * k; FL.zoom += (1 - FL.zoom) * k;
-      if (Math.abs(FL.yaw) < 0.01 && Math.abs(FL.pitch) < 0.01 && Math.abs(FL.zoom - 1) < 0.01) { FL.yaw = FL.pitch = 0; FL.zoom = 1; FL.on = false; camSnap = false; return; }
+  // Alt: free-look that doesn't steer the walker; on release the view swings back
+  addEventListener('keydown', e => { if ((e.code === 'AltLeft' || e.code === 'AltRight') && !e.repeat) { e.preventDefault(); if (R.altYaw === null) R.altYaw = R.yaw; } });
+  addEventListener('keyup', e => { if ((e.code === 'AltLeft' || e.code === 'AltRight') && R.altYaw !== null) { e.preventDefault(); R.ret = R.altYaw; R.altYaw = null; } });
+  addEventListener('blur', () => { if (R.altYaw !== null) { R.ret = R.altYaw; R.altYaw = null; } });
+
+  // the direction WASD moves toward (camera yaw, or the held yaw during Alt free-look)
+  function moveYaw() { return R.altYaw !== null ? R.altYaw : (typeof R.ret === 'number' ? R.ret : R.yaw); }
+  // which views use the rig: chase (0) and close chase (1) everywhere
+  const rigView = () => { const i = (typeof cameraIndex === 'number' ? cameraIndex : 0) % 5; return i === 0 || i === 1; };
+
+  // the rig itself: called after physics with the final position
+  function rig(dt, close) {
+    dt = Math.min(dt, 0.1);
+    let px, gy, L, h, dist, side, sprint = false, roof = 1.6, cr = 0;
+    if (mode === 'foot') {
+      px = { x: carPos.x, z: carPos.z }; gy = ped.y; L = 0; h = 1.55;
+      sprint = !!inputState.nos && Math.abs(ped.speed) > 3;
+      dist = (close ? 1.9 : 2.55) + (sprint ? 0.35 : 0); side = close ? 0.45 : 0.55;
+    } else {
+      const g = mode === 'crysta' ? playerCarGroup : active.g;
+      px = { x: g.position.x, z: g.position.z }; gy = g.position.y;
+      const bx = mode === 'crysta' ? null : boxOf(active);
+      L = mode === 'crysta' ? CRYSTA_LEN : Math.max(1.8, (active.len && active.len < 30 ? active.len : 4));
+      roof = bx ? bx.max.y : 1.85; cr = mode === 'crysta' ? CRYSTA_LEN / 2 : Math.max(bx.max.z, -bx.min.z, 1);
+      h = roof * 0.55 + 0.9 + L * 0.06; dist = (close ? 0.7 : 1) * (3.2 + L * 0.85); side = 0;
     }
-    let dist, h, p0;
-    if (mode === 'crysta') { dist = 6.6; h = 1.25; p0 = 0.15; }
-    else if (mode === 'foot') { dist = 3.6; h = 1.45; p0 = 0.15; }
-    else { const L = active.len || 4; dist = 3.8 + L * 0.85; h = 0.9 + L * 0.12; p0 = 0.2; }
-    const yaw = carRot + Math.PI + FL.yaw, pitch = THREE.MathUtils.clamp(p0 + FL.pitch, -0.3, 1.35), d = dist * FL.zoom;
-    const px = carPos.x, py = (mode === 'foot' ? ped.y : mode === 'crysta' ? carPos.y - 0.44 : (active ? active.g.position.y : 0)) + h, pz = carPos.z;
-    const oc = new THREE.Vector3(px + Math.sin(yaw) * Math.cos(pitch) * d, Math.max(0.35, py + Math.sin(pitch) * d), pz + Math.cos(yaw) * Math.cos(pitch) * d);
-    clipCam(px, py, pz, oc, dt); camera.position.copy(oc);
-    camera.lookAt(px, py, pz);
+    const key = mode + ':' + (active ? active.model : '');
+    if (key !== R.key || !R.init) {                                            // entered / left something: start behind it
+      R.key = key; R.init = true; R.yaw = carRot; R.pitch = mode === 'foot' ? 0.12 : 0.2; R.yv = R.pv = 0; R.idle = 99; R.ret = false; R.altYaw = null;
+      R.py = gy + h; R.pyv = 0; R.dist = dist; R.dv = 0; R.lx = px.x; R.lz = px.z; R.vx = R.vz = 0;
+    }
+    R.idle += dt;
+    // smoothed travel velocity from the final positions
+    if (dt > 0) { const k = 1 - Math.exp(-dt * 10); R.vx += ((px.x - R.lx) / dt - R.vx) * k; R.vz += ((px.z - R.lz) / dt - R.vz) * k; }
+    R.lx = px.x; R.lz = px.z;
+    const spd = Math.hypot(R.vx, R.vz);
+    if (typeof R.ret === 'number') {                                           // Alt released: swing back
+      [R.yaw, R.yv] = spring(R.yaw, R.yv, R.yaw + wrap(R.ret - R.yaw), 14, dt);
+      if (Math.abs(wrap(R.ret - R.yaw)) < 0.01) { R.yaw = R.ret; R.ret = false; R.yv = 0; }
+    } else if (mode !== 'foot' && R.idle > 1.5 && R.ptrs.size === 0) {
+      // ease back behind the direction of travel; reversing / crawling keeps the current angle (no swing)
+      const fx = Math.sin(carRot), fz = Math.cos(carRot), fwdV = R.vx * fx + R.vz * fz;
+      if (fwdV > 1.5) {
+        const tgt = spd > 4 ? Math.atan2(R.vx, R.vz) : carRot, w = 2.2 + Math.min(2.5, spd * 0.08);
+        [R.yaw, R.yv] = spring(R.yaw, R.yv, R.yaw + wrap(tgt - R.yaw), w, dt);
+        [R.pitch, R.pv] = spring(R.pitch, R.pv, 0.2, w, dt);
+      } else { R.yv *= Math.exp(-dt * 8); R.pv *= Math.exp(-dt * 8); }
+    }
+    R.yaw = wrap(R.yaw);
+    const back = typeof lookBack !== 'undefined' && !!lookBack;
+    const yaw = R.yaw + (back ? Math.PI : 0), pitch = back ? 0.2 : R.pitch;
+    // only the vertical (jumps, kerbs) is smoothed; horizontal follows exactly
+    [R.py, R.pyv] = spring(R.py, R.pyv, gy + h, mode === 'foot' ? 14 : 10, dt);
+    [R.dist, R.dv] = spring(R.dist, R.dv, dist * R.zoom, 6, dt);
+    const fwd = { x: Math.sin(yaw) * Math.cos(pitch), y: -Math.sin(pitch), z: Math.cos(yaw) * Math.cos(pitch) };
+    const rt = { x: -Math.cos(yaw), z: Math.sin(yaw) };                       // camera right
+    const pv = { x: px.x + rt.x * side, y: R.py, z: px.z + rt.z * side };     // over the right shoulder
+    const cam = new THREE.Vector3(pv.x - fwd.x * R.dist, pv.y - fwd.y * R.dist, pv.z - fwd.z * R.dist);
+    clipCam(pv.x, pv.y, pv.z, cam, dt);
+    cam.y = Math.max(cam.y, gy + 0.3, (typeof groundY === 'function' ? groundY(cam.x, cam.z) : 0) + 0.25);
+    // never inside the vehicle body: pulled in closer than its half length -> go over the roof
+    if (mode !== 'foot') { const dh = Math.hypot(cam.x - px.x, cam.z - px.z); if (dh < cr + 0.4) cam.y = Math.max(cam.y, gy + roof + 0.5); }
+    camera.position.copy(cam);
+    camera.lookAt(cam.x + fwd.x * 10, cam.y + fwd.y * 10, cam.z + fwd.z * 10);
+    // FOV: a little wider with speed / sprint
+    const kmh = Math.abs(carSpeed), fovT = 65 + (mode === 'foot' ? (sprint ? 5 : 0) : Math.min(12, kmh * 0.07)) + (typeof isNosActive !== 'undefined' && isNosActive && mode === 'crysta' ? 6 : 0);
+    R.fov += (fovT - R.fov) * (1 - Math.exp(-dt * 3));
+    if (Math.abs(camera.fov - R.fov) > 0.01) { camera.fov = R.fov; camera.updateProjectionMatrix(); }
     if (mode !== 'crysta') body.visible = true;
-    if (typeof updateCamera !== 'undefined') updateCamera.yaw = carRot;   // Crysta chase picks up from behind
+    if (typeof updateCamera !== 'undefined') updateCamera.yaw = yaw;
+    camSnap = false;
   }
+  // per frame (after the camera): release the pointer when a menu / map / chat opens
+  function freeLook(dt) {
+    if (locked() && uiOpen()) { try { document.exitPointerLock(); } catch (e) {} }
+  }
+  // the Crysta's chase views (crysta.js updateCamera) use the same rig
+  function crystaRig(dt) { if (mode !== 'crysta' || !rigView()) return false; rig(dt, ((typeof cameraIndex === 'number' ? cameraIndex : 0) % 5) === 1); return true; }
 
   function update(dt) {
     const n = Math.max(1, Math.ceil(dt / (1 / 120) - 1e-6)), h = dt / n;   // sub-steps: frame-rate independent, no tunnelling
@@ -488,9 +754,10 @@ const Player = (function () {
     if ((hintT += dt) < 0.25) return; hintT = 0;
     if (!hintEl) { hintEl = document.createElement('div'); hintEl.id = 'enterHint'; hintEl.style.cssText = 'position:fixed;left:50%;bottom:calc(120px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:6;padding:6px 12px;border-radius:8px;background:rgba(10,15,25,.75);color:#e5e7eb;font:600 13px system-ui,sans-serif;pointer-events:none;display:none;white-space:nowrap'; document.body.appendChild(hintEl); }
     const b = mode === 'foot' && (typeof isPlaying === 'undefined' || isPlaying) ? pickVehicle() : null;
+    hintPick = b; hintAt = performance.now();
     if (!b) { hintEl.style.display = 'none'; return; }
-    const v = b.v, name = v.crysta ? 'INNOVA CRYSTA' : (PARAMS[v.model] || PARAMS.hatch).name;
-    const jack = traffic.includes(v) && !v.parked && !v._propSlot && !!driverOf(v);
+    const v = b.v, name = b.pk ? (PARAMS[b.pk.kind] || PARAMS.hatch).name : v.crysta ? 'INNOVA CRYSTA' : (PARAMS[v.model] || PARAMS.hatch).name;
+    const jack = !!v && traffic.includes(v) && !v.parked && !v._propSlot && !!driverOf(v);
     hintEl.innerHTML = '<b style="color:#fbbf24">F</b> ' + (jack ? 'Take' : 'Get in') + ' · ' + name;
     hintEl.style.display = 'block';
   }
@@ -525,6 +792,6 @@ const Player = (function () {
     if (!v.tail) v.tail = [];
     parked.push(v);
   }
-  return { addParked, toggle, update, updateCam, resetToCrysta, crystaCollide, setHud, tick, freeLook, cameraName, enterPassenger, leavePassenger, PARAMS, SEATS,
+  return { addParked, toggle, crystaRig, update, updateCam, resetToCrysta, crystaCollide, setHud, tick, freeLook, cameraName, enterPassenger, leavePassenger, PARAMS, SEATS,
     set onPassengerExit(f) { passengerExit = f; }, get freeLookOn() { return FL.on; }, get fleeing() { return fleeing; }, get body() { return human; }, get mode() { return mode; }, get active() { return active; } };
 })();
