@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0a0f19">
+<title>Innova Crysta in Nellutla</title>
+<style>
+  /* ------------------------------------------------------------ layout tokens
+     --g gutter (respects notches), --rad radar size, --cs compass scale, --u touch button unit */
+  :root {
+    --sl: env(safe-area-inset-left, 0px); --sr: env(safe-area-inset-right, 0px);
+    --st: env(safe-area-inset-top, 0px);  --sb: env(safe-area-inset-bottom, 0px);
+    --g: 12px; --rad: clamp(120px, 20vmin, 220px); --cs: 1; --u: clamp(56px, 11vmin, 76px);
+    --bar: 40px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; background: #9cc3df; font-family: -apple-system, system-ui, sans-serif; color: #fff; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  body { position: fixed; inset: 0; }
+  canvas#gl { display: block; position: fixed; inset: 0; touch-action: none; }
+  button { font-family: inherit; }
+  .panel { background: rgba(10,15,25,.78); border: 1px solid rgba(255,255,255,.14); border-radius: 12px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+
+  /* ------------------------------------------------------------ start screen */
+  #start { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: safe center; gap: clamp(8px, 2.4vh, 18px);
+    padding: calc(16px + var(--st)) calc(16px + var(--sr)) calc(16px + var(--sb)) calc(16px + var(--sl)); overflow-y: auto; touch-action: pan-y;
+    background: radial-gradient(circle, rgba(10,15,25,.35), rgba(5,8,14,.92)); z-index: 10; }
+  #start h1 { margin: 0; font-size: clamp(22px, 5.5vmin, 34px); letter-spacing: 2px; text-align: center; }
+  #start p { margin: 0; color: #cbd5e1; max-width: min(560px, 92vw); text-align: center; line-height: 1.5; font-size: clamp(13px, 2.2vmin, 16px); }
+  .plate { background: #fff; color: #111; font-weight: 900; letter-spacing: 3px; padding: 6px 16px; border: 2px solid #000; border-radius: 6px; font-size: clamp(13px, 2.4vmin, 16px); }
+  #pname { padding: 12px 14px; border-radius: 10px; border: 1px solid #475569; background: rgba(15,23,42,.85); color: #fff; font-size: 16px; text-align: center; width: min(300px, 86vw); user-select: text; -webkit-user-select: text; }
+  #go { font-size: clamp(17px, 3vmin, 20px); font-weight: 800; padding: 14px clamp(28px, 8vw, 56px); min-height: 52px; border-radius: 40px; border: 2px solid #60a5fa; color: #fff; background: linear-gradient(135deg,#0284c7,#2563eb); cursor: pointer; }
+  #ccOpenBtn { min-height: 48px; }
+  @media (max-height: 460px) { #start p { display: none; } #start { gap: 8px; } }
+
+  /* ------------------------------------------------------------ top HUD bar (Controls / Settings, + Map / More on touch) */
+  #hudBar { position: fixed; top: calc(var(--g) + var(--st)); right: calc(var(--g) + var(--sr)); z-index: 12; display: none; gap: 6px; }
+  body.playing #hudBar { display: flex; }
+  .hud-btn { height: var(--bar); min-width: var(--bar); padding: 0 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.18); background: rgba(10,15,25,.72); color: #e5e7eb;
+    font: 700 13px system-ui, sans-serif; letter-spacing: .04em; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; touch-action: manipulation; }
+  .hud-btn:hover { background: rgba(30,41,59,.9); }
+  .hud-btn.on { background: #1d4ed8; border-color: #60a5fa; }
+  .hud-btn kbd { font: 700 10px ui-monospace, monospace; color: #94a3b8; border: 1px solid #475569; border-radius: 4px; padding: 0 4px; }
+  .touch-only { display: none !important; }
+  html.touch .touch-only { display: inline-flex !important; }
+  html.touch .desk-only { display: none !important; }
+
+  /* ------------------------------------------------------------ mission / compass / heading (mp.js) */
+  #mission { position: fixed; top: calc(var(--st) + 62px); left: 50%; transform: translateX(-50%); padding: 6px 18px; text-align: center; max-width: min(440px, calc(100vw - 2 * var(--rad) - 60px)); z-index: 5; }
+  #mission .t { color: #fbbf24; font-size: clamp(10px, 1.6vmin, 11px); font-weight: 800; letter-spacing: 2px; }
+  #mission .d { font-size: clamp(12px, 2vmin, 14px); font-weight: 600; }
+  #where { display: block; font-size: 11px; color: #cbd5e1; margin-top: 2px; }
+  #where b { color: #ffd36b; }
+  #mpCompass { top: calc(var(--st) + 8px) !important; transform: translateX(-50%) scale(var(--cs)) !important; transform-origin: 50% 0; }
+  #mpHdg { top: calc(var(--st) + 8px + 32px * var(--cs)) !important; }
+  #mpCoords { top: calc(var(--st) + var(--g) + var(--bar) + 8px) !important; right: calc(var(--g) + var(--sr)) !important; }
+  #mpSquad { top: calc(var(--st) + var(--g)) !important; left: calc(var(--g) + var(--sl)) !important; min-width: 0 !important; max-width: 220px; }
+  #mpPanel { left: calc(var(--g) + var(--sl)) !important; bottom: calc(var(--g) + var(--sb)) !important; width: min(340px, 30vw) !important; }
+  #mpLog { max-height: min(230px, 30vh) !important; }
+  #mpBoard { min-width: 0 !important; width: min(520px, 94vw); max-height: 80vh; overflow: auto; }
+  #mpWheel { width: min(360px, 90vmin) !important; height: min(360px, 90vmin) !important; margin: calc(min(360px, 90vmin) / -2) 0 0 calc(min(360px, 90vmin) / -2) !important; }
+
+  /* ------------------------------------------------------------ dash + radar */
+  #dash { position: fixed; left: 50%; bottom: calc(14px + var(--sb)); transform: translateX(-50%); display: flex; gap: clamp(10px, 1.6vw, 22px); align-items: center; padding: 8px clamp(12px, 1.6vw, 22px); z-index: 5; white-space: nowrap; }
+  #spd { font-size: clamp(26px, 4.4vmin, 40px); font-weight: 900; min-width: 2.2em; text-align: center; }
+  .lbl { font-size: 10px; color: #94a3b8; letter-spacing: 1px; text-align: center; }
+  .val { font-size: clamp(14px, 2vmin, 18px); font-weight: 800; text-align: center; }
+  #radar { position: fixed; right: calc(14px + var(--sr)); bottom: calc(14px + var(--sb)); width: var(--rad); height: var(--rad); border-radius: 50%; border: 3px solid rgba(255,255,255,.75); background: #223; z-index: 4; }
+  #propRadar { width: calc(var(--rad) - 6px) !important; height: calc(var(--rad) - 6px) !important; }
+  #propHud { right: calc(14px + var(--sr)) !important; bottom: calc(var(--rad) + 26px + var(--sb)) !important; max-width: 46vw; }
+  #propHint { bottom: calc(var(--rad) * .5 + 90px) !important; max-width: 90vw; white-space: normal; text-align: center; }
+  @media (max-width: 1240px) { #dash .opt { display: none; } }
+
+  /* ------------------------------------------------------------ big map */
+  #bigmap { position: fixed; left: calc(3vw + var(--sl)); top: calc(3vh + var(--st)); width: calc(94vw - var(--sl) - var(--sr)); height: calc(94vh - var(--st) - var(--sb)); display: none; background: rgba(8,12,20,.94); border-radius: 12px; z-index: 30; touch-action: none; }
+  #mapClose { position: fixed; right: calc(3vw + 10px + var(--sr)); top: calc(3vh + 10px + var(--st)); z-index: 32; display: none; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255,255,255,.4); background: rgba(10,15,25,.9); color: #fff; font: 700 20px system-ui; cursor: pointer; }
+  html.touch #mapClose { width: 56px; height: 56px; font-size: 24px; }
+  #mapClose:hover { background: #b91c1c; }
+  body.map-open #mpPanel, body.map-open #mpSquad, body.map-open #mpCompass, body.map-open #mpHdg, body.map-open #mpCoords, body.map-open #mission, body.map-open #hudBar, body.map-open #tc, body.map-open #dash, body.map-open #propHud, body.map-open #rotateHint { visibility: hidden; }
+  #popup { position: fixed; top: 30%; left: 50%; transform: translateX(-50%); font-size: clamp(18px, 4vmin, 26px); font-weight: 900; color: #fbbf24; text-shadow: 0 3px 10px #000; opacity: 0; transition: opacity .3s; text-align: center; max-width: 90vw; pointer-events: none; z-index: 20; }
+  #cockpitWheel { display: none; }
+  #btn4wd { display: none; }
+
+  /* ------------------------------------------------------------ Controls help card (hidden until asked for) */
+  #info { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 40; width: min(720px, calc(100vw - 24px - var(--sl) - var(--sr))); max-height: calc(100vh - 24px - var(--st) - var(--sb));
+    overflow-y: auto; padding: 16px clamp(14px, 3vw, 24px) 18px; font-size: clamp(12.5px, 1.8vmin, 14px); line-height: 1.5; display: none; background: rgba(10,15,25,.94); touch-action: pan-y; overscroll-behavior: contain; }
+  #info.open { display: block; }
+  #info h2 { margin: 0 0 10px; font-size: clamp(16px, 2.6vmin, 20px); letter-spacing: .08em; }
+  #info h3 { margin: 0 0 6px; font-size: 12px; letter-spacing: .14em; color: #93c5fd; text-transform: uppercase; }
+  #info .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px 20px; }
+  #info dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 10px; margin: 0; }
+  #info dt { color: #ffd36b; font-weight: 700; white-space: nowrap; }
+  #info dd { margin: 0; color: #e2e8f0; }
+  #info .muted { color: #9aa4b2; font-size: 11.5px; margin-top: 10px; }
+  #info .x, #settings .x { position: absolute; top: 8px; right: 8px; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255,255,255,.25); background: rgba(30,41,59,.9); color: #fff; font: 700 18px system-ui; cursor: pointer; }
+  html.touch #info section.touchsec { order: -1; }
+
+  /* ------------------------------------------------------------ settings menu */
+  #settings { position: fixed; z-index: 41; top: calc(var(--st) + var(--g) + var(--bar) + 8px); right: calc(var(--g) + var(--sr)); width: min(300px, calc(100vw - 24px)); padding: 14px 16px 16px; display: none; font-size: 13px; }
+  #settings.open { display: block; }
+  #settings h2 { margin: 0 0 10px; font-size: 14px; letter-spacing: .12em; }
+  #settings .seg { display: flex; gap: 4px; margin: 6px 0 4px; }
+  #settings .seg button { flex: 1; min-height: 44px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; font-weight: 700; cursor: pointer; }
+  #settings .seg button.on { background: #1d4ed8; border-color: #60a5fa; }
+  #settings .muted { color: #94a3b8; font-size: 11.5px; line-height: 1.45; }
+  #qNotice { position: fixed; left: 50%; top: calc(var(--st) + 30%); transform: translateX(-50%); z-index: 45; padding: 8px 14px; border-radius: 18px; background: rgba(10,15,25,.86); font: 600 13px system-ui; opacity: 0; transition: opacity .3s; pointer-events: none; }
+  #qNotice.on { opacity: 1; }
+  #rotateHint { display: none; }
+  body:not(.playing) #mpPanel, body:not(.playing) #mpCoords, body:not(.playing) #mpCompass, body:not(.playing) #mpHdg, body:not(.playing) #mpSquad { visibility: hidden; }
+  body:not(.playing) #propHud, body:not(.playing) #rotateHint { display: none !important; }
+
+  /* ------------------------------------------------------------ touch controls */
+  #tc { display: none; position: fixed; inset: 0; pointer-events: none; z-index: 8; touch-action: none; }
+  html.touch #tc { display: block; }
+  #tc[data-mode="off"] { display: none !important; }
+  #tc > div { position: absolute; }
+  .tc-btn { pointer-events: auto; touch-action: none; width: var(--u); height: var(--u); border-radius: 50%; border: 2px solid rgba(255,255,255,.4); background: rgba(10,15,25,.38); color: rgba(255,255,255,.92);
+    font: 800 clamp(12px, 2.2vmin, 15px) system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0; line-height: 1.05; }
+  .tc-btn small { font-size: 9.5px; font-weight: 700; opacity: .8; letter-spacing: .04em; }
+  .tc-btn.on { background: rgba(96,165,250,.55); border-color: #bfdbfe; }
+  .tc-stick { pointer-events: auto; touch-action: none; left: calc(var(--g) + var(--sl)); bottom: calc(var(--g) + var(--sb)); width: calc(var(--u) * 2.2); height: calc(var(--u) * 2.2); border-radius: 50%;
+    background: radial-gradient(circle, rgba(10,15,25,.18), rgba(10,15,25,.38)); border: 2px solid rgba(255,255,255,.3); }
+  .tc-knob { position: absolute; left: 50%; top: 50%; width: calc(var(--u) * .9); height: calc(var(--u) * .9); margin: calc(var(--u) * -.45); border-radius: 50%; background: rgba(255,255,255,.45); border: 2px solid rgba(255,255,255,.7); pointer-events: none; }
+  .tc-stick.on .tc-knob { background: rgba(147,197,253,.7); }
+  #tcArrows { left: calc(var(--g) + var(--sl)); bottom: calc(var(--g) + var(--sb)); display: none; gap: 10px; }
+  .tc-arrow { width: calc(var(--u) * 1.15); height: calc(var(--u) * 1.4); border-radius: 16px; font-size: 22px; }
+  #tc[data-steer="arrows"][data-mode="drive"] #tcArrows { display: flex; }
+  #tc[data-steer="arrows"][data-mode="drive"] #tcStick { display: none; }
+  #tcQuick { left: calc(var(--g) + var(--sl)); bottom: calc(var(--g) + var(--sb) + var(--u) * 2.2 + 10px); display: flex; gap: 8px; }
+  #tc[data-mode="foot"] #tcQuick .tc-drive { display: none; }
+  #tc[data-mode="drive"] #tcQuick .tc-footonly { display: none; }
+  #tcDrive, #tcFoot { right: calc(var(--g) + var(--sr)); bottom: calc(var(--g) + var(--sb)); width: calc(var(--u) * 2.3 + 10px); height: calc(var(--u) * 3.3 + 16px); }
+  #tcDrive .tc-btn, #tcFoot .tc-btn { position: absolute; }
+  #tcGas { right: 0; bottom: 0; width: calc(var(--u) * 1.2); height: calc(var(--u) * 2); border-radius: 18px; background: rgba(22,101,52,.42); }
+  #tcBrake { right: calc(var(--u) * 1.2 + 8px); bottom: 0; width: calc(var(--u) * 1.1); height: calc(var(--u) * 1.3); border-radius: 16px; background: rgba(127,29,29,.42); }
+  #tcHand { right: calc(var(--u) * 1.2 + 8px); bottom: calc(var(--u) * 1.3 + 8px); }
+  #tcHorn { right: calc(var(--u) * 1.2 + 8px); bottom: calc(var(--u) * 2.3 + 16px); font-size: 20px; }
+  #tcNos { right: calc(var(--u) * .1); bottom: calc(var(--u) * 2 + 8px); background: rgba(30,64,175,.42); }
+  #tcJump { right: 0; bottom: 0; width: calc(var(--u) * 1.3); height: calc(var(--u) * 1.3); }
+  #tcRun { right: calc(var(--u) * 1.3 + 10px); bottom: 0; }
+  #tcUse { right: calc(var(--u) * .15); bottom: calc(var(--u) * 1.3 + 10px); }
+  #tcFoot, #tcDrive { display: none; }
+  #tc[data-mode="drive"] #tcDrive, #tc[data-mode="foot"] #tcFoot { display: block; }
+  #tcMore { pointer-events: auto; right: calc(var(--g) + var(--sr)); top: calc(var(--st) + var(--g) + var(--bar) + 8px); padding: 10px; display: none; grid-template-columns: repeat(4, var(--u)); gap: 8px; z-index: 13; }
+  #tc.more-open #tcMore { display: grid; }
+  #tcMore .tc-btn { border-radius: 14px; font-size: 18px; }
+
+  /* ------------------------------------------------------------ touch-device HUD layout: map top-left, buttons top-right, controls at the bottom */
+  html.touch { --g: 8px; --rad: clamp(96px, 20vmin, 160px); --bar: 56px; --cs: .62; }
+  html.touch .hud-btn { font-size: 18px; padding: 0 10px; }
+  html.touch #hudBar .hud-btn .lbl-txt { display: none; }
+  html.touch #radar { right: auto; bottom: auto; left: calc(var(--g) + var(--sl)); top: calc(var(--g) + var(--st)); }
+  html.touch #mpSquad { top: calc(var(--st) + var(--g) + var(--rad) + 8px) !important; max-width: min(200px, 40vw); font-size: 11px !important; }
+  html.touch #dash { bottom: calc(var(--g) + var(--sb)); gap: 10px; padding: 4px 12px; }
+  html.touch #dash .opt, html.touch #dash .opt2 { display: none; }
+  html.touch #spd { font-size: clamp(22px, 4.4vmin, 32px); }
+  html.touch #propHud { bottom: auto !important; top: calc(var(--st) + var(--g) + var(--bar) + 44px) !important; right: calc(var(--g) + var(--sr)) !important; font-size: 11px !important; }
+  html.touch #propHint { bottom: calc(var(--u) * 3.3 + 30px + var(--sb)) !important; }
+  html.touch #mpPanel { bottom: calc(var(--g) + var(--sb) + var(--u) * 3.3 + 24px) !important; width: min(300px, 44vw) !important; }
+  html.touch #mpLog { max-height: 18vh !important; }
+  html.touch #mpCoords { font-size: 10px !important; }
+  html.touch #mission { top: calc(var(--st) + var(--g) + var(--bar) + 6px); max-width: calc(100vw - 2 * var(--rad) - 2 * var(--g) - 24px); padding: 4px 12px; }
+  /* landscape phone: short screen, everything tighter; coordinates sit under the button bar */
+  @media (pointer: coarse) and (max-height: 500px) and (orientation: landscape) {
+    html.touch { --u: 56px; --rad: 96px; --cs: .6; --barw: calc(4 * var(--bar) + 18px);
+      --colL: calc(var(--sl) + var(--g) * 2 + var(--rad)); --colR: calc(var(--sr) + var(--g) * 2 + var(--barw)); }
+    /* compass, heading and mission share the column between the radar and the button bar */
+    html.touch #mpCompass { left: calc(var(--colL) + (100vw - var(--colL) - var(--colR)) / 2) !important; }
+    html.touch #mpHdg { left: calc(var(--colL) + (100vw - var(--colL) - var(--colR)) / 2) !important; }
+    html.touch #mission { left: calc(var(--colL) + (100vw - var(--colL) - var(--colR)) / 2); max-width: calc(100vw - var(--colL) - var(--colR)); top: calc(var(--st) + 8px + 50px * var(--cs) + 4px); }
+    html.touch #mpCoords { top: calc(var(--st) + var(--g) + var(--rad) + 6px) !important; right: auto !important; left: calc(var(--g) + var(--sl)); text-align: left !important; }
+    html.touch #mpSquad { top: calc(var(--st) + var(--g) + var(--rad) + 44px) !important; max-height: calc(100vh - var(--rad) - var(--u) * 3.3 - 70px); overflow: hidden; }
+    html.touch #propHud { top: calc(var(--st) + var(--g) + var(--bar) + 8px) !important; }
+    html.touch #dash { bottom: calc(var(--g) + var(--sb)); }
+    html.touch #mpPanel { left: calc(var(--g) * 2 + var(--sl) + var(--u) * 2.2) !important; bottom: calc(var(--g) + var(--sb) + 62px) !important; width: min(280px, calc(100vw - var(--u) * 4.6 - 60px)) !important; }
+    html.touch #mpLog { max-height: 22vh !important; }
+  }
+  /* portrait phone: stack top-down (buttons, compass, radar + mission, coords + properties), dash just above the pedals */
+  @media (orientation: portrait) and (max-width: 600px) {
+    :root { --rad: 104px; --cs: .7; --row: calc(var(--st) + var(--g) + var(--bar) + 50px); }
+    html.touch { --cs: .78; --u: 56px; --rad: 104px; }
+    #mpCompass { top: calc(var(--st) + var(--g) + var(--bar) + 4px) !important; }
+    #mpHdg { top: calc(var(--st) + var(--g) + var(--bar) + 6px + 30px * var(--cs)) !important; }
+    html.touch #radar { top: var(--row); }
+    #mission, html.touch #mission { top: var(--row); left: calc(var(--g) * 2 + var(--rad) + var(--sl)); right: calc(var(--g) + var(--sr)); transform: none; max-width: none; padding: 5px 10px; }
+    #mpCoords, html.touch #mpCoords { top: calc(var(--row) + var(--rad) + 8px) !important; right: auto !important; left: calc(var(--g) + var(--sl)); text-align: left !important; }
+    html.touch #propHud { top: calc(var(--row) + var(--rad) + 8px) !important; }
+    html.touch #mpSquad { top: calc(var(--row) + var(--rad) + 48px) !important; max-height: 20vh; overflow: hidden; }
+    html.touch #dash { bottom: calc(var(--g) + var(--sb) + var(--u) * 3.3 + 26px); }
+    html.touch #mpPanel { bottom: calc(var(--g) + var(--sb) + var(--u) * 3.3 + 84px) !important; width: calc(100vw - 2 * var(--g)) !important; }
+    html.touch #mpLog { max-height: 12vh !important; }
+    #dash .opt2 { display: none; }
+    #rotateHint { display: block; position: fixed; left: calc(var(--g) + var(--sl)); top: calc(var(--st) + var(--g)); width: calc(100vw - 4 * var(--bar) - 3 * 6px - 3 * var(--g)); max-width: 120px; z-index: 9;
+      padding: 6px 8px; border-radius: 10px; background: rgba(10,15,25,.6); font: 600 11px/1.3 system-ui; color: #e2e8f0; pointer-events: none; transition: opacity .6s; }
+    #rotateHint.gone { opacity: 0; }
+  }
+  /* small non-touch windows (e.g. a narrow desktop browser) */
+  @media (max-width: 900px) { #dash .opt2 { display: none; } }
+  @media (max-width: 1000px) { #hudBar .lbl-txt, #hudBar kbd { display: none; } .hud-btn { font-size: 17px; } :root { --cs: .85; } }
+  @media (max-width: 640px) { :root { --cs: .7; } }
+  @media (min-width: 2000px) { :root { --rad: 240px; } #dash { padding: 10px 26px; } }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="start">
+  <h1>NELLUTLA · JANGAON</h1>
+  <div class="plate">TS 08 HN 1111</div>
+  <p>Toyota Innova Crysta 2.4 V on a real-geometry map of Nellutla village: NH-365B, the Lingala Ghanpur road, concrete village streets, dirt lanes, the river bed and 1,600 real house footprints.</p>
+  <input id="pname" maxlength="20" placeholder="Your name (for multiplayer)" autocomplete="nickname" enterkeyhint="go">
+  <button id="go">START DRIVING</button>
+</div>
+<div id="mission" class="panel" style="display:none"><div class="t" id="mTitle"></div><div class="d" id="mTask"></div><span id="where"></span></div>
+<div id="hudBar">
+  <button class="hud-btn" id="btnHelp" title="Controls (I)" aria-label="Controls" aria-controls="info"><span>?</span><span class="lbl-txt">Controls</span> <kbd class="desk-only">I</kbd></button>
+  <button class="hud-btn" id="btnMap" title="Map (M)" aria-label="Map"><span>🗺</span><span class="lbl-txt">Map</span> <kbd class="desk-only">M</kbd></button>
+  <button class="hud-btn" id="btnSettings" title="Settings" aria-label="Settings" aria-controls="settings"><span>⚙</span><span class="lbl-txt">Settings</span></button>
+</div>
+<div id="settings" class="panel" role="dialog" aria-label="Settings">
+  <button class="x" data-close aria-label="Close settings">✕</button>
+  <h2>SETTINGS</h2>
+  <div>Graphics quality</div>
+  <div class="seg" id="qSeg"><button data-q="auto">Auto</button><button data-q="low">Low</button><button data-q="medium">Medium</button><button data-q="high">High</button></div>
+  <div class="muted" id="qInfo"></div>
+  <div style="margin-top:12px">Controls <span class="muted" id="devInfo"></span></div>
+  <div class="seg" id="ctrlSeg"><button data-c="auto">Auto</button><button data-c="touch">Touch</button><button data-c="keyboard">Keyboard</button></div>
+  <div class="touch-only" style="display:none;flex-direction:column;margin-top:12px">Touch steering
+    <div class="seg" id="steerSeg"><button data-s="stick">Stick</button><button data-s="arrows">Arrows</button></div>
+  </div>
+</div>
+<div id="info" class="panel" role="dialog" aria-label="Controls">
+  <button class="x" data-close aria-label="Close controls">✕</button>
+  <h2>CONTROLS</h2>
+  <div class="cols">
+    <section>
+      <h3>Keyboard · driving</h3>
+      <dl>
+        <dt>W / ↑</dt><dd>Gas</dd><dt>S / ↓</dt><dd>Brake, hold to reverse</dd><dt>A D / ← →</dt><dd>Steer</dd>
+        <dt>Space</dt><dd>Handbrake</dd><dt>Shift</dt><dd>NOS</dd><dt>C</dt><dd>Look back</dd><dt>V</dt><dd>Camera</dd>
+        <dt>H · L · K</dt><dd>Horn · lights · 4WD</dd><dt>R</dt><dd>Reset car</dd><dt>1-4 · 5 · 6</dt><dd>Doors · boot · hood</dd><dt>O · Y</dt><dd>Sunroof · wipers</dd>
+      </dl>
+    </section>
+    <section>
+      <h3>Keyboard · general</h3>
+      <dl>
+        <dt>F</dt><dd>Get in / out · take a vehicle</dd><dt>WASD</dt><dd>Walk (on foot)</dd><dt>Space · Shift</dt><dd>Jump · run</dd><dt>E</dt><dd>Interact</dd>
+        <dt>P · U</dt><dd>Properties · character</dd><dt>M</dt><dd>Map</dd><dt>G</dt><dd>Ride an auto (passenger)</dd><dt>T · B · Shift+G</dt><dd>Time · sounds · car model</dd><dt>Drag · wheel</dt><dd>Free-look orbit · zoom</dd>
+        <dt>Enter</dt><dd>Chat</dd><dt>Q + 1-8</dt><dd>Quick chat</dd><dt>Tab · Z</dt><dd>Players · ping</dd><dt>I</dt><dd>This panel</dd>
+      </dl>
+    </section>
+    <section>
+      <h3>Gamepad</h3>
+      <dl>
+        <dt>Left stick</dt><dd>Steer</dd><dt>RT · LT</dt><dd>Gas · brake/reverse</dd><dt>A</dt><dd>Get in / out</dd><dt>B · X</dt><dd>Handbrake · NOS</dd>
+        <dt>Y</dt><dd>Camera</dd><dt>LB · RB</dt><dd>Horn · look back</dd><dt>Start · Back</dt><dd>Map · reset</dd>
+      </dl>
+    </section>
+    <section class="touchsec">
+      <h3>Touch</h3>
+      <dl>
+        <dt>Left stick</dt><dd>Steer (or ◀ ▶ pads, set in ⚙)</dd><dt>GAS · BRAKE</dt><dd>Right pedals, hold BRAKE to reverse</dd><dt>HAND · NOS</dt><dd>Handbrake · boost</dd>
+        <dt>F · 🎥 · 📯</dt><dd>In/out · camera · horn</dd><dt>🗺 · ⋯</dt><dd>Map · lights, chat, quick chat, ping</dd><dt>On foot</dt><dd>Stick moves, JUMP, RUN, E interact</dd>
+      </dl>
+    </section>
+  </div>
+  <div class="muted">Steer and press gas at the same time: every control works with several fingers at once.</div>
+</div>
+<div id="dash" class="panel" style="display:none">
+  <div><div class="lbl">GEAR</div><div class="val" id="gear">1</div></div>
+  <div><div id="spd">0</div><div class="lbl">KM/H</div></div>
+  <div class="opt"><div class="lbl">SURFACE</div><div class="val" id="surf">-</div></div>
+  <div><div class="lbl">NOS</div><div class="val" id="nos">100%</div></div>
+  <div class="opt"><div class="lbl">TIME</div><div class="val" id="clock">09:00</div></div>
+  <div class="opt"><div class="lbl">VEHICLE</div><div class="val" id="veh">CRYSTA</div></div>
+  <div class="opt2"><div class="lbl">CASH</div><div class="val" id="cash">₹0</div></div>
+</div>
+<canvas id="radar" width="220" height="220" style="display:none"></canvas>
+<canvas id="bigmap"></canvas>
+<button id="mapClose" title="Close map (M or Esc)" aria-label="Close map">✕</button>
+<div id="popup"></div>
+<div id="rotateHint">↻ Rotate for the best view</div>
+<div id="cockpitWheel"></div><button id="btn4wd"></button>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>window.NELLUTLA_EXCLUDE = window.NELLUTLA_EXCLUDE || [];   // [{x, z, r}]: buildings whose centre is inside are skipped (custom-modelled by a feature module)</script>
+<script src="../nellutla-map/map-data.js?v=1793650446"></script>
+<script src="../nellutla-map/nellutla-world.js?v=1793650446"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="crysta-body.js?v=1793650446"></script>
+<script src="crysta-detail.js?v=1793650446"></script>
+<script src="crysta.js?v=1793650446"></script>
+<script src="device.js?v=1793653556"></script>
+<script src="quality.js?v=1793653556"></script>
+<script src="ambient.js?v=1793650446"></script>
+<script src="engine-audio.js?v=1793650446"></script>
+<script src="traffic-models.js?v=1793650446"></script>
+<script src="glb-car.js?v=1793650446"></script>
+<script src="multiplayer/mp.js?v=1793650446"></script>
+<script src="people-models.js?v=1793650446"></script>
+<script src="player.js?v=1793650446"></script>
+<!-- Feature modules. Each registers itself on GameHooks (init/update/key) and owns its own file. -->
+<script>window.GameHooks = { init: [], update: [], key: [] };</script>
+<script src="parked.js?v=1793650446"></script>
+<script src="character-creator.js?v=1793650446"></script>
+<script src="properties.js?v=1793650446"></script>
+<script src="safehouse.js?v=1793657508"></script>
+<script src="touch-controls.js?v=1793653556"></script>
+<script src="auto-rides.js?v=1793660000"></script>
+<script>
+// ---------------------------------------------------------------- scene
+// antialias and the pixel-ratio cap come from the performance tier (quality.js)
+renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gl'), antialias: Quality.initial.antialias, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Quality.initial.pixelRatio);
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.85;
+scene = new THREE.Scene();
+scene.background = new THREE.Color(0xa9cbe3);
+scene.fog = new THREE.Fog(0xd8d6cc, 250, 1700);
+// gradient sky dome with warm haze at the horizon (Deccan plateau dry-season look)
+const skyU = { top: { value: new THREE.Color(0x5c94d6) }, hor: { value: new THREE.Color(0xdbd9cc) }, sunDir: { value: new THREE.Vector3(0, 1, 0) }, sunCol: { value: new THREE.Color(0xfff2d0) } };
+const sky = new THREE.Mesh(new THREE.SphereGeometry(3000, 32, 16), new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, fog: false, uniforms: skyU,
+  vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+  fragmentShader: 'uniform vec3 top; uniform vec3 hor; uniform vec3 sunDir; uniform vec3 sunCol; varying vec3 vP; void main(){ float h = max(vP.y, 0.0); vec3 c = mix(hor, top, pow(h, 0.45)); float sd = max(dot(normalize(vP), sunDir), 0.0); c += sunCol * (pow(sd, 600.0) * 3.0 + pow(sd, 12.0) * 0.25); gl_FragColor = vec4(c, 1.0); }'
+}));
+scene.add(sky);
+// stars for the night sky
+const starGeo = new THREE.BufferGeometry(), starPos = [];
+for (let i = 0; i < 2500; i++) { const u = Math.random() * 2 - 1, a = Math.random() * 6.283, r = 2800; const y = Math.abs(u); starPos.push(Math.sqrt(1 - y * y) * Math.cos(a) * r, y * r, Math.sqrt(1 - y * y) * Math.sin(a) * r); }
+starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
+const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false }));
+scene.add(stars);
+camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.15, 6000);
+clock = new THREE.Clock();
+hemiLight = new THREE.HemisphereLight(0xdfeaff, 0x8a6a48, 0.75); scene.add(hemiLight);
+sunLight = new THREE.DirectionalLight(0xfff0d0, 1.35);
+sunLight.castShadow = true; sunLight.shadow.mapSize.set(2048, 2048);
+Object.assign(sunLight.shadow.camera, { left: -80, right: 80, top: 80, bottom: -80, near: 10, far: 500 });
+scene.add(sunLight); scene.add(sunLight.target);
+
+const world = NellutlaWorld.build(scene, window.NELLUTLA_MAP);
+Quality.attach({ renderer, scene, camera, sunLight, sky, stars, world });
+// height of the drivable surface: road meshes sit a few cm above the ground plane (see ROAD_STYLE in nellutla-world.js)
+const SURFACE_Y = { highway: 0.115, tar: 0.095, cc: 0.075, lane: 0.065, dirt: 0.055, river: 0.0, field: 0.0 };
+// field bunds (earth ridges between fields) lift whatever drives over them
+function bundY(x, z) { return world.bundAt ? world.bundAt(x, z) : 0; }
+function groundY(x, z) { return (SURFACE_Y[world.surfaceAt(x, z)] || 0) + bundY(x, z); }
+
+// ---------------------------------------------------------------- day / night (1 game day = 16 real minutes)
+let timeOfDay = 9.0;                   // hours
+const DAY_SECONDS = 16 * 60;
+const C = (h) => new THREE.Color(h);
+const SKY_KEYS = [                     // hour, sky top, horizon, sun colour, sun intensity, hemi intensity, exposure
+  [0,   C(0x05070f), C(0x10151f), C(0x8899bb), 0.0, 0.18, 0.9],
+  [5,   C(0x0b1222), C(0x2a2a3a), C(0xffa060), 0.0, 0.22, 0.9],
+  [6.2, C(0x3a5f95), C(0xf2a066), C(0xffa060), 0.6, 0.45, 0.9],
+  [8,   C(0x5c94d6), C(0xdbd9cc), C(0xfff0d0), 1.25, 0.72, 0.85],
+  [16,  C(0x5c94d6), C(0xdbd9cc), C(0xfff0d0), 1.3, 0.75, 0.85],
+  [17.8, C(0x4a6fa8), C(0xf0a060), C(0xff9a50), 0.7, 0.5, 0.9],
+  [18.8, C(0x1c2440), C(0x6a4a5a), C(0xff7040), 0.0, 0.28, 0.9],
+  [20,  C(0x05070f), C(0x10151f), C(0x8899bb), 0.0, 0.18, 0.9],
+  [24,  C(0x05070f), C(0x10151f), C(0x8899bb), 0.0, 0.18, 0.9],
+];
+let wasNight = false;
+function updateDayNight(dt) {
+  timeOfDay = (timeOfDay + dt * 24 / DAY_SECONDS) % 24;
+  let k = 0; while (SKY_KEYS[k + 1][0] <= timeOfDay) k++;
+  const A = SKY_KEYS[k], B = SKY_KEYS[k + 1], t = (timeOfDay - A[0]) / (B[0] - A[0]);
+  skyU.top.value.copy(A[1]).lerp(B[1], t); skyU.hor.value.copy(A[2]).lerp(B[2], t); skyU.sunCol.value.copy(A[3]).lerp(B[3], t);
+  sunLight.color.copy(skyU.sunCol.value);
+  sunLight.intensity = A[4] + (B[4] - A[4]) * t;
+  hemiLight.intensity = A[5] + (B[5] - A[5]) * t;
+  hemiLight.color.copy(skyU.top.value).lerp(new THREE.Color(0xffffff), 0.6);
+  renderer.toneMappingExposure = A[6] + (B[6] - A[6]) * t;
+  scene.fog.color.copy(skyU.hor.value);
+  // sun path: rises in the east (+x), sets in the west, slightly south of overhead (17.7 N)
+  const ang = (timeOfDay - 6) / 12 * Math.PI;
+  const dir = new THREE.Vector3(Math.cos(ang), Math.sin(ang), 0.25).normalize();
+  skyU.sunDir.value.copy(dir);
+  sunLight.position.set(carPos.x + dir.x * 250, Math.max(20, dir.y * 250), carPos.z + dir.z * 250);
+  const night = THREE.MathUtils.clamp((0.15 - dir.y) / 0.3, 0, 1);
+  stars.material.opacity = night;
+  world.setNight(night);
+  if (night > 0.6 && !wasNight) { wasNight = true; if (!headlightsOn) toggleHeadlights(); }
+  if (night < 0.3 && wasNight) { wasNight = false; if (headlightsOn) toggleHeadlights(); }
+  const hh = Math.floor(timeOfDay), mm = Math.floor((timeOfDay - hh) * 60);
+  document.getElementById('clock').textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+window.NellutlaWorldRef = world;
+buildToyotaInnovaCrysta();
+const steeringWheelMesh = playerCarGroup.children[0].userData.steeringWheel;
+// swap in a licensed .glb Crysta if one has been dropped into models/
+CrystaGLB.tryLoad('models/').then(r => { if (r) { console.log('crysta.glb loaded', r); showComboPopup('CUSTOM CRYSTA MODEL LOADED'); } });
+
+// ---------------------------------------------------------------- spawn on NH-365B, facing along it
+function nearestRoadDir(x, z, types) {
+  let best = null;
+  for (const r of world.roads) if (!types || types.includes(r.t)) for (let i = 0; i < r.p.length - 1; i++) {
+    const a = r.p[i], b = r.p[i + 1], dx = b[0] - a[0], dz = b[1] - a[1], L2 = dx * dx + dz * dz || 1;
+    const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / L2));
+    const px = a[0] + t * dx, pz = a[1] + t * dz, d = Math.hypot(x - px, z - pz);
+    if (!best || d < best.d) best = { d, x: px, z: pz, rot: Math.atan2(dx, dz), road: r };
+  }
+  return best;
+}
+const spawnInfo = nearestRoadDir(world.spawn.x, world.spawn.z, ['highway']);
+function respawnCar() {
+  // keep left (India drives on the left)
+  const lx = Math.cos(spawnInfo.rot) * 2, lz = -Math.sin(spawnInfo.rot) * 2;
+  carPos.set(spawnInfo.x + lx, 0.44, spawnInfo.z + lz);
+  carRot = spawnInfo.rot; carSpeed = 0; isReversing = false; currentGear = 1;
+  if (typeof vel !== 'undefined') { vel.x = vel.z = 0; yawRate = 0; lastSpeed = 0; gearIdx = 0; }
+  snapCameraToCar();
+}
+
+// ---------------------------------------------------------------- missions at real landmarks
+const LM = n => world.landmarks.find(l => l.name.startsWith(n));
+const MISSIONS = [
+  { title: 'SHIVALAYAM DARSHAN', task: 'Drive to Shivalayam Temple in the village north', l: LM('Shivalayam'), r: 18, reward: 500 },
+  { title: 'SCHOOL DROP', task: 'Drop the kids at ZPSS School', l: LM('ZPSS'), r: 16, reward: 400 },
+  { title: 'HOSPITAL RUN', task: 'Rush to the Government Hospital, Nellutla', l: LM('Government Hospital'), r: 16, reward: 700 },
+  { title: 'GANESH TEMPLE', task: 'Reach Borra Venkanna Ganesh Temple', l: LM('Ganesh'), r: 18, reward: 500 },
+  { title: 'FUEL UP', task: 'Take NH-365B west to Nellutla Petrol Bunk', l: LM('Nellutla Petrol'), r: 22, reward: 600 },
+  { title: 'COTTON LOAD', task: 'Head east to the Cotton Factory', l: LM('Cotton'), r: 25, reward: 800 },
+].filter(m => m.l);
+let mIdx = 0;
+const beacon = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 60, 24, 1, true),
+  new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }));
+beacon.position.y = 30; scene.add(beacon);
+function setMission() {
+  const m = MISSIONS[mIdx];
+  beacon.position.x = m.l.x; beacon.position.z = m.l.z;
+  document.getElementById('mTitle').textContent = `MISSION ${mIdx + 1}/${MISSIONS.length} · ${m.title}`;
+  document.getElementById('mTask').textContent = m.task;
+}
+let cash = 500000;   // starting money for a new player: enough for a small village home (saved cash from properties.js overrides this)
+function showComboPopup(msg) {
+  const p = document.getElementById('popup'); p.textContent = msg; p.style.opacity = 1;
+  clearTimeout(p._t); p._t = setTimeout(() => p.style.opacity = 0, 1600);
+}
+
+// ---------------------------------------------------------------- village traffic following real roads
+const traffic = [];
+(function spawnTraffic() {
+  const routeLen = r => r.p.reduce((sum, p, i) => i ? sum + Math.hypot(p[0] - r.p[i-1][0], p[1] - r.p[i-1][1]) : 0, 0);
+  const all = world.roads.filter(r => r.p.length >= 2).map(r => ({ r, len: routeLen(r) })).filter(o => o.len > 100);
+  const on = types => all.filter(o => types.includes(o.r.t));
+  // kind, how many, which roads, speed (m/s)
+  const PLAN = [
+    ['auto', 12, ['highway', 'tar', 'cc', 'lane'], 9], ['bike', 14, ['highway', 'tar', 'cc', 'lane', 'dirt'], 11],
+    ['hatch', 7, ['highway', 'tar', 'cc'], 13], ['suv', 5, ['highway', 'tar', 'cc'], 14],
+    ['tractor', 5, ['tar', 'dirt', 'cc', 'lane'], 5], ['lorry', 3, ['highway', 'tar'], 12],
+    ['bus', 2, ['highway', 'tar'], 12], ['bullockCart', 4, ['dirt', 'lane'], 1.6],
+  ];
+  for (const [kind, n, types, spd] of PLAN) {
+    const routes = on(types); if (!routes.length) continue;
+    for (let i = 0; i < n; i++) {
+      const o = routes[Math.floor(Math.random() * routes.length)];
+      const v = TrafficModels[kind]();
+      const speed = spd * (o.r.t === 'highway' ? 1.7 : 1) * (0.85 + Math.random() * 0.3);
+      traffic.push({ ...v, model: kind, r: o.r, len: o.len, s: Math.random() * o.len, dir: Math.random() < 0.5 ? 1 : -1, speed, cur: speed, len2: v.len / 2, wheelR: 0.4 });
+      scene.add(v.g);
+    }
+  }
+})();
+function pointAt(r, s) {
+  for (let i = 0; i < r.p.length - 1; i++) {
+    const a = r.p[i], b = r.p[i + 1], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (s <= L || i === r.p.length - 2) { const t = Math.min(1, s / (L || 1)); return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, Math.atan2(b[0] - a[0], b[1] - a[1])]; }
+    s -= L;
+  }
+}
+function updateTraffic(dt) {
+  const night = stars.material.opacity > 0.4;
+  for (const t of traffic) {
+    // slow down for the player or a vehicle ahead in the same lane
+    const fx = Math.sin(t.g.rotation.y), fz = Math.cos(t.g.rotation.y);
+    let want = t.speed;
+    const px = carPos.x - t.g.position.x, pz = carPos.z - t.g.position.z, ahead = px * fx + pz * fz, side = Math.abs(px * fz - pz * fx);
+    if (ahead > 0 && ahead < t.len2 + 10 && side < 3) want = Math.min(want, Math.max(0, (ahead - t.len2 - 3) * 0.8));
+    for (const o of traffic) {
+      if (o === t || o.r !== t.r || o.dir !== t.dir) continue;
+      const gap = (o.s - t.s) * t.dir;
+      if (gap > 0 && gap < t.len2 + o.len2 + 8) want = Math.min(want, o.cur * 0.9);
+    }
+    t.cur += (want - t.cur) * Math.min(1, dt * 2.5);
+    t.s += t.dir * t.cur * dt;
+    if (t.s > t.len) { t.s = t.len; t.dir = -1; } else if (t.s < 0) { t.s = 0; t.dir = 1; }
+    const [x, z, h] = pointAt(t.r, t.s), rot = t.dir > 0 ? h : h + Math.PI;
+    const off = Math.min(2.2, t.r.w / 4);           // keep left
+    { const gx = x + Math.cos(rot) * off, gz = z - Math.sin(rot) * off; t.g.position.set(gx, groundY(gx, gz), gz); }
+    t.g.rotation.y += Math.atan2(Math.sin(rot - t.g.rotation.y), Math.cos(rot - t.g.rotation.y)) * Math.min(1, dt * 6);
+    for (const w of t.wheels) w.rotation.x += t.cur * dt / t.wheelR;
+    if (t.night !== night) {
+      t.night = night;
+      t.head.forEach(m => m.material.color.setHex(night ? 0xfff2c0 : 0x777766));
+      t.tail.forEach(m => m.material.color.setHex(night ? 0xff2020 : 0x661111));
+    }
+    // collide with player
+    const dx = carPos.x - t.g.position.x, dz = carPos.z - t.g.position.z, d = Math.hypot(dx, dz);
+    const r = 1.7 + Math.min(t.len2, 2.5);
+    if (d < r && d > 0.01) {
+      const push = r - d; carPos.x += dx / d * push; carPos.z += dz / d * push;
+      if (Math.abs(carSpeed) > 25) showComboPopup('CRASH!'); carSpeed *= 0.4;
+    }
+  }
+}
+
+// ---------------------------------------------------------------- vehicle dynamics: Innova Crysta 2.4 GD, 6-speed auto, RWD
+// Real figures: 2100 kg, 150 PS @3400, 360 Nm @1600-2400, wheelbase 2.75 m, 0-100 km/h about 12.5 s, top about 175 km/h.
+const CRYSTA = {
+  mass: 2100, wheelbase: 2.75, wheelR: 0.36, final: 3.909, eff: 0.88,
+  gears: [3.60, 2.09, 1.49, 1.00, 0.73, 0.58], reverse: 3.28,
+  upshift: 3900, downshift: 1500, idle: 800, redline: 4200,
+  dragK: 0.5 * 1.2 * 0.36 * 2.75,        // ½ ρ Cd A
+};
+// Arcade tuning: 1.0 everywhere = realistic Crysta; raise for a punchier, grippier GTA-style feel.
+const ARCADE = { power: 1.9, grip: 1.3, brake: 1.3, steer: 1.6, drag: 0.65, drift: 0.85, stability: 2.2 };
+const MU = { highway: 1.0, tar: 0.95, cc: 0.9, lane: 0.85, dirt: 0.68, river: 0.45, field: 0.55 };   // tyre friction
+const CRR = { highway: 0.012, tar: 0.014, cc: 0.016, lane: 0.02, dirt: 0.035, river: 0.11, field: 0.06 }; // rolling resistance
+let surface = 'highway';
+const vel = { x: 0, z: 0 };              // world-space velocity, m/s
+let brakingNow = false, throttleIn = 0, yawRate = 0, lastSpeed = 0, gearIdx = 0, shiftTimer = 0, pitchVis = 0, rollVis = 0, slipVis = 0, longAcc = 0, latAcc = 0;
+function torqueAt(rpm) {                 // Nm, full throttle
+  if (rpm < 1000) return 210 + (rpm - 800) * 0.4;
+  if (rpm < 1600) return 250 + (rpm - 1000) / 600 * 110;
+  if (rpm <= 2400) return 360;
+  if (rpm <= 3400) return 360 - (rpm - 2400) / 1000 * 50;
+  return Math.max(0, 310 - (rpm - 3400) / 800 * 310);
+}
+// Map workaround: some compound walls in the map data cut across paved roads (e.g. the CC road at -89,-34 and
+// -73,-200). Nothing solid stands on a paved carriageway, so over tar/CC/highway the wall probe is ignored, and on
+// narrow lanes/dirt it is shrunk so you can squeeze past a wall corner poking into the lane.
+const PAVED = { highway: 1, tar: 1, cc: 1 };
+function wallProbeRadius(x, z, r) { const s = world.surfaceAt(x, z); return PAVED[s] ? 0 : (s === 'lane' || s === 'dirt') ? r * 0.75 : r; }
+// fixed-size sub-steps: same behaviour at 30, 60 or 144 fps, and no tunnelling through thin walls at speed
+function updatePhysics(dt) {
+  pollGamepad();
+  const n = Math.max(1, Math.ceil(dt / (1 / 120) - 1e-6)), h = dt / n;
+  for (let i = 0; i < n; i++) { physicsStep(h); if (typeof Player !== 'undefined' && i < n - 1) Player.crystaCollide(); }
+}
+function physicsStep(dt) {
+  const C = CRYSTA, g = 9.81;
+  // external code (traffic crashes, respawn) scales carSpeed; mirror that onto the velocity vector
+  if (Math.abs(carSpeed - lastSpeed) > 0.01) {
+    const k = Math.abs(lastSpeed) > 0.1 ? carSpeed / lastSpeed : 0;
+    vel.x *= k; vel.z *= k; if (k === 0) yawRate = 0;
+  }
+  surface = world.surfaceAt(carPos.x, carPos.z);
+  let mu = MU[surface] * ARCADE.grip;
+  if (bundY(carPos.x, carPos.z) > 0.05) { vel.x *= 1 - 1.5 * dt; vel.z *= 1 - 1.5 * dt; }   // bump and scrub speed crossing a bund
+  if (fourWheelDriveLock && mu < 0.9) mu = Math.min(0.92, mu + 0.2);
+
+  const fwd = { x: Math.sin(carRot), z: Math.cos(carRot) }, left = { x: Math.cos(carRot), z: -Math.sin(carRot) };
+  let vF = vel.x * fwd.x + vel.z * fwd.z, vL = vel.x * left.x + vel.z * left.z;
+  const speed = Math.hypot(vel.x, vel.z);
+
+  // steering: rack is slower at speed, lock reduces with speed
+  const target = Math.abs(padIn.steer) > 0.12 ? padIn.steer : (inputState.left ? 1 : 0) - (inputState.right ? 1 : 0);
+  // quick at parking speed, calmer at highway speed; returns to centre faster than it turns in (self-centring)
+  const centring = !target || Math.sign(target) !== Math.sign(steerAngle);
+  steerAngle += (target - steerAngle) * Math.min(1, dt * (centring ? 9 : 5.5) * ARCADE.steer / (1 + speed / 32));
+
+  // reverse gear: hold brake at standstill
+  // D <-> R like big driving games: the pedal against the direction of travel brakes, and the box flips to the
+  // other direction automatically the moment the car is (almost) stopped, while you keep holding the key
+  const wantFwd = inputState.gas && !inputState.brake, wantBack = inputState.brake && !inputState.gas;
+  if (!isReversing && wantBack && vF < 0.8) isReversing = true;
+  else if (isReversing && wantFwd && vF > -0.8) isReversing = false;
+  brakingNow = (!isReversing && inputState.brake) || (isReversing && inputState.gas);
+
+  // auto gearbox
+  const wheelRpm = Math.abs(vF) / C.wheelR * 60 / (2 * Math.PI);
+  shiftTimer = Math.max(0, shiftTimer - dt);
+  if (!isReversing && shiftTimer === 0) {
+    const rpmNow = wheelRpm * C.gears[gearIdx] * C.final;
+    const upAt = inputState.gas ? C.upshift : 2200;
+    if (rpmNow > upAt && gearIdx < C.gears.length - 1) { gearIdx++; shiftTimer = 0.35; }
+    else if (gearIdx > 0 && wheelRpm * C.gears[gearIdx - 1] * C.final < (inputState.gas ? C.downshift + 900 : C.downshift)) { gearIdx--; shiftTimer = 0.25; }
+  }
+  const ratio = isReversing ? C.reverse : C.gears[gearIdx];
+  engineRPM = Math.max(C.idle, Math.min(C.redline, wheelRpm * ratio * C.final));
+  currentGear = isReversing ? -1 : gearIdx + 1;
+
+  // NOS
+  isNosActive = inputState.nos && nosTank > 0 && speed > 4 && inputState.gas && !isReversing;
+  nosTank = isNosActive ? Math.max(0, nosTank - dt * 25) : Math.min(100, nosTank + dt * 6);
+
+  // longitudinal forces
+  // throttle pedal ramps in/out instead of switching instantly (smooth take-off, no lurch)
+  const pedal = isReversing ? (inputState.brake ? Math.max(0.6, padIn.brake) : 0) : (inputState.gas ? Math.max(padIn.gas, padIn.gas > 0 ? 0 : 1) : 0);
+  throttleIn += (pedal - throttleIn) * Math.min(1, dt * (pedal > throttleIn ? 5 : 9));
+  const throttle = throttleIn > 0.02 ? throttleIn : 0;
+  let Fdrive = 0;
+  if (throttle && shiftTimer < 0.2) {
+    const rpmForTorque = Math.max(1200, engineRPM);        // torque converter lets it pull from standstill
+    Fdrive = torqueAt(rpmForTorque) * throttle * ratio * C.final * C.eff / C.wheelR * (isNosActive ? 1.6 : 1) * ARCADE.power;
+    if (engineRPM >= C.redline - 20) Fdrive *= 0.1;
+    if (isReversing) Fdrive = -Fdrive;
+  }
+  const tractionMax = mu * C.mass * g * (fourWheelDriveLock ? 1.1 : 0.85);   // RWD: rear axle load
+  const wheelspin = Math.abs(Fdrive) > tractionMax;
+  Fdrive = THREE.MathUtils.clamp(Fdrive, -tractionMax, tractionMax);
+  let Fbrake = 0;
+  if (brakingNow) Fbrake = mu * C.mass * g * 0.85 * ARCADE.brake;           // ABS-limited
+  if (!inputState.gas && !inputState.brake && !isReversing) Fbrake += 1100 + Math.abs(vF) * 28;  // gentle engine braking when you lift off (coasts, doesn't stamp the brakes)
+  if (inputState.drift) Fbrake += mu * C.mass * g * 0.35;                          // handbrake on rear
+  const Fdrag = C.dragK * ARCADE.drag * vF * Math.abs(vF) + CRR[surface] * C.mass * g * Math.sign(vF);
+  let aF = (Fdrive - Fdrag) / C.mass;
+  const bA = Fbrake / C.mass;
+  if (Math.abs(vF) > 0.05) aF -= Math.sign(vF) * Math.min(bA, Math.abs(vF) / dt);
+  else if (!throttle) { vF = 0; aF = 0; }
+  // never let braking flip the direction of travel; reverse only engages from a standstill
+  if (brakingNow && !isReversing && vF + aF * dt < 0) { vF = 0; aF = 0; }
+  if (brakingNow && isReversing && vF + aF * dt > 0) { vF = 0; aF = 0; }
+  vF += aF * dt;
+  if (!isReversing && vF < 0 && !throttle) vF = Math.min(0, vF + 3 * dt);
+  if (isReversing && vF < -8.5) vF += (-8.5 - vF) * Math.min(1, dt * 3);        // reverse tops out near 30 km/h
+
+  // lateral: bicycle model with grip limit; handbrake lets the rear step out
+  const lock = 0.62 / (1 + (speed * speed) / (900 * ARCADE.steer * ARCADE.steer));
+  const delta = steerAngle * lock;
+  let targetYaw = vF * Math.tan(delta) / C.wheelbase;
+  const maxYaw = (mu * g * 1.05 * ARCADE.steer) / Math.max(3, Math.abs(vF));                     // understeer at the limit
+  const rearGrip = inputState.drift ? 0.3 : 1;
+  if (inputState.drift && speed > 8) targetYaw *= 1.9 * ARCADE.drift;
+  targetYaw = THREE.MathUtils.clamp(targetYaw, -maxYaw / (rearGrip < 1 ? 1.1 : 1), maxYaw / (rearGrip < 1 ? 1.1 : 1));
+  yawRate += (targetYaw - yawRate) * Math.min(1, dt * (6 * mu * ARCADE.steer));
+  carRot += yawRate * dt;
+  // tyres pull the sideways velocity back towards zero, limited by friction
+  const latGrip = mu * g * rearGrip * (wheelspin ? 0.7 : 1);
+  // stability assist snaps slides straight once you let go of the handbrake
+  const assist = inputState.drift ? 1 : ARCADE.stability;
+  const dvL = THREE.MathUtils.clamp(-vL, -latGrip * dt * 1.4 * assist, latGrip * dt * 1.4 * assist);
+  vL += dvL;
+  // counter-steer assist: in a slide (not on the handbrake) gently yaw the nose toward the direction of travel
+  if (!inputState.drift && speed > 6 && Math.abs(vL) > 1.2) yawRate += THREE.MathUtils.clamp(-vL / Math.max(4, Math.abs(vF)), -1, 1) * Math.sign(vF || 1) * dt * 2.5;
+  latAcc = yawRate * vF; longAcc = aF;
+  slipVis = Math.abs(vL) + (wheelspin && speed < 12 ? 3 : 0) + (inputState.brake && speed > 15 && Fbrake >= mu * C.mass * g * 0.8 ? 1.5 : 0);
+
+  // rebuild world velocity in the new heading
+  const nf = { x: Math.sin(carRot), z: Math.cos(carRot) }, nl = { x: Math.cos(carRot), z: -Math.sin(carRot) };
+  vel.x = nf.x * vF + nl.x * vL; vel.z = nf.z * vF + nl.z * vL;
+  carPos.x += vel.x * dt; carPos.z += vel.z * dt;
+  const [x0, z0, x1, z1] = world.bounds;
+  carPos.x = Math.max(x0 + 5, Math.min(x1 - 5, carPos.x)); carPos.z = Math.max(z0 + 5, Math.min(z1 - 5, carPos.z));
+
+  // collisions: three probes along the body. Only the velocity INTO the wall is removed (small bounce),
+  // the car keeps sliding along it, and a glancing hit turns the nose to follow the wall instead of sticking.
+  for (const o of [1.45, 0, -1.45]) {
+    const bx = carPos.x + Math.sin(carRot) * o, bz = carPos.z + Math.cos(carRot) * o;
+    const p = { x: bx, z: bz };
+    const c = world.collide(p, wallProbeRadius(bx, bz, 0.98));
+    if (!c.hit) continue;
+    carPos.x += p.x - bx; carPos.z += p.z - bz;
+    const vn = vel.x * c.nx + vel.z * c.nz;
+    if (vn < 0) {
+      const impact = -vn;
+      vel.x -= (1 + (impact > 3 ? 0.25 : 0)) * vn * c.nx; vel.z -= (1 + (impact > 3 ? 0.25 : 0)) * vn * c.nz;
+      const keep = 1 - Math.min(0.35, impact * 0.025);              // scrape: lose some speed in proportion to the hit
+      vel.x *= keep; vel.z *= keep;
+      const sp = Math.hypot(vel.x, vel.z);
+      if (sp > 3 && o !== 0) {                                     // glancing: swing the heading toward the slide direction
+        const fwdDot = Math.sin(carRot) * vel.x + Math.cos(carRot) * vel.z;
+        let want = Math.atan2(vel.x, vel.z); if (fwdDot < 0) want += Math.PI;
+        let d = want - carRot; d = Math.atan2(Math.sin(d), Math.cos(d));
+        if (Math.abs(d) < 0.9) carRot += d * Math.min(1, impact * 0.08 + 0.15);
+      }
+      yawRate *= 0.6;
+      if (impact > 8) showComboPopup('BUMP!');
+    }
+  }
+  carSpeed = (vel.x * Math.sin(carRot) + vel.z * Math.cos(carRot)) * 3.6;
+  lastSpeed = carSpeed;
+  turboBoost += ((inputState.gas ? Math.min(1.8, engineRPM / 2400) : 0) - turboBoost) * dt * 3;
+  if (!inputState.gas && turboBoost > 0.9 && engineRPM > 2200) playBlowOffValveSound();
+
+  // body motion: pitch under accel/brake, roll in corners, bounce on rough ground
+  pitchVis += ((-longAcc * 0.006) - pitchVis) * Math.min(1, dt * 5);
+  rollVis += ((latAcc * 0.012) - rollVis) * Math.min(1, dt * 4);
+  const rough = surface === 'dirt' || surface === 'field' || surface === 'river';
+  playerCarGroup.position.set(carPos.x, groundY(carPos.x, carPos.z), carPos.z);   // tyres on the road surface (carPos.y is a camera/legacy height)
+  if (rough) playerCarGroup.position.y += (Math.sin(performance.now() / 70) * 0.5 + Math.sin(performance.now() / 37) * 0.5) * 0.025 * Math.min(1, speed / 8);
+  playerCarGroup.rotation.set(THREE.MathUtils.clamp(pitchVis, -0.05, 0.05), carRot, THREE.MathUtils.clamp(rollVis, -0.06, 0.06), 'YXZ');
+  const spin = ((wheelspin && throttle ? Math.max(Math.abs(vF), 12) * Math.sign(Fdrive || 1) : vF) / wheelRadius) * dt;
+  if (steeringWheelMesh) steeringWheelMesh.rotation.z = steerAngle * 2.2;
+  wheelMeshes.forEach(w => { w.tire.rotation.x += spin; if (w.isFront) w.anchor.rotation.y = delta; });
+  rearBrakeLights.forEach(tl => tl.material.color.setHex(brakingNow ? 0xff0000 : 0xb91c1c));
+
+  // tyre squeal and skid marks when sliding
+  if (squealGain && audioCtx) {
+    const sq = THREE.MathUtils.clamp((slipVis - 1.2) / 5, 0, 1) * (surface === 'highway' || surface === 'tar' || surface === 'cc' ? 0.14 : 0.04);
+    squealGain.gain.setTargetAtTime(sq, audioCtx.currentTime, 0.05);
+  }
+  if (slipVis > 2 && speed > 3 && ['highway', 'tar', 'cc', 'lane'].includes(surface)) addSkid();
+
+}
+function checkMission() {
+  const m = MISSIONS[mIdx];
+  if (Math.hypot(carPos.x - m.l.x, carPos.z - m.l.z) < m.r) {
+    cash += m.reward; playVictoryFanfare(); showComboPopup(`MISSION COMPLETE +₹${m.reward}`);
+    mIdx = (mIdx + 1) % MISSIONS.length; setMission();
+  }
+}
+// skid marks: a ring buffer of thin dark quads behind the rear wheels
+const SKID_MAX = 600;
+const skidGeo = new THREE.BufferGeometry(); skidGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(SKID_MAX * 6 * 3), 3));
+const skidMesh = new THREE.Mesh(skidGeo, new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, side: THREE.DoubleSide }));
+skidMesh.frustumCulled = false; scene.add(skidMesh);
+let skidIdx = 0, lastSkid = null;
+function addSkid() {
+  const pts = [-0.8, 0.8].map(o => ({ x: carPos.x + Math.cos(carRot) * o - Math.sin(carRot) * 1.37, z: carPos.z - Math.sin(carRot) * o - Math.cos(carRot) * 1.37 }));
+  if (lastSkid && Math.hypot(pts[0].x - lastSkid[0].x, pts[0].z - lastSkid[0].z) < 0.4) return;
+  if (lastSkid && Math.hypot(pts[0].x - lastSkid[0].x, pts[0].z - lastSkid[0].z) < 3) {
+    const a = skidGeo.attributes.position.array, w = 0.11, nx = Math.cos(carRot) * w, nz = -Math.sin(carRot) * w, y = 0.16;
+    for (let k = 0; k < 2; k++) {
+      const p0 = lastSkid[k], p1 = pts[k], i = (skidIdx % SKID_MAX) * 18; skidIdx++;
+      a.set([p0.x - nx, y, p0.z - nz, p0.x + nx, y, p0.z + nz, p1.x + nx, y, p1.z + nz, p0.x - nx, y, p0.z - nz, p1.x + nx, y, p1.z + nz, p1.x - nx, y, p1.z - nz], i);
+    }
+    skidGeo.attributes.position.needsUpdate = true;
+  }
+  lastSkid = pts;
+}
+
+function toggleHeadlights() {
+  headlightsOn = !headlightsOn;
+  frontHeadlights.forEach(hl => { hl.material.color.setHex(headlightsOn ? 0xffffff : 0x555555); if (hl.userData.spot) hl.userData.spot.intensity = headlightsOn ? 1.8 : 0; });
+}
+
+// ---------------------------------------------------------------- input
+let showMap = false;
+function setMap(on) {
+  showMap = on;
+  document.getElementById('bigmap').style.display = on ? 'block' : 'none';
+  document.getElementById('mapClose').style.display = on ? 'block' : 'none';
+  document.body.classList.toggle('map-open', on);
+}
+// one toggle for every input (M key, gamepad Start, HUD button, touch button); debounced so a synthetic key
+// plus a click from the same tap can't open and instantly close it again
+function toggleMap() { const now = performance.now(); if (now - (toggleMap.t || 0) < 250) return; toggleMap.t = now; setMap(!showMap); }
+document.getElementById('mapClose').addEventListener('click', e => { e.stopPropagation(); setMap(false); });
+document.getElementById('btnMap').addEventListener('click', e => { e.stopPropagation(); toggleMap(); e.currentTarget.blur(); });
+function cycleCamera() {
+  cameraIndex = (cameraIndex + 1) % CAMERA_MODES.length;
+  showComboPopup('CAMERA · ' + (Player.mode === 'crysta' ? ['CHASE', 'CLOSE CHASE', 'COCKPIT', 'HOOD', 'TOP-DOWN'][cameraIndex] : Player.cameraName()));
+}
+let ambience = null, engineSound = null;
+const KEYMAP = { KeyW: 'gas', ArrowUp: 'gas', KeyS: 'brake', ArrowDown: 'brake', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', Space: 'drift', ShiftLeft: 'nos', ShiftRight: 'nos' };
+// keyboard and gamepad are merged into inputState every frame, so neither can leave a key stuck
+const keyState = {};
+const padIn = { steer: 0, gas: 0, brake: 0, connected: false, btn: [] };
+let lookBack = false;
+function isTypingTarget(t) { return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable); }
+function syncInput() {
+  for (const a of ['gas', 'brake', 'left', 'right', 'drift', 'nos']) inputState[a] = !!keyState[a] || !!padIn[a + 'B'];
+}
+function releaseAllInput() {
+  for (const k in keyState) keyState[k] = false;
+  for (const k in inputState) if (typeof inputState[k] === 'boolean') inputState[k] = false;
+  lookBack = false;
+}
+addEventListener('blur', releaseAllInput);
+document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAllInput(); });
+document.addEventListener('focusin', e => { if (isTypingTarget(e.target)) releaseAllInput(); });   // chat box, name field, creator forms
+function pollGamepad() {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const gp = pads && [...pads].find(p => p && p.connected);
+  padIn.connected = !!gp;
+  if (!gp) { padIn.steer = padIn.gas = padIn.brake = 0; ['gasB', 'brakeB', 'leftB', 'rightB', 'driftB', 'nosB'].forEach(k => padIn[k] = false); TouchControls.apply(padIn); syncInput(); return; }
+  const dz = v => Math.abs(v) < 0.15 ? 0 : (v - Math.sign(v) * 0.15) / 0.85;
+  const b = i => gp.buttons[i] ? gp.buttons[i].value || (gp.buttons[i].pressed ? 1 : 0) : 0;
+  padIn.steer = -dz(gp.axes[0] || 0);
+  padIn.gas = b(7); padIn.brake = b(6);
+  padIn.gasB = padIn.gas > 0.08 || b(12) > 0.5; padIn.brakeB = padIn.brake > 0.08 || b(13) > 0.5;
+  padIn.leftB = padIn.steer > 0.3 || b(14) > 0.5; padIn.rightB = padIn.steer < -0.3 || b(15) > 0.5;
+  padIn.driftB = b(1) > 0.5; padIn.nosB = b(2) > 0.5;
+  // edge-triggered buttons: A get in/out, Y camera, LB horn, RB look back (held), Back reset, Start map
+  const prev = padIn.btn, now = gp.buttons.map(x => x.pressed);
+  const tap = i => now[i] && !prev[i];
+  if (isPlaying) {
+    if (tap(0)) Player.toggle();
+    if (tap(3)) cycleCamera();
+    if (tap(4)) triggerHorn();
+    if (tap(8)) { Player.resetToCrysta(); respawnCar(); }
+    if (tap(9)) toggleMap();
+  }
+  lookBack = !!now[5] || !!keyState.look;
+  padIn.btn = now;
+  TouchControls.apply(padIn);
+  syncInput();
+}
+addEventListener('gamepadconnected', () => showComboPopup('CONTROLLER CONNECTED'));
+const GAME_KEYS = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab']);
+addEventListener('keydown', e => {
+  if (isTypingTarget(e.target)) return;                    // never steer the car while typing in a field
+  // feature modules can take a key first (return true to consume it)
+  for (const f of GameHooks.key) { try { if (f(e, GAME) === true) return; } catch (err) { console.error(err); } }
+  if (GAME_KEYS.has(e.code)) e.preventDefault();          // no page scrolling / focus hopping
+  if (KEYMAP[e.code]) { keyState[KEYMAP[e.code]] = true; syncInput(); }
+  if (e.code === 'KeyC') { keyState.look = true; lookBack = true; }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.repeat) return;
+  const k = e.code;
+  if (k === 'KeyI') toggleHelp();
+  if (k === 'Escape' && (document.getElementById('info').classList.contains('open') || document.getElementById('settings').classList.contains('open'))) { toggleHelp(false); toggleSettings(false); }
+  if (k === 'KeyH') triggerHorn();
+  if (k === 'KeyL') toggleHeadlights();
+  if (k === 'KeyV') cycleCamera();
+  if (k === 'KeyR') { Player.resetToCrysta(); respawnCar(); }
+  if (k === 'KeyF') Player.toggle();
+  if (k === 'KeyB' && ambience) showComboPopup(ambience.toggle() ? 'VILLAGE SOUNDS ON' : 'VILLAGE SOUNDS OFF');
+  if (k === 'KeyG' && e.shiftKey) { if (CrystaGLB.loaded) showComboPopup(CrystaGLB.toggle() ? 'GLB MODEL' : 'BUILT-IN MODEL'); else showComboPopup('NO models/crysta.glb FOUND'); }
+  if (k === 'KeyT') { timeOfDay = (timeOfDay + 2) % 24; showComboPopup('TIME +2H'); }
+  if (k === 'KeyK') { fourWheelDriveLock = !fourWheelDriveLock; showComboPopup(fourWheelDriveLock ? '4WD LOCKED' : '4WD HIGH'); }
+  if (k === 'Digit1') toggleDoor('FL'); if (k === 'Digit2') toggleDoor('FR');
+  if (k === 'Digit3') toggleDoor('RL'); if (k === 'Digit4') toggleDoor('RR');
+  if (k === 'Digit5') toggleTrunk(); if (k === 'Digit6') toggleHood();
+  if (k === 'KeyO') toggleSunroof(); if (k === 'KeyY') toggleWipers();   // P belongs to properties.js
+  if (k === 'KeyM') toggleMap();
+  if (k === 'Escape' && showMap) setMap(false);
+});
+addEventListener('keyup', e => {
+  if (KEYMAP[e.code]) { keyState[KEYMAP[e.code]] = false; syncInput(); }
+  if (e.code === 'KeyC') { keyState.look = false; lookBack = false; }
+  if (e.key === 'Meta') releaseAllInput();                  // macOS swallows keyups while Cmd is held
+});
+// resize + orientation: phones report the new size late, so re-check a few frames after the event
+function fitView() {
+  const w = innerWidth, h = innerHeight;
+  if (w === fitView.w && h === fitView.h) return; fitView.w = w; fitView.h = h;
+  camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h);
+  window.scrollTo(0, 0);
+}
+addEventListener('resize', fitView);
+addEventListener('orientationchange', () => { [50, 250, 600].forEach(t => setTimeout(fitView, t)); });
+if (window.visualViewport) visualViewport.addEventListener('resize', fitView);
+addEventListener('scroll', () => { if (scrollX || scrollY) scrollTo(0, 0); });
+
+// ---------------------------------------------------------------- Controls card + Settings menu
+const helpEl = document.getElementById('info'), setEl = document.getElementById('settings');
+function toggleHelp(on) {
+  on = on === undefined ? !helpEl.classList.contains('open') : on;
+  helpEl.classList.toggle('open', on); document.getElementById('btnHelp').classList.toggle('on', on);
+  if (on) toggleSettings(false);
+}
+function toggleSettings(on) {
+  on = on === undefined ? !setEl.classList.contains('open') : on;
+  setEl.classList.toggle('open', on); document.getElementById('btnSettings').classList.toggle('on', on);
+  if (on) { toggleHelp(false); renderSettings(); }
+}
+function renderSettings() {
+  setEl.querySelectorAll('#qSeg button').forEach(b => b.classList.toggle('on', b.dataset.q === Quality.mode));
+  setEl.querySelectorAll('#steerSeg button').forEach(b => b.classList.toggle('on', b.dataset.s === TouchControls.steerMode));
+  let cm = 'auto'; try { cm = localStorage.getItem('nellutla.controls') || 'auto'; } catch (e) {}
+  setEl.querySelectorAll('#ctrlSeg button').forEach(b => b.classList.toggle('on', b.dataset.c === cm));
+  document.getElementById('devInfo').textContent = `· detected ${Device.type}, ${Device.touchUI ? 'touch' : 'keyboard'} controls`;
+  const a = Quality.applied;
+  document.getElementById('qInfo').innerHTML = `Now: <b>${Quality.TIERS[Quality.tier].name}</b>${Quality.mode === 'auto' ? ' (auto, detected ' + Quality.TIERS[Quality.detected].name + ')' : ''} · ${Quality.frameMs ? Quality.frameMs.toFixed(1) + ' ms/frame' : ''}<br>`
+    + `pixel ratio ${a.pixelRatio} · shadows ${a.shadows ? a.shadowSize : 'off'} · view ${a.cameraFar} m · villagers ${a.villagers}<br>Auto drops a tier if frames stay above 33 ms for 3 s.`;
+}
+document.getElementById('btnHelp').addEventListener('click', e => { e.stopPropagation(); toggleHelp(); e.currentTarget.blur(); });
+document.getElementById('btnSettings').addEventListener('click', e => { e.stopPropagation(); toggleSettings(); e.currentTarget.blur(); });
+document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => { toggleHelp(false); toggleSettings(false); }));
+document.getElementById('qSeg').addEventListener('click', e => { const q = e.target.closest('button'); if (q) { Quality.set(q.dataset.q); renderSettings(); } });
+document.getElementById('ctrlSeg').addEventListener('click', e => { const q = e.target.closest('button'); if (q) Device.setControls(q.dataset.c === 'auto' ? null : q.dataset.c); });
+document.getElementById('steerSeg').addEventListener('click', e => { const q = e.target.closest('button'); if (q) { TouchControls.setSteerMode(q.dataset.s); renderSettings(); } });
+Quality.onChange.push(() => { if (setEl.classList.contains('open')) renderSettings(); });
+setInterval(() => { if (setEl.classList.contains('open')) renderSettings(); }, 1000);
+
+// ---------------------------------------------------------------- HUD
+const radar = document.getElementById('radar').getContext('2d'), big = document.getElementById('bigmap');
+function drawRadar() {
+  radar.clearRect(0, 0, 220, 220); radar.save();
+  radar.beginPath(); radar.arc(110, 110, 110, 0, 7); radar.clip();
+  world.drawMap(radar, carPos.x, carPos.z, 0.9, 220, 220, Math.PI + carRot);
+  const m = MISSIONS[mIdx], dx = m.l.x - carPos.x, dz = m.l.z - carPos.z;
+  const a = Math.PI + carRot, rx = (dx * Math.cos(a) - dz * Math.sin(a)) * 0.9, rz = (dx * Math.sin(a) + dz * Math.cos(a)) * 0.9;
+  const dist = Math.hypot(rx, rz), k = Math.min(1, 100 / (dist || 1));
+  radar.fillStyle = '#fbbf24'; radar.beginPath(); radar.arc(110 + rx * k, 110 + rz * k, 6, 0, 7); radar.fill();
+  MP.drawRadar(radar, 0.9, Math.PI + carRot);
+  radar.fillStyle = '#38bdf8'; radar.beginPath(); radar.moveTo(110, 100); radar.lineTo(117, 118); radar.lineTo(103, 118); radar.fill();
+  radar.restore();
+}
+function drawBigMap() {
+  big.width = big.clientWidth; big.height = big.clientHeight;
+  const g = big.getContext('2d'), [x0, z0, x1, z1] = world.bounds, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+  const s = Math.min(big.width / (x1 - x0), big.height / (z1 - z0));
+  world.drawMap(g, cx, cz, s, big.width, big.height, 0);
+  const P = (x, z) => [big.width / 2 + (x - cx) * s, big.height / 2 + (z - cz) * s];
+  g.font = '12px sans-serif';
+  world.landmarks.forEach(l => { const [px, py] = P(l.x, l.z); g.fillStyle = '#ffd36b'; g.beginPath(); g.arc(px, py, 3.5, 0, 7); g.fill(); g.fillStyle = '#fff'; g.fillText(l.name, px + 6, py + 4); });
+  const m = MISSIONS[mIdx], [mx, my] = P(m.l.x, m.l.z); g.strokeStyle = '#fbbf24'; g.lineWidth = 3; g.beginPath(); g.arc(mx, my, 10, 0, 7); g.stroke();
+  MP.drawBigMap(g, P);
+  const [px, py] = P(carPos.x, carPos.z); g.fillStyle = '#38bdf8'; g.beginPath(); g.arc(px, py, 6, 0, 7); g.fill();
+}
+let hudT = 0;
+function updateHUD(dt) {
+  document.getElementById('spd').textContent = Math.round(Math.abs(carSpeed));
+  document.getElementById('gear').textContent = isReversing ? 'R' : currentGear;
+  document.getElementById('surf').textContent = surface.toUpperCase();
+  document.getElementById('nos').textContent = Math.round(nosTank) + '%';
+  document.getElementById('cash').textContent = '₹' + cash.toLocaleString('en-IN');
+  drawRadar(); if (showMap) (MP.bigMap ? MP.bigMap(big) : drawBigMap());
+  if ((hudT += dt) > 0.4) {
+    hudT = 0; let b = null;
+    for (const l of world.landmarks) { const d = Math.hypot(l.x - carPos.x, l.z - carPos.z); if (!b || d < b.d) b = { d, l }; }
+    document.getElementById('where').innerHTML = `Near: <b>${b.l.name}</b> (${Math.round(b.d)} m)`;
+  }
+}
+
+// ---------------------------------------------------------------- loop
+try { document.getElementById('pname').value = localStorage.getItem('nellutla.name') || ''; } catch (e) {}
+document.getElementById('pname').addEventListener('keydown', e => e.stopPropagation());
+document.getElementById('go').onclick = () => {
+  const nm = document.getElementById('pname').value.trim(); if (nm) MP.setName(nm);
+  MP.connect();
+  try { initAudio(); } catch (e) {}
+  try { if (audioCtx && !ambience) ambience = VillageAmbience(audioCtx, world); } catch (e) { console.warn('ambience', e); }
+  try { if (audioCtx && !engineSound) engineSound = EngineSound(audioCtx); } catch (e) { console.warn('engine sound', e); }
+  document.getElementById('start').style.display = 'none';
+  ['mission', 'dash', 'radar'].forEach(id => document.getElementById(id).style.display = '');
+  document.body.classList.add('playing');
+  setTimeout(() => { const r = document.getElementById('rotateHint'); if (r) r.classList.add('gone'); }, 6000);
+  document.activeElement && document.activeElement.blur && document.activeElement.blur();
+  respawnCar();
+  isPlaying = true;
+};
+respawnCar(); setMission();
+// feature modules get the shared context once the world, car and traffic exist
+const GAME = { scene, world, camera, renderer, traffic, get carPos() { return carPos; }, showPopup: (t) => showComboPopup(t),
+  get cash() { return cash; }, set cash(v) { if (typeof v === 'number' && isFinite(v)) cash = Math.round(v); }, get playerMode() { return Player.mode; } };
+window.GAME = GAME;
+GameHooks.init.forEach(f => { try { f(GAME); } catch (e) { console.error('feature init failed', e); } });
+(function loop() {
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, clock.getDelta());
+  if (isPlaying) {
+    if (Player.mode === 'crysta') { updatePhysics(dt); Player.crystaCollide(); } else { pollGamepad(); Player.update(dt); }
+    checkMission(); updateCarAnimations(dt); updateTraffic(dt);
+    try {
+      // the old two-oscillator engine is replaced by the layered EngineSound; keep its squeal/turbo blow-off parts
+      if (engineGain && audioCtx) engineGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+      if (turboGain && audioCtx) turboGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+      if (engineSound) {
+        const crysta = Player.mode === 'crysta', foot = Player.mode === 'foot';
+        const kind = crysta ? 'crysta' : foot ? 'crysta' : ((Player.active && Player.active.model) || 'hatch');
+        engineSound.setKind(kind);
+        const spd = Math.abs(carSpeed);
+        // other vehicles have no gearbox model: fake a 4-speed rpm sweep from road speed
+        const fakeRpm = (top, idle, red) => { const g = Math.min(3, Math.floor(spd / (top / 4))); const f = (spd - g * top / 4) / (top / 4); return idle + (red - idle) * (0.25 + 0.7 * f); };
+        const TOP = { bike: 90, auto: 60, hatch: 150, suv: 140, tractor: 30, lorry: 80, bus: 80 };
+        engineSound.update({
+          on: !foot,
+          rpm: crysta ? engineRPM : fakeRpm(TOP[kind] || 100, 800, kind === 'bike' ? 7500 : kind === 'auto' ? 5000 : 3500),
+          throttle: crysta ? throttleIn : (inputState.gas ? 1 : 0),
+          speedKmh: spd, surface: world.surfaceAt(carPos.x, carPos.z),
+          shifting: crysta && shiftTimer > 0,
+        });
+      }
+      if (Player.mode !== 'crysta' && squealGain && audioCtx) squealGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
+    } catch (e) { console.warn(e); }
+    if (ambience) ambience.update(dt, camera, timeOfDay, traffic, carSpeed);
+    MP.update(dt);
+    GameHooks.update.forEach(f => { try { f(dt, GAME); } catch (e) { console.error('feature update failed', e); } });
+    updateHUD(dt);
+  } else {
+    carRot += dt * 0.25; playerCarGroup.rotation.y = carRot;        // showroom spin
+  }
+  if (Player.mode === 'crysta' || !isPlaying) updateCamera(dt); else Player.updateCam(dt);
+  if (isPlaying) { Player.freeLook(dt); Player.tick(dt); }
+  if (!isPlaying) { camera.position.set(carPos.x + 6, 2.4, carPos.z + 6); camera.lookAt(carPos.x, 1, carPos.z); }
+  updateDayNight(isPlaying ? dt : 0); sunLight.target.position.set(carPos.x, 0, carPos.z);
+  beacon.rotation.y += dt;
+  sky.position.copy(camera.position); stars.position.copy(camera.position);
+  world.update(camera, dt, carPos);
+  renderer.render(scene, camera);
+})();
+</script>
+</body>
+</html>

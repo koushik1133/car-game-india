@@ -1,0 +1,13 @@
+# Only the Nellutla game is published. Everything else in this folder stays local:
+#   cars/  third-party GTA mod archives (not ours to redistribute)
+#   rea/   someone else's repository
+#   map/   the separate Sandy Shores map
+/*
+!/.gitignore
+!/README.md
+!/serve.py
+!/innova-nellutla/
+!/nellutla-map/
+.DS_Store
+innova-nellutla/models/*.glb
+__pycache__/
