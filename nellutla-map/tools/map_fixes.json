@@ -1,0 +1,41 @@
+{
+ "_note": "Hand fixes applied by build_map.py after the footprints are read. remove_buildings: footprints not in the imagery (centroid x,z within r). reserve: plots modelled by hand (no generic buildings, walls or trees). clearance: metres kept between any footprint and a road edge.",
+ "clearance": 0.6,
+ "remove_buildings": [
+  {
+   "x": 132.0,
+   "z": -255.0,
+   "r": 2.0,
+   "why": "#463: pale strip is the CC lane east_ns1 continuing south to east_diag, not a roof"
+  },
+  {
+   "x": 42.4,
+   "z": -263.0,
+   "r": 3.0,
+   "why": "#317: the real house is modelled by innova-nellutla/safehouse2.js"
+  }
+ ],
+ "reserve": [
+  {
+   "name": "safehouse2 plot (building #317 + yard)",
+   "poly": [
+    [
+     34.93,
+     -277.79
+    ],
+    [
+     52.08,
+     -268.96
+    ],
+    [
+     43.98,
+     -253.23
+    ],
+    [
+     26.83,
+     -262.06
+    ]
+   ]
+  }
+ ]
+}

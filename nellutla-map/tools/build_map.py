@@ -191,6 +191,90 @@ for ring in rings:
         buildings.append({'p': [[r1(x), r1(z)] for x, z in pts], 'h': h, 'r': roof, 'rc': roof_hex,
                           'c': rng.choice(WALL_COLS), 'a': round(area)})
 
+# ---------------------------------------------------------------- footprint fixes (tools/map_fixes.json)
+# 1. remove footprints that are not in the imagery (matched by centroid), 2. reserve hand-built plots (safe house),
+# 3. keep every footprint out of the carriageways: ML footprints are often 1-2 m too big or offset, so where one
+#    reaches into a road corridor (half width + clearance) it is trimmed back along the road edge; a footprint whose
+#    centre lies on the carriageway (or that keeps < 6 m2) is standing in the road and is dropped.
+fixes = json.load(open(f'{TOOLS}/map_fixes.json'))
+def _cen(p):
+    return sum(q[0] for q in p) / len(p), sum(q[1] for q in p) / len(p)
+def _area(p):
+    return abs(0.5 * sum(p[i][0] * p[(i + 1) % len(p)][1] - p[(i + 1) % len(p)][0] * p[i][1] for i in range(len(p))))
+def _inpoly(x, z, poly):
+    c = False
+    for i in range(len(poly)):
+        a, b = poly[i], poly[(i + 1) % len(poly)]
+        if (a[1] > z) != (b[1] > z) and x < (b[0] - a[0]) * (z - a[1]) / (b[1] - a[1]) + a[0]:
+            c = not c
+    return c
+reserved = [r['poly'] for r in fixes.get('reserve', [])]
+n_rm = n_res = n_trim = n_drop = 0
+keep = []
+for b in buildings:
+    cx, cz = _cen(b['p'])
+    if any(math.hypot(cx - f['x'], cz - f['z']) < f.get('r', 1.5) for f in fixes.get('remove_buildings', [])):
+        n_rm += 1; continue
+    if any(_inpoly(cx, cz, rp) for rp in reserved):
+        n_res += 1; continue
+    keep.append(b)
+buildings = keep
+CLR = fixes.get('clearance', 0.6)
+_rsegs = [(rd['p'][i], rd['p'][i + 1], rd['w']) for rd in roads if rd['t'] != 'dirt' for i in range(len(rd['p']) - 1)]
+def _clip(poly, ax, az, nx, nz, off):
+    # keep the part of poly with (p - a) . n >= off
+    out = []
+    for i in range(len(poly)):
+        P, Q = poly[i], poly[(i + 1) % len(poly)]
+        dp = (P[0] - ax) * nx + (P[1] - az) * nz - off
+        dq = (Q[0] - ax) * nx + (Q[1] - az) * nz - off
+        if dp >= 0: out.append(P)
+        if (dp >= 0) != (dq >= 0):
+            t = dp / (dp - dq); out.append([P[0] + (Q[0] - P[0]) * t, P[1] + (Q[1] - P[1]) * t])
+    return out
+keep = []
+for b in buildings:
+    p0 = [list(q) for q in b['p']]; p = p0; a0 = _area(p0)
+    cx, cz = _cen(p0)
+    for _ in range(2):          # second pass catches corners exposed by the first
+        for a, c, w in _rsegs:
+            if min(a[0], c[0]) - 30 > cx or max(a[0], c[0]) + 30 < cx or min(a[1], c[1]) - 30 > cz or max(a[1], c[1]) + 30 < cz:
+                continue
+            dx, dz = c[0] - a[0], c[1] - a[1]; L = math.hypot(dx, dz)
+            if L < 0.5: continue
+            ux, uz = dx / L, dz / L
+            half = w / 2 + CLR
+            hit = False
+            for q in p:
+                t = (q[0] - a[0]) * ux + (q[1] - a[1]) * uz
+                if 0 < t < L and abs((q[0] - a[0]) * -uz + (q[1] - a[1]) * ux) < half: hit = True; break
+            if not hit:     # also a road edge crossing the footprint between its corners
+                for k in range(0, 11):
+                    t = L * k / 10; x_, z_ = a[0] + ux * t, a[1] + uz * t
+                    for s in (-half, 0, half):
+                        if _inpoly(x_ - uz * s, z_ + ux * s, p): hit = True; break
+                    if hit: break
+            if not hit: continue
+            pc = _cen(p)
+            side = 1 if ((pc[0] - a[0]) * -uz + (pc[1] - a[1]) * ux) >= 0 else -1
+            p = _clip(p, a[0], a[1], -uz * side, ux * side, half)
+            if len(p) < 3: break
+        if len(p) < 3: break
+    def _in_carriageway(x, z):
+        for a, c, w in _rsegs:
+            dx, dz = c[0] - a[0], c[1] - a[1]; L2 = dx * dx + dz * dz or 1e-9
+            t = max(0, min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / L2))
+            if math.hypot(x - a[0] - t * dx, z - a[1] - t * dz) < w / 2: return True
+        return False
+    if len(p) < 3 or _area(p) < 6 or _in_carriageway(cx, cz):
+        n_drop += 1; continue
+    if _area(p) < a0 - 0.05:
+        n_trim += 1
+        b['p'] = [[r1(q[0]), r1(q[1])] for q in p]; b['a'] = round(_area(p))
+    keep.append(b)
+buildings = keep
+print(f'footprint fixes: removed {n_rm}, reserved-plot {n_res}, trimmed off roads {n_trim}, dropped (in road) {n_drop}')
+
 # ---------------------------------------------------------------- compound walls
 def seg_nearest(px_, pz_, ax, az, bx, bz):
     dx, dz = bx - ax, bz - az
@@ -265,6 +349,7 @@ for x0, z0, x1, z1 in walls:
         run = [run[0], run[1], r1(bx), r1(bz)] if run else [r1(ax), r1(az), r1(bx), r1(bz)]
     if run: clean.append(run)
 walls = [w for w in clean if math.hypot(w[2] - w[0], w[3] - w[1]) > 0.8]
+walls = [w for w in walls if not any(_inpoly((w[0] + w[2]) / 2, (w[1] + w[3]) / 2, rp) or _inpoly(w[0], w[1], rp) or _inpoly(w[2], w[3], rp) for rp in reserved)]
 print('walls on roads: dropped', dropped, 'm; kept', len(walls), 'segments')
 
 # ---------------------------------------------------------------- land cover (3 m cells)
@@ -341,6 +426,7 @@ for ty in range(0, H - TC, TC):
             x, z = px2w(px_, py_)
             trees.append([r1(x), r1(z), round(3.0 + f * 4 + rng.uniform(0, 1.5), 1)])
 # thin out orchards so the instance count stays sane
+trees = [t for t in trees if not any(_inpoly(t[0], t[1], rp) for rp in reserved)]
 if len(trees) > 9000:
     rng.shuffle(trees); trees = trees[:9000]
 

@@ -445,6 +445,7 @@ const HumanModel = (function () {
     const res = { group, parts, hipHeight: hipH * s, scale: s, appearance: o };
     group.userData.humanRef = res;
     if (!low && !api.player) api.player = res;
+    glbRegister(res);
     return res;
   }
 
@@ -529,6 +530,7 @@ const HumanModel = (function () {
   // ------------------------------------------------------------ animation
   // Walk / run cycle. phase advances with distance; speed in m/s (about 1.4 walking, 5 running).
   function animateWalk(p, phase, speed) {
+    if (glbDrive(p, Math.abs(speed) > 2.6 ? 'run' : 'walk', speed)) return;
     const sp = Math.abs(speed), k = Math.min(1, sp / 1.6), run = Math.min(1, Math.max(0, (sp - 2.2) / 2.3));
     const amp = (0.48 + run * 0.4) * k, s = Math.sin(phase), c = Math.cos(phase), dir = speed < 0 ? -1 : 1;
     p.legL.rotation.set(-s * amp * dir, 0, 0.02); p.legR.rotation.set(s * amp * dir, 0, -0.02);
@@ -544,11 +546,24 @@ const HumanModel = (function () {
     p.hips.position.x = s * 0.018 * k * (1 - run);
     p.hips.position.y = 0.92 - (1 - Math.abs(c)) * 0.02 * k + Math.abs(c) * run * 0.03 - run * 0.03;
     p.head.rotation.set(-p.torso.rotation.x * 0.7, -p.torso.rotation.y * 0.6, -p.torso.rotation.z);
-    if (p.skirt) { p.skirt.rotation.set(-run * 0.15, 0, 0); p.skirt.scale.set(1, 1, 1); }
-    if (p.skirt2) { p.skirt2.rotation.set(-run * 0.12, 0, 0); p.skirt2.scale.set(1, 1, 1); }
+    // lungi / saree / kurta hem: swings after the legs (a quarter cycle behind), twists with the pelvis, flares at the hem
+    // when the knees part, and kicks back a little when running
+    const lag = Math.sin(phase - 0.6), spread = Math.abs(s) * k;
+    if (p.skirt) { p.skirt.rotation.set(-run * 0.15 + lag * 0.07 * k * dir, s * 0.06 * k, lag * 0.05 * k); p.skirt.scale.set(1 + spread * 0.07, 1, 1 + spread * 0.12); }
+    if (p.skirt2) { p.skirt2.rotation.set(-run * 0.12 + lag * 0.05 * k * dir, s * 0.05 * k, lag * 0.04 * k); p.skirt2.scale.set(1 + spread * 0.05, 1, 1 + spread * 0.08); }
+  }
+  // Turning on the spot: small alternating steps (feet shuffle round) instead of the body spinning on frozen legs.
+  function animateTurn(p, t, rate) {
+    if (glbDrive(p, 'walk', 0.6)) return;
+    const k = Math.min(1, Math.abs(rate) / 2.5), s = Math.sin(t * 9);
+    animateIdle(p, t);
+    p.legL.rotation.x = -Math.max(0, s) * 0.25 * k; p.legR.rotation.x = -Math.max(0, -s) * 0.25 * k;
+    p.shinL.rotation.x = 0.05 + Math.max(0, s) * 0.4 * k; p.shinR.rotation.x = 0.05 + Math.max(0, -s) * 0.4 * k;
+    p.hips.rotation.y = Math.sign(rate) * 0.06 * k; p.head.rotation.y = Math.sign(rate) * 0.2 * k;
   }
   // Standing idle: breathing, slow weight shift between feet, glances, relaxed arms.
   function animateIdle(p, t) {
+    if (glbDrive(p, 'idle', 0)) return;
     const b = Math.sin(t * 1.7), w = Math.sin(t * 0.35), wl = Math.max(0, w), wr = Math.max(0, -w);
     p.hips.position.set(w * 0.02, 0.92 - Math.abs(w) * 0.008, 0);
     p.hips.rotation.set(0, 0, w * 0.035);
@@ -566,6 +581,7 @@ const HumanModel = (function () {
   // Seated poses. 'car' = upright seat with hands on a wheel, 'bike' = astride, legs apart, hands on bars,
   // 'bench' = sitting on a plank with hands on knees.
   function sit(p, pose) {
+    glbDrive(p, 'sit', 0, pose);
     const bike = pose === 'bike';
     p.hips.position.set(0, 0.92, 0); p.hips.rotation.set(0, 0, 0); p.torso.rotation.set(bike ? 0.25 : 0.05, 0, 0); p.torso.scale.set(1, 1, 1); p.head.rotation.set(bike ? -0.2 : 0, 0, 0);
     p.legL.rotation.set(bike ? -1.1 : -1.45, 0, bike ? 0.25 : 0.08); p.legR.rotation.set(bike ? -1.1 : -1.45, 0, bike ? -0.25 : -0.08);
@@ -589,6 +605,7 @@ const HumanModel = (function () {
     for (const k of Object.keys(h.parts)) delete h.parts[k];
     Object.assign(h.parts, n.parts);
     h.hipHeight = n.hipHeight; h.scale = n.scale; h.appearance = n.appearance;
+    glbUnregister(n); if (h.parts._glb) { h.parts._glb.res = h; glbDetach(h.parts._glb); }
     return h;
   }
   function triangles(obj) {
@@ -597,11 +614,137 @@ const HumanModel = (function () {
     return Math.round(t);
   }
 
+
+  // ------------------------------------------------------------ asset-backed (GLB) characters
+  // When Assets.CHARACTER (e.g. 'models/villager.glb', a rigged, animated CC0 humanoid) and Assets (assets.js) are
+  // present, the nearest GLB.MAX humans to the camera swap their procedural body for a SkeletonUtils
+  // clone of it, tinted to the appearance, driven by an AnimationMixer. Everything else stays
+  // procedural, and so does everything if the file is missing. Clip names are matched loosely:
+  // /idle/, /walk/, /run|sprint|jog/, /sit/. Without a sit clip, seated humans stay procedural.
+  const GLB = { path: 'models/villager.glb', state: 'idle', gltf: null, clips: {}, list: [], MAX: 30, RANGE: 70, active: 0 };
+  const CLIP_RX = { idle: /idle/i, walk: /walk/i, run: /run|sprint|jog/i, sit: /sit/i };
+  function glbUse(g) {               // also callable directly with an already-loaded gltf
+    if (!THREE.SkeletonUtils) { GLB.state = 'none'; return false; }
+    GLB.gltf = g; GLB.clips = {};
+    for (const k in CLIP_RX) GLB.clips[k] = g.animations.find(a => CLIP_RX[k].test(a.name) && !(k === 'idle' && /sit/i.test(a.name))) || null;
+    const b = new THREE.Box3().setFromObject(g.scene); GLB.height = Math.max(0.1, b.max.y - b.min.y); GLB.minY = b.min.y;
+    GLB.state = 'ready';
+  }
+  function glbLoad() {
+    if (GLB.state !== 'idle' || !window.Assets) return;
+    if (!Assets.CHARACTER) { GLB.state = 'none'; return; }   // no character file shipped yet (avoids a 404)
+    GLB.path = Assets.CHARACTER;
+    GLB.state = 'loading';
+    Promise.all([Assets.gltf(GLB.path), Assets.needSkeletonUtils()]).then(([g, ok]) => {
+      if (GLB.state !== 'loading') return;
+      if (!g || !ok || !THREE.SkeletonUtils || !g.animations.length) { GLB.state = 'none'; return; }
+      glbUse(g);
+    });
+  }
+  function glbRegister(res) {
+    const c = { res, obj: null, mixer: null, actions: {}, cur: null, mode: 'idle', speed: 0, pose: null, seen: performance.now() };
+    Object.defineProperty(res.parts, '_glb', { value: c, enumerable: false, writable: true, configurable: true });
+    GLB.list.push(c);
+  }
+  function glbUnregister(res) {
+    const c = res.parts && res.parts._glb; if (!c) return;
+    glbDetach(c); const i = GLB.list.indexOf(c); if (i >= 0) GLB.list.splice(i, 1);
+  }
+  const TINT = [
+    ['hair', /hair|beard|brow/i], ['feet', /shoe|boot|feet|foot|sandal/i], ['skin', /skin|body|face|head|hand|arm/i],
+    ['bottom', /pant|trouser|leg|bottom|lower|skirt|short|lungi|dhoti/i], ['top', /shirt|top|torso|cloth|jacket|sweater|upper|vest|dress/i]];
+  function glbAttach(c) {
+    const o = c.res.appearance, g = GLB.gltf;
+    const obj = THREE.SkeletonUtils.clone(g.scene);
+    const k = (1.75 * c.res.scale) / GLB.height;
+    obj.scale.setScalar(k); obj.position.y = -GLB.minY * k;
+    const colour = { skin: o.skin, hair: o.hairColor, feet: o.feetColor,
+      top: o.top === 'uniform' ? 0xc2a36b : o.topColor,
+      bottom: o.bottom === 'jeans' && o.bottomColor === undefined ? 0x2c4a7a : o.bottomColor };
+    obj.traverse(m => {
+      if (!m.isMesh) return;
+      m.castShadow = true; m.frustumCulled = false;
+      m.material = Array.isArray(m.material) ? m.material.map(x => x.clone()) : m.material.clone();
+      (Array.isArray(m.material) ? m.material : [m.material]).forEach(mt => {
+        const t = TINT.find(e => e[1].test(mt.name || '') || e[1].test(m.name || ''));
+        if (t && colour[t[0]] !== undefined && mt.color) mt.color.setHex(colour[t[0]]);
+        if (m.isSkinnedMesh) mt.skinning = true;
+      });
+    });
+    c.mixer = new THREE.AnimationMixer(obj); c.actions = {}; c.cur = null;
+    for (const n in GLB.clips) if (GLB.clips[n]) c.actions[n] = c.mixer.clipAction(GLB.clips[n]);
+    c.obj = obj;
+    const grp = c.res.group;
+    grp.children.forEach(ch => { ch.userData.glbHidden = ch.visible; ch.visible = false; });
+    grp.add(obj); GLB.active++;
+    glbPlay(c, c.mode, 0);
+  }
+  function glbDetach(c) {
+    if (!c.obj) return;
+    c.mixer.stopAllAction(); c.mixer.uncacheRoot(c.obj);
+    const grp = c.obj.parent; if (grp) grp.remove(c.obj);
+    c.obj.traverse(m => { if (m.isMesh) (Array.isArray(m.material) ? m.material : [m.material]).forEach(x => x.dispose()); });
+    if (grp) grp.children.forEach(ch => { if (ch.userData.glbHidden !== undefined) { ch.visible = ch.userData.glbHidden; delete ch.userData.glbHidden; } });
+    c.obj = null; c.mixer = null; c.actions = {}; c.cur = null; GLB.active--;
+  }
+  function glbPlay(c, mode, fade) {
+    const name = c.actions[mode] ? mode : mode === 'run' && c.actions.walk ? 'walk' : 'idle';
+    const a = c.actions[name]; if (!a) return;
+    if (name === 'walk') a.timeScale = Math.max(0.4, Math.min(2.2, c.speed / 1.4));
+    else if (name === 'run') a.timeScale = Math.max(0.6, Math.min(1.6, c.speed / 4.5));
+    else a.timeScale = 1;
+    if (c.cur === name) return;
+    const prev = c.cur && c.actions[c.cur];
+    a.reset(); a.enabled = true; a.setEffectiveWeight(1);
+    if (name === 'sit') { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; }
+    if (prev && fade) a.crossFadeFrom(prev, fade, false); else if (prev) prev.stop();
+    a.play(); c.cur = name;
+  }
+  // called from animateWalk/animateIdle/sit; returns true when a GLB body is showing (skip the procedural pose)
+  function glbDrive(p, mode, speed, pose) {
+    const c = p && p._glb; if (!c) return false;
+    c.mode = mode; c.speed = Math.abs(speed); c.pose = pose || null;
+    if (!c.obj) return false;
+    if (mode === 'sit' && !GLB.clips.sit) { glbDetach(c); return false; }
+    glbPlay(c, mode, 0.2);
+    return true;
+  }
+  function inScene(o) { while (o) { if (o.isScene) return o.visible !== false; if (!o.visible) return false; o = o.parent; } return false; }
+  let lastT = performance.now(), lastRank = 0;
+  const wp = new THREE.Vector3();
+  function glbTick() {
+    requestAnimationFrame(glbTick);
+    const now = performance.now(), dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
+    if (GLB.state === 'idle') glbLoad();
+    if (GLB.state !== 'ready') return;
+    if (now - lastRank > 400) {
+      lastRank = now;
+      const cam = (typeof camera !== "undefined" && camera) || window.camera, cp = cam && cam.getWorldPosition ? cam.getWorldPosition(new THREE.Vector3()) : null;
+      const cand = [];
+      for (let i = GLB.list.length - 1; i >= 0; i--) {
+        const c = GLB.list[i];
+        if (!inScene(c.res.group)) {
+          if (c.obj) glbDetach(c);
+          if (!c.res.group.parent && now - c.seen > 30000) GLB.list.splice(i, 1);   // dropped humans
+          continue;
+        }
+        c.seen = now;
+        if (c.mode === 'sit' && !GLB.clips.sit) { if (c.obj) glbDetach(c); continue; }
+        const d = cp ? c.res.group.getWorldPosition(wp).distanceTo(cp) : 0;
+        if (d < GLB.RANGE) cand.push([d, c]); else if (c.obj) glbDetach(c);
+      }
+      cand.sort((a, b) => a[0] - b[0]);
+      cand.forEach(([, c], i) => { if (i < GLB.MAX) { if (!c.obj) glbAttach(c); } else if (c.obj) glbDetach(c); });
+    }
+    for (const c of GLB.list) if (c.mixer) c.mixer.update(dt);
+  }
+  requestAnimationFrame(glbTick);
+
   // saved appearance from the character creator (character-creator.js writes this key)
   let saved = null;
   try { const r = localStorage.getItem('nellutla.character'); if (r) saved = JSON.parse(r); } catch (e) { saved = null; }
 
-  const api = { create, animateWalk, animateIdle, sit, rebuild, triangles, normalize, randomAppearance,
-    OPTIONS, SKINS, HAIR_COLORS, EYES, PALETTE, playerAppearance: saved, player: null };
+  const api = { create, animateWalk, animateIdle, animateTurn, sit, rebuild, triangles, normalize, randomAppearance,
+    OPTIONS, SKINS, HAIR_COLORS, EYES, PALETTE, playerAppearance: saved, player: null, GLB, glbUse };
   return api;
 })();

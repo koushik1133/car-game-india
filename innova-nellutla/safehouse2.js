@@ -1,7 +1,7 @@
 // safehouse2.js: version 2 of the player's home, rebuilt from the user's Street View photos (Nellutla, Oct 2022).
-// Built BESIDE version 1 (safehouse.js, map building #317), on the next free plot to the WEST along the same CC lane:
-// same local frame as v1 (a along the lane ENE, b into the plot SSE), plot a = -19.5 .. -1.1, b = -2.8 .. 14.
-// The plot has no generic footprints, so nothing needs to be excluded.
+// Stands on map building #317 (the real house, ~17.70398 N 79.19688 E) and replaces version 1 (safehouse.js is now
+// empty). Local frame: a along the CC lane east_diag (ENE), b into the plot (SSE); plot a = -19.5 .. -1.1, b = -2.8 .. 14.
+// The plot is reserved in nellutla-map/tools/map_fixes.json (no generic buildings, walls or trees inside).
 //
 // What is reproduced: long single-storey front wing with a stepped parapet of 6 OPEN LOUVRE ziggurat merlons,
 // a 3-bay scalloped (multifoil) arcade outlined in dark grey, a tall aubergine feature wall with 3 stacked square
@@ -18,9 +18,14 @@
   'use strict';
   const SAVE_KEY = 'nellutla.safehouse2';
 
-  // ---------------------------------------------------------------- frame (identical to safehouse.js)
-  const O = { x: 38.8, z: -272.2 };
+  // ---------------------------------------------------------------- frame
+  // Same axes as the old v1 frame (a along the lane ENE, b into the plot SSE), origin moved 14 m along the lane from
+  // v1's front-west corner (38.8,-272.2) so the plot (a -19.5 .. -1.1) now covers map building #317, the real house,
+  // with its east wall 0.5 m clear of lane se_ns and the front wall facing lane east_diag.
   const UX = 13.2 / 14.857, UZ = 6.8 / 14.857;
+  const O = { x: 38.8 + 14 * UX, z: -272.2 + 14 * UZ };
+  // the generic footprint #317 is also dropped by nellutla-map/tools/map_fixes.json; keep this for older map data
+  (window.NELLUTLA_EXCLUDE = window.NELLUTLA_EXCLUDE || []).push({ x: 42.4, z: -263.0, r: 4 });
   const NX = -UZ, NZ = UX;
   const TH = Math.atan2(-UZ, UX);
   const W = (a, b) => ({ x: O.x + a * UX + b * NX, z: O.z + a * UZ + b * NZ });
@@ -332,10 +337,12 @@
     for (const a of piersA.slice(0, 4)) pier(a, 0.18, 1.9, C.cream);
     for (const a of [PG[0], PG[1]]) pier(a, 0.2, 2.0, C.aub);
     for (const a of MG) pier(a, 0.25, 2.2, C.aub);
-    // lilac side wall (west) and plain back wall
+    // lilac side walls (west + east) and plain back wall
     const lil = (a0, a1, b0, b1, color, colDk) => { B.box(a0, a1, 0, 0.3, b0 - 0.02, b1 + 0.02, '#7d766c'); B.box(a0, a1, 0.3, 1.8, b0, b1, color); B.box(a0 - 0.03, a1 + 0.03, 1.8, 1.88, b0 - 0.03, b1 + 0.03, colDk); col(a0, a1, b0, b1); };
     lil(YARD.a0 - 0.11, YARD.a0 + 0.11, WB, YARD.b1, C.lilac, C.lilacDk);
     lil(YARD.a0, YARD.a1, YARD.b1 - 0.11, YARD.b1 + 0.11, C.cream, C.creamDk);
+    // east side wall (along lane se_ns): the plot is fully enclosed, a car only gets in through the main gate
+    lil(YARD.a1 - 0.11, YARD.a1 + 0.11, WB, YARD.b1, C.lilac, C.lilacDk);
     // courtyard: red/yellow checkerboard tiles, apron to the lane
     for (let a = -6.65; a < YARD.a1 - 0.2; a += 0.6) for (let b = WB + 0.25; b < YARD.b1 - 0.2; b += 0.6) tile(a, b, 0.6, 0.03, ((Math.round(a / 0.6) + Math.round(b / 0.6)) & 1) ? C.red : C.yellow);
     B.box(MG[0], MG[1], 0, 0.04, WB - 1.5, WB + 0.1, '#bdb8ae');
@@ -519,7 +526,7 @@
     const dG = Math.hypot(l.a - MGc.a, l.b - MGc.b);
     const driving = mode === 'vehicle' || mode === 'crysta';
     if (dG > 14) manual.gate = false;
-    want.gate = (driving && dG < 10) || manual.gate;
+    want.gate = (driving && (dG < 10 || inYard(l))) || manual.gate;   // stays open while a vehicle is in the yard
     want.ped = mode === 'foot' && Math.hypot(l.a - PGc.a, l.b - PGc.b) < 2.2;
     if (Math.hypot(l.a - DOORc.a, l.b - DOORc.b) > 3.2) manual.door = false;
     want.door = manual.door;

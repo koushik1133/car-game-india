@@ -286,31 +286,33 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>window.NELLUTLA_EXCLUDE = window.NELLUTLA_EXCLUDE || [];   // [{x, z, r}]: buildings whose centre is inside are skipped (custom-modelled by a feature module)</script>
-<script src="../nellutla-map/map-data.js?v=1793663053"></script>
-<script src="../nellutla-map/nellutla-world.js?v=1793663053"></script>
+<script src="../nellutla-map/map-data.js?v=1793665390"></script>
+<script src="../nellutla-map/nellutla-world.js?v=1793665679"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-<script src="crysta-body.js?v=1793663053"></script>
-<script src="crysta-detail.js?v=1793663053"></script>
-<script src="crysta.js?v=1793663053"></script>
-<script src="device.js?v=1793663053"></script>
-<script src="quality.js?v=1793663053"></script>
-<script src="ambient.js?v=1793663053"></script>
-<script src="engine-audio.js?v=1793663053"></script>
-<script src="traffic-models.js?v=1793663053"></script>
-<script src="glb-car.js?v=1793663053"></script>
-<script src="multiplayer/mp.js?v=1793663053"></script>
-<script src="people-models.js?v=1793663053"></script>
-<script src="player.js?v=1793663053"></script>
+<script src="crysta-body.js?v=1793665390"></script>
+<script src="crysta-detail.js?v=1793665390"></script>
+<script src="crysta.js?v=1793665390"></script>
+<script src="device.js?v=1793665390"></script>
+<script src="quality.js?v=1793665390"></script>
+<script src="ambient.js?v=1793665390"></script>
+<script src="engine-audio.js?v=1793665390"></script>
+<script src="traffic-models.js?v=1793665390"></script>
+<script src="glb-car.js?v=1793665390"></script>
+<script src="multiplayer/mp.js?v=1793665390"></script>
+<script src="people-models.js?v=1793666001"></script>
+<script src="assets.js?v=1793665390"></script>
+<script src="player.js?v=1793666001"></script>
 <!-- Feature modules. Each registers itself on GameHooks (init/update/key) and owns its own file. -->
 <script>window.GameHooks = { init: [], update: [], key: [] };</script>
-<script src="parked.js?v=1793663053"></script>
-<script src="character-creator.js?v=1793663053"></script>
-<script src="properties.js?v=1793663053"></script>
-<script src="safehouse.js?v=1793663053"></script>
-<script src="safehouse2.js?v=1793663053"></script>
-<script src="streetscape.js?v=1793663053"></script>
-<script src="touch-controls.js?v=1793663053"></script>
-<script src="auto-rides.js?v=1793663053"></script>
+<script src="parked.js?v=1793665390"></script>
+<script src="character-creator.js?v=1793665390"></script>
+<script src="properties.js?v=1793665390"></script>
+<script src="safehouse.js?v=1793665390"></script>
+<script src="safehouse2.js?v=1793665679"></script>
+<script src="streetscape.js?v=1793665679"></script>
+<script src="animals.js?v=1793666501"></script>
+<script src="touch-controls.js?v=1793665390"></script>
+<script src="auto-rides.js?v=1793665390"></script>
 <script>
 // ---------------------------------------------------------------- scene
 // antialias and the pixel-ratio cap come from the performance tier (quality.js)
@@ -532,6 +534,7 @@ const MU = { highway: 1.0, tar: 0.95, cc: 0.9, lane: 0.85, dirt: 0.68, river: 0.
 const CRR = { highway: 0.012, tar: 0.014, cc: 0.016, lane: 0.02, dirt: 0.035, river: 0.11, field: 0.06 }; // rolling resistance
 let surface = 'highway';
 const vel = { x: 0, z: 0 };              // world-space velocity, m/s
+const crystaSusp = {};
 let brakingNow = false, throttleIn = 0, yawRate = 0, lastSpeed = 0, gearIdx = 0, shiftTimer = 0, pitchVis = 0, rollVis = 0, slipVis = 0, longAcc = 0, latAcc = 0;
 function torqueAt(rpm) {                 // Nm, full throttle
   if (rpm < 1000) return 210 + (rpm - 800) * 0.4;
@@ -544,7 +547,9 @@ function torqueAt(rpm) {                 // Nm, full throttle
 // -73,-200). Nothing solid stands on a paved carriageway, so over tar/CC/highway the wall probe is ignored, and on
 // narrow lanes/dirt it is shrunk so you can squeeze past a wall corner poking into the lane.
 const PAVED = { highway: 1, tar: 1, cc: 1 };
-function wallProbeRadius(x, z, r) { const s = world.surfaceAt(x, z); return PAVED[s] ? 0 : (s === 'lane' || s === 'dirt') ? r * 0.75 : r; }
+// Collision always on. (An earlier workaround switched it off on paved roads because some map walls crossed
+// roads; those walls are now removed from the map data, and switching it off let cars drive into houses.)
+function wallProbeRadius(x, z, r) { return r; }
 // fixed-size sub-steps: same behaviour at 30, 60 or 144 fps, and no tunnelling through thin walls at speed
 function updatePhysics(dt) {
   pollGamepad();
@@ -692,8 +697,12 @@ function physicsStep(dt) {
   rollVis += ((latAcc * 0.012) - rollVis) * Math.min(1, dt * 4);
   const rough = surface === 'dirt' || surface === 'field' || surface === 'river';
   playerCarGroup.position.set(carPos.x, groundY(carPos.x, carPos.z), carPos.z);   // tyres on the road surface (carPos.y is a camera/legacy height)
-  if (rough) playerCarGroup.position.y += (Math.sin(performance.now() / 70) * 0.5 + Math.sin(performance.now() / 37) * 0.5) * 0.025 * Math.min(1, speed / 8);
-  playerCarGroup.rotation.set(THREE.MathUtils.clamp(pitchVis, -0.05, 0.05), carRot, THREE.MathUtils.clamp(rollVis, -0.06, 0.06), 'YXZ');
+  playerCarGroup.rotation.set(0, carRot, 0);
+  // per-wheel ground following + sprung body (visual only; physics untouched)
+  const suspBody = playerCarGroup.userData.body, suspWheels = wheelMeshes.filter(w => w.baseY !== undefined);
+  if (suspBody && suspWheels.length && typeof VehicleSuspension !== 'undefined') {
+    VehicleSuspension.step(crystaSusp, playerCarGroup, suspBody, suspWheels, { dt, speed, longAcc, latAcc, ground: groundY, rough: VehicleSuspension.roughAt });
+  } else playerCarGroup.rotation.set(THREE.MathUtils.clamp(pitchVis, -0.05, 0.05), carRot, THREE.MathUtils.clamp(rollVis, -0.06, 0.06), 'YXZ');
   const spin = ((wheelspin && throttle ? Math.max(Math.abs(vF), 12) * Math.sign(Fdrive || 1) : vF) / wheelRadius) * dt;
   if (steeringWheelMesh) steeringWheelMesh.rotation.z = steerAngle * 2.2;
   wheelMeshes.forEach(w => { w.tire.rotation.x += spin; if (w.isFront) w.anchor.rotation.y = delta; });

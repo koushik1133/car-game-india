@@ -35,7 +35,12 @@ const Player = (function () {
   // ---------------------------------------------------------------- on-foot villager
   const ped = { vy: 0, y: 0, phase: 0, speed: 0 };
   // villager built by people-models.js (HumanModel); parts are jointed groups we swing in walk()
-  const human = HumanModel.create({ gender: 'm', outfit: 'lungi', color: 0x2f6fb3, skin: 0x8d5a3b });
+  // Fixed default look (blue shirt, checked lungi, short hair, stubble, chappals). Only gender/outfit/colours used to
+  // be passed, so normalize() re-rolled hair (incl. 'curly'), face, beard and lungi colour on every load; the look the
+  // user liked is this one. A character saved in the creator still replaces it (character-creator.js).
+  const human = HumanModel.create({ gender: 'm', top: 'shirt', bottom: 'lungi', topColor: 0x2f6fb3, bottomColor: 0xf4cccc, color: 0x2f6fb3,
+    skin: 0x8d5a3b, hair: 'short', hairColor: 0x141210, facial: 'stubble', face: 'oval', brows: 'medium', eyes: 0x2a1a10,
+    feet: 'chappals', feetColor: 0x5a3a24, acc: {}, height: 1, build: 1 });
   const body = human.group, hp = human.parts;
   body.visible = false;                                         // added to the scene on first exit
 
@@ -371,8 +376,10 @@ const Player = (function () {
     // visuals: wheels, brake lights, bike lean
     v.g.position.set(carPos.x, typeof groundY === 'function' ? groundY(carPos.x, carPos.z) : 0, carPos.z);
     v.g.rotation.y = carRot;
-    const lean = P.lean ? THREE.MathUtils.clamp(-v.yawRate * v.vF * 0.05, -0.55, 0.55) : THREE.MathUtils.clamp(v.yawRate * v.vF * 0.006, -0.05, 0.05);
+    // bikes lean the whole machine about the tyre contact line (both wheels stay down); cars roll on springs
+    const lean = P.lean ? THREE.MathUtils.clamp(-v.yawRate * v.vF * 0.05, -0.55, 0.55) : 0;
     v.g.rotation.z += (lean - v.g.rotation.z) * Math.min(1, dt * 6);
+    suspend(v, dt, !!P.lean);
     for (const w of v.wheels) w.rotation.x += v.vF * dt / 0.4;
     setTail(v, braking || v.vF < -0.1);
     isReversing = v.vF < -0.1;
@@ -430,6 +437,22 @@ const Player = (function () {
     const t = e.target; if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
     ped.buffer = BUFFER; ped.jumpHeld = true;
   });
+  // split a traffic-model vehicle into wheels + sprung body (once), then run the shared suspension
+  function suspend(v, dt, bike) {
+    if (typeof VehicleSuspension === 'undefined' || typeof groundY !== 'function') return;
+    if (!v.susp) {
+      const ws = (v.wheels || []).filter(w => w.parent === v.g);
+      const sb = new THREE.Group(); sb.name = 'sprung';
+      [...v.g.children].forEach(ch => { if (!ws.includes(ch)) sb.add(ch); });
+      v.g.add(sb);
+      v.susp = { body: sb, st: {}, lastV: v.vF || 0, acc: 0, wheels: ws.map(w => ({ obj: w, x: w.position.x, z: w.position.z, baseY: w.position.y })) };
+    }
+    const S = v.susp, a = ((v.vF || 0) - S.lastV) / Math.max(dt, 1e-4); S.lastV = v.vF || 0;
+    S.acc += (THREE.MathUtils.clamp(a, -12, 12) - S.acc) * Math.min(1, dt * 10);
+    if (!S.wheels.length) return;
+    VehicleSuspension.step(S.st, v.g, S.body, S.wheels, { dt, speed: v.vF || 0, longAcc: S.acc, latAcc: (v.yawRate || 0) * (v.vF || 0),
+      ground: groundY, rough: VehicleSuspension.roughAt, bike, pitchK: bike ? 0.003 : 0.005 });
+  }
   function walk(dt) {
     surface = world.surfaceAt(carPos.x, carPos.z);
     const turn = (typeof padIn !== 'undefined' && Math.abs(padIn.steer) > 0.12) ? padIn.steer : (inputState.left ? 1 : 0) - (inputState.right ? 1 : 0);
@@ -437,10 +460,15 @@ const Player = (function () {
     let want, f;
     if (rigView()) {
       // PUBG: W/A/S/D relative to the camera; the body turns smoothly to face where it's going
-      const ix = -turn, iz = move, m = Math.min(1, Math.hypot(ix, iz));
+      // ix = LEFT component (A = +1): the camera's left is yaw + 90 deg (its right is (-cos, sin) = yaw - 90 deg),
+      // so the world heading is yaw + atan2(left, forward). (Was -turn: A/D were mirrored.)
+      const ix = turn, iz = move, m = Math.min(1, Math.hypot(ix, iz));
       if (m > 0.01) {
-        ped.dir = moveYaw() + Math.atan2(ix, iz);
-        const dd = wrap(ped.dir - carRot); carRot += dd * (1 - Math.exp(-dt * 12));
+        ped.dir = wrap(moveYaw() + Math.atan2(ix, iz));
+        // shortest arc; an exact 180 deg reversal picks one side and keeps it (no flip-flop at +-pi)
+        let dd = wrap(ped.dir - carRot);
+        if (Math.abs(dd) > Math.PI - 0.05) dd = (ped.turnSide || 1) * Math.abs(dd); else ped.turnSide = Math.sign(dd) || 1;
+        carRot = wrap(carRot + dd * (1 - Math.exp(-dt * 12)));
       }
       want = m * (inputState.nos ? 5.6 : 2.2) * (ped.land > 0 ? 0.5 : 1);
       f = m > 0.01 ? fwdOf(ped.dir) : fwdOf(ped.dir !== undefined ? ped.dir : carRot);
@@ -487,7 +515,13 @@ const Player = (function () {
     ped.phase += Math.abs(ped.speed) * dt * 3.2;
     if (ped.air) jumpPose(ped.vy);
     else if (Math.abs(ped.speed) > 0.05) HumanModel.animateWalk(hp, ped.phase, ped.speed);
-    else HumanModel.animateIdle(hp, performance.now() / 1000);
+    else {
+      // turning in place: shuffle the feet round with the body (rate from the heading change)
+      const tr = wrap(carRot - (ped.lastRot === undefined ? carRot : ped.lastRot)) / Math.max(dt, 1e-4);
+      if (Math.abs(tr) > 0.6 && HumanModel.animateTurn) HumanModel.animateTurn(hp, performance.now() / 1000, tr);
+      else HumanModel.animateIdle(hp, performance.now() / 1000);
+    }
+    ped.lastRot = carRot;
     if (!ped.air && ped.land > 0) landPose(ped.land);
     body.position.set(carPos.x, ped.y + (ped.air ? 0 : Math.abs(Math.sin(ped.phase)) * 0.04 * Math.min(1, Math.abs(ped.speed))), carPos.z);
     body.rotation.y = carRot;

@@ -284,6 +284,20 @@ function playVictoryFanfare() {
   });
 }
 
+function crystaEnvMap() {
+  if (crystaEnvMap.tex) return crystaEnvMap.tex;
+  const face = (top, bot, horizon) => {
+    const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+    const gr = x.createLinearGradient(0, 0, 0, 64);
+    if (top === 'sky') { gr.addColorStop(0, '#6f9fd8'); gr.addColorStop(1, '#cfe2f3'); }
+    else if (top === 'ground') { gr.addColorStop(0, '#6b5a45'); gr.addColorStop(1, '#4a3d2e'); }
+    else { gr.addColorStop(0, '#8fb6e2'); gr.addColorStop(0.5, '#e4eef7'); gr.addColorStop(0.53, '#7d7158'); gr.addColorStop(1, '#4f4434'); }
+    x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return c;
+  };
+  const t = new THREE.CubeTexture([face('side'), face('side'), face('sky'), face('ground'), face('side'), face('side')]);
+  t.needsUpdate = true; crystaEnvMap.tex = t; return t;
+}
+
 function buildToyotaInnovaCrysta() {
   if (playerCarGroup) scene.remove(playerCarGroup);
   playerCarGroup = new THREE.Group();
@@ -298,17 +312,19 @@ function buildToyotaInnovaCrysta() {
 
   // Vehicle dimensions are defined globally
 
-  const bodyPaintMat = new THREE.MeshPhongMaterial({
-    color: 0xffffff, specular: 0x94a3b8, shininess: 85
+  // small generated environment (sky gradient over warm ground) for paint / glass / chrome reflections
+  const envMap = crystaEnvMap();
+  const bodyPaintMat = new THREE.MeshPhongMaterial({   // Super White: warm white base, crisp clearcoat highlight
+    color: 0xf4f4f0, specular: 0xb8c2cc, shininess: 110, envMap, reflectivity: 0.16, combine: THREE.MixOperation
   });
   const pianoBlackMat = new THREE.MeshPhongMaterial({
-    color: 0x090d16, specular: 0x334155, shininess: 80
+    color: 0x07090d, specular: 0x5a6676, shininess: 110, envMap, reflectivity: 0.22, combine: THREE.MixOperation
   });
   const chromeMat = new THREE.MeshPhongMaterial({
-    color: 0xf8fafc, specular: 0xffffff, shininess: 120
+    color: 0xe8edf2, specular: 0xffffff, shininess: 160, envMap, reflectivity: 0.85, combine: THREE.MixOperation
   });
   const darkGlassMat = new THREE.MeshPhongMaterial({
-    color: 0x0f172a, specular: 0x8899aa, transparent: true, opacity: 0.82, shininess: 120
+    color: 0x0c131c, specular: 0xaabbcc, transparent: true, opacity: 0.86, shininess: 150, envMap, reflectivity: 0.35, combine: THREE.MixOperation
   });
   const hazelLeatherMat = new THREE.MeshLambertMaterial({ color: 0xa16207 });
   const darkTrimMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
@@ -322,6 +338,7 @@ function buildToyotaInnovaCrysta() {
   buildCrystaInterior(chassisMesh);
 
   playerCarGroup.add(chassisMesh);
+  playerCarGroup.userData.body = chassisMesh;        // the sprung mass (suspension moves this, not the wheels)
 
   // 10. 17" TWO-TONE DIAMOND-CUT STAR ALLOY WHEELS
   const wheelPositions = [
@@ -342,7 +359,7 @@ function buildToyotaInnovaCrysta() {
     wAnchor.add(wheel.fixed);
 
     playerCarGroup.add(wAnchor);
-    wheelMeshes.push({ anchor: wAnchor, tire: wTireGroup, isFront: wp.isFront });
+    wheelMeshes.push({ anchor: wAnchor, tire: wTireGroup, isFront: wp.isFront, obj: wAnchor, x: wp.x, z: wp.z, baseY: wheelRadius });
   });
 
   scene.add(playerCarGroup);
@@ -514,3 +531,54 @@ function snapCameraToCar() {
 }
 
 // ======================================================================
+
+// ======================================================================
+// SUSPENSION (visual): per-wheel ground following + sprung body (heave / pitch / roll spring-dampers)
+// s: persistent state; g: vehicle group (position at the ground under its centre, rotation.y = heading);
+// body: the sprung Object3D; wheels: [{ obj, x, z, baseY }] in g's local space.
+// o: { dt, speed (m/s), longAcc, latAcc, ground(x,z), rough(x,z) -> amplitude, bike }
+// ======================================================================
+window.VehicleSuspension = (function () {
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const noise = (x, z) => Math.sin(x * 3.1 + z * 1.7) * 0.5 + Math.sin(x * 7.3 - z * 5.9) * 0.3 + Math.sin(x * 13.7 + z * 11.1) * 0.2;
+  function dof(s, k, target, w, zeta, dt) {
+    const v = s[k + 'v'] || 0, x = s[k] || 0;
+    const a = w * w * (target - x) - 2 * zeta * w * v;
+    s[k + 'v'] = v + a * dt; s[k] = x + s[k + 'v'] * dt;
+  }
+  function step(s, g, body, wheels, o) {
+    const dt = Math.min(o.dt, 1 / 30); if (dt <= 0 || !wheels.length) return;
+    const r = g.rotation.y, c = Math.cos(r), sn = Math.sin(r), base = g.position.y;
+    let zf = 0, zr = 0, nf = 0, nr = 0, xl = 0, xr = 0, nl = 0, nrr = 0, front = 0, rear = 0, left = 0, right = 0, sum = 0;
+    let zMid = 0; wheels.forEach(w => zMid += w.z); zMid /= wheels.length;
+    const sp = Math.abs(o.speed || 0);
+    for (const w of wheels) {
+      const wx = g.position.x + w.x * c + w.z * sn, wz = g.position.z - w.x * sn + w.z * c;
+      let h = o.ground(wx, wz) - base;
+      const amp = o.rough ? o.rough(wx, wz) : 0;
+      if (amp) h += noise(wx, wz) * amp * Math.min(1, sp / 6);
+      h = clamp(h, -0.15, 0.3);
+      // the tyre follows the ground almost rigidly (tiny unsprung lag so a bund edge reads as a hop)
+      w.off = w.off === undefined ? h : w.off + (h - w.off) * Math.min(1, dt * 45);
+      if (w.obj) w.obj.position.y = w.baseY + w.off;
+      sum += w.off;
+      if (w.z >= zMid) { front += w.off; nf++; zf += w.z; } else { rear += w.off; nr++; zr += w.z; }
+      if (w.x > 0.05) { right += w.off; nrr++; xr += w.x; } else if (w.x < -0.05) { left += w.off; nl++; xl += w.x; }
+    }
+    const heaveT = sum / wheels.length;
+    let pitchT = 0, rollT = 0;
+    if (nf && nr) { const wb = Math.max(0.5, zf / nf - zr / nr); pitchT = -(front / nf - rear / nr) / wb; }
+    if (nl && nrr && !o.bike) { const tr = Math.max(0.3, xr / nrr - xl / nl); rollT = (right / nrr - left / nl) / tr; }
+    pitchT += clamp(-(o.longAcc || 0) * (o.pitchK || 0.005), -0.045, 0.045);            // dive under braking, squat on throttle
+    if (!o.bike) rollT += clamp((o.latAcc || 0) * (o.rollK || 0.008), -0.06, 0.06); // body rolls out of the corner
+    const w = o.w || 9, z = o.zeta || 0.32;                                            // ~1.4 Hz, underdamped: visible settle
+    dof(s, 'h', heaveT, w * 1.2, z, dt); dof(s, 'p', pitchT, w, z, dt); dof(s, 'r', rollT, w, z, dt);
+    s.h = clamp(s.h, heaveT - 0.09, heaveT + 0.09); s.p = clamp(s.p, -0.12, 0.12); s.r = clamp(s.r, -0.12, 0.12);
+    body.position.y = (body.userData.baseY || 0) + s.h;
+    body.rotation.x = s.p; body.rotation.z = s.r;
+  }
+  // which surfaces shake the tyres, and how much (m)
+  const ROUGH = { dirt: 0.022, field: 0.035, river: 0.03, lane: 0.006 };
+  function roughAt(x, z) { try { return ROUGH[world.surfaceAt(x, z)] || 0; } catch (e) { return 0; } }
+  return { step, roughAt };
+})();

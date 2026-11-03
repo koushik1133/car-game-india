@@ -1127,6 +1127,19 @@
 
     // ---------------- roads
     const RT = makeRoadTextures();
+    // CC0 photo textures (innova-nellutla/assets.js, Poly Haven) when the game provides them; procedural canvases otherwise.
+    // The game renders with linear output like the canvas textures, so the colour maps are kept linear too.
+    const CC0 = (name, rx, ry, fallback) => {
+      if (typeof window === 'undefined' || !window.Assets || !Assets.tex) return fallback;
+      const t = Assets.tex(name, { repeat: [rx, ry === undefined ? rx : ry] }).map;
+      if (!t) return fallback;
+      t.encoding = THREE.LinearEncoding; t.anisotropy = 8;
+      return t;
+    };
+    // road UVs: u = 0..1 across the road, v = metres / width along it, so one tile is one road width square
+    RT.asphalt = CC0('asphalt', 1, 1, RT.asphalt);
+    RT.concrete = CC0('ccroad', 1, 1, RT.concrete);
+    RT.dirt = CC0('dirt', 1, 1, RT.dirt);
     const roadBuilders = {};
     D.roads.forEach((r, i) => {
       const st = ROAD_STYLE[r.t] || ROAD_STYLE.dirt;
@@ -1385,10 +1398,10 @@
       facadeMats.push(mat);
       const m = wallB[i].mesh(mat); m.castShadow = m.receiveShadow = true; group.add(m);
     });
-    const roofTex = tex(stainedConcrete(256, false));
+    const roofTex = CC0('concrete', 0.6, 0.6, tex(stainedConcrete(256, false)));
     const rm = roofs.mesh(new THREE.MeshLambertMaterial({ map: roofTex, vertexColors: true })); rm.receiveShadow = true; group.add(rm);
-    const tm = tileRoofs.mesh(new THREE.MeshLambertMaterial({ map: tileTexture(), vertexColors: true })); tm.castShadow = true; group.add(tm);
-    const sm = sheetRoofs.mesh(new THREE.MeshLambertMaterial({ map: sheetTexture(), vertexColors: true })); sm.receiveShadow = true; group.add(sm);
+    const tm = tileRoofs.mesh(new THREE.MeshLambertMaterial({ map: CC0('roof', 0.8, 0.8, tileTexture()), vertexColors: true })); tm.castShadow = true; group.add(tm);
+    const sm = sheetRoofs.mesh(new THREE.MeshLambertMaterial({ map: CC0('corrugated', 0.5, 0.5, sheetTexture()), vertexColors: true })); sm.receiveShadow = true; group.add(sm);
     const pm = parapets.mesh(new THREE.MeshLambertMaterial({ map: roofTex, vertexColors: true })); pm.castShadow = true; group.add(pm);
     const lm = ledges.mesh(new THREE.MeshLambertMaterial({ vertexColors: true })); lm.castShadow = true; group.add(lm);
     const frm = frames.mesh(new THREE.MeshLambertMaterial({ vertexColors: true })); frm.castShadow = true; frm.receiveShadow = true; group.add(frm);
@@ -1441,7 +1454,7 @@
       segs.push([A[0], A[1], Bq[0], Bq[1]]);
     }
     const gm = gates.mesh(new THREE.MeshLambertMaterial({ vertexColors: true })); gm.castShadow = true; group.add(gm);
-    const cwTex = tex(stainedConcrete(256, true));
+    const cwTex = CC0('plaster', 0.7, 0.7, tex(stainedConcrete(256, true)));
     const cwm = cw.mesh(new THREE.MeshLambertMaterial({ map: cwTex, vertexColors: true })); cwm.castShadow = cwm.receiveShadow = true; group.add(cwm);
     const cwpm = cwp.mesh(new THREE.MeshLambertMaterial({ map: cwTex, vertexColors: true })); cwpm.castShadow = true; group.add(cwpm);
 
@@ -2162,6 +2175,13 @@
         carry = (carry - L) % 38; if (carry < 0) carry += 38;
       }
     }
+    // a pole set off one road must not stand on another (junctions, lanes that run into a road's verge)
+    const onCarriageway = (x, z, pad) => roadSegs.some(([a2, c2, t2, w2]) => {
+      if (t2 === 'river') return false;
+      const dx = c2[0] - a2[0], dz = c2[1] - a2[1], L2 = dx * dx + dz * dz || 1, tt = Math.max(0, Math.min(1, ((x - a2[0]) * dx + (z - a2[1]) * dz) / L2));
+      return Math.hypot(x - a2[0] - tt * dx, z - a2[1] - tt * dz) < w2 / 2 + pad;
+    });
+    for (let i = poles.length - 1; i >= 0; i--) if (onCarriageway(poles[i][0], poles[i][1], 0.5)) poles.splice(i, 1);
     // tapered concrete H-poles; local x is the cross-arm, turned across the road
     const poleIM = new THREE.InstancedMesh(poleGeometry(), new THREE.MeshLambertMaterial({ vertexColors: true }), poles.length);
     poleIM.castShadow = true; poleIM.frustumCulled = false;
@@ -2451,6 +2471,7 @@
             if (hr < 0.03) kind = 'hay'; else if (hr < 0.05) kind = 'buffalo'; else if (hr < 0.4) kind = 'shrub';
           }
           if (!kind || !free(x, z, kind === 'hay' ? 1.8 : 1.0)) continue;
+          if (kind !== 'shrub' && onCarriageway(x, z, 1.0)) continue;          // never park a prop on another road
           placed[kind].push([x, z, kind === 'bike' || kind === 'bike2' || kind === 'cot' ? rot + (hr > 0.07 ? Math.PI / 2 : 0) : hr * 40, 0.8 + (hr * 13 % 1) * 0.5]);
         }
       }
@@ -2761,6 +2782,8 @@
       }
       const slot = (k, hex) => { const m = PART[k], i = m.count++; m.setColorAt(i, col.setHex(hex)); return i; };
       const pick = (a) => a[Math.floor(Math.random() * a.length)];
+      // quiet zones (e.g. the lane in front of the safe house): villagers never spawn or walk into them
+      const quiet = (x, z) => (window.NELLUTLA_QUIET || []).some(q => Math.hypot(x - q.x, z - q.z) < q.r);
       let made = 0, guard = 0;
       while (made < COUNT && guard++ < COUNT * 20) {
         const k = Math.floor(Math.random() * routes.length); if (lens[k] < 30) continue;
@@ -2782,7 +2805,9 @@
         }
         const stick = elder && Math.random() < 0.85; if (stick) parts.stick = slot('stick', 0xffffff);
         const scale = kid ? 0.66 + Math.random() * 0.1 : female ? 0.92 + Math.random() * 0.05 : 0.98 + Math.random() * 0.07;
-        people.push({ r, len: lens[k], s: Math.random() * lens[k], dir: Math.random() < 0.5 ? 1 : -1, speed: (elder ? 0.55 : kid ? 1.1 : 0.9) + Math.random() * (elder ? 0.2 : 0.6),
+        const s0 = Math.random() * lens[k], q0 = pathPoint(r, s0);
+        if (quiet(q0[0], q0[1])) { for (const k2 in parts) { const m = PART[k2 === 'armL' || k2 === 'armR' ? 'arm' : k2 === 'legL' || k2 === 'legR' ? 'leg' : k2]; if (m) m.count--; } continue; }
+        people.push({ r, len: lens[k], s: s0, dir: Math.random() < 0.5 ? 1 : -1, speed: (elder ? 0.55 : kid ? 1.1 : 0.9) + Math.random() * (elder ? 0.2 : 0.6),
           side: Math.random() < 0.5 ? 1 : -1, off: 0, phase: Math.random() * 6, scale, type, parts, stick, stoop: elder ? 0.14 : 0,
           swing: type === 'woman' || type === 'elderWoman' ? 0.3 : 0.5, idle: Math.random() < 0.25, x: 0, z: 0, rot: 0 });
         made++;
@@ -2804,7 +2829,7 @@
     function updatePeople(dt, car, camPos) {
       if (!people.count) return;
       peopleT += dt;
-      const M = people.meshes;
+      const M = people.meshes, QUIET = window.NELLUTLA_QUIET || [];
       people.forEach((p) => {
         // only animate people near the camera; far ones keep their last pose
         const far = camPos && Math.abs(p.x - camPos.x) + Math.abs(p.z - camPos.z) > 350;
@@ -2818,6 +2843,7 @@
         p.off += (target - p.off) * Math.min(1, dt * 3);
         if (walking) {
           p.s += p.dir * p.speed * dt;
+          if (QUIET.length) { const q = pathPoint(p.r, p.s); if (QUIET.some(z2 => Math.hypot(q[0] - z2.x, q[1] - z2.z) < z2.r)) { p.s -= 2 * p.dir * p.speed * dt; p.dir = -p.dir; } }
           if (p.s > p.len) { p.s = p.len; p.dir = -1; } else if (p.s < 0) { p.s = 0; p.dir = 1; }
         }
         const [x, z, h] = pathPoint(p.r, p.s), rot = p.dir > 0 ? h : h + Math.PI;

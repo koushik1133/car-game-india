@@ -9,7 +9,7 @@ function buildCrystaShell(chassis, M, plateTex) {
   function sideExtrude(draw, width, mat, bevel) {
     const s = new THREE.Shape(); draw(s);
     const b = bevel === undefined ? 0.05 : bevel;
-    const g = new THREE.ExtrudeGeometry(s, { depth: width - 2 * b, bevelEnabled: b > 0, bevelThickness: b, bevelSize: b, bevelSegments: 4, curveSegments: 18 });
+    const g = new THREE.ExtrudeGeometry(s, { depth: width - 2 * b, bevelEnabled: b > 0, bevelThickness: b, bevelSize: b, bevelSegments: 6, curveSegments: 24 });
     g.rotateY(-Math.PI / 2);
     g.translate((width - 2 * b) / 2, 0, 0);
     const m = new THREE.Mesh(g, mat); m.castShadow = true; m.receiveShadow = true;
@@ -31,20 +31,19 @@ function buildCrystaShell(chassis, M, plateTex) {
   const FW = 1.38, RW = -1.37, AR = 0.47, AY = 0.40;
   const front = sideExtrude(s => {
     s.moveTo(0.90, 0.30); s.lineTo(FW - AR, 0.30); s.lineTo(FW - AR, AY); s.absarc(FW, AY, AR, Math.PI, 0, true); s.lineTo(FW + AR, 0.30);
-    s.lineTo(2.28, 0.30);
-    s.quadraticCurveTo(2.39, 0.33, 2.38, 0.52);       // front bumper
-    s.lineTo(2.36, 0.80);
-    s.quadraticCurveTo(2.34, 0.94, 2.14, 0.96);       // nose top
-    s.lineTo(1.05, 1.05);                             // hood to cowl
+    s.lineTo(2.22, 0.30);
+    s.bezierCurveTo(2.33, 0.30, 2.385, 0.36, 2.385, 0.47);   // rounded chin
+    s.bezierCurveTo(2.385, 0.62, 2.37, 0.74, 2.355, 0.82);   // bumper face, slight rake
+    s.bezierCurveTo(2.34, 0.92, 2.28, 0.955, 2.12, 0.965);   // nose / hood leading edge
+    s.bezierCurveTo(1.70, 0.99, 1.30, 1.03, 1.05, 1.05);     // hood crown
     s.lineTo(0.90, 1.06);
-  }, W, M.paint, 0.03);
+  }, W, M.paint, 0.06);
   chassis.add(front);
   const rear = sideExtrude(s => {
     s.moveTo(-2.28, 0.30); s.lineTo(RW - AR, 0.30); s.lineTo(RW - AR, AY); s.absarc(RW, AY, AR, Math.PI, 0, true); s.lineTo(-0.90, 0.30);
-    s.lineTo(-0.90, 1.08); s.lineTo(-2.24, 1.10);
-    s.lineTo(-2.29, 0.62); s.lineTo(-2.31, 0.40);
-    s.quadraticCurveTo(-2.32, 0.30, -2.28, 0.30);     // rear bumper
-  }, W, M.paint, 0.03);
+    s.lineTo(-0.90, 1.08); s.bezierCurveTo(-1.50, 1.09, -2.00, 1.10, -2.24, 1.10);
+    s.bezierCurveTo(-2.27, 0.90, -2.29, 0.72, -2.30, 0.60); s.bezierCurveTo(-2.33, 0.50, -2.33, 0.36, -2.27, 0.30);   // rear bumper
+  }, W, M.paint, 0.06);
   chassis.add(rear);
   const sill = sideExtrude(s => { s.moveTo(0.92, 0.30); s.lineTo(0.92, 0.40); s.lineTo(-0.92, 0.40); s.lineTo(-0.92, 0.30); }, W, M.paint, 0.02);
   chassis.add(sill);
@@ -80,9 +79,11 @@ function buildCrystaShell(chassis, M, plateTex) {
   chassis.add(quarter);
 
   const roof = sideExtrude(s => {
-    s.moveTo(0.30, 1.605); s.lineTo(0.14, 1.695); s.lineTo(-1.97, 1.755);
-    s.quadraticCurveTo(-2.26, 1.75, -2.29, 1.67); s.lineTo(-2.27, 1.63); s.lineTo(-1.95, 1.70); s.lineTo(0.22, 1.625);
-  }, W - 0.20, M.paint, 0.03);
+    s.moveTo(0.30, 1.605); s.quadraticCurveTo(0.20, 1.70, 0.02, 1.715);
+    s.bezierCurveTo(-0.70, 1.775, -1.50, 1.765, -1.97, 1.745);            // crowned roof, dropping ~3 cm to the rear
+    s.quadraticCurveTo(-2.26, 1.74, -2.29, 1.67); s.lineTo(-2.27, 1.63); s.lineTo(-1.95, 1.70);
+    s.bezierCurveTo(-1.40, 1.715, -0.60, 1.72, 0.22, 1.625);
+  }, W - 0.20, M.paint, 0.05);
   chassis.add(roof);
   // black A/B/C/D pillars for the floating-roof look
   [-1, 1].forEach(sd => {
@@ -144,7 +145,9 @@ function buildCrystaShell(chassis, M, plateTex) {
 
   // L-shaped tail lamps wrapping onto the quarter panel
   [-1, 1].forEach(sd => {
-    const v = box(0.14, 0.42, 0.05, tailMat(), sd * 0.80, 0.88, -2.305);
+    const v = box(0.15, 0.50, 0.05, tailMat(), sd * 0.79, 0.90, -2.305);
+    box(0.04, 0.34, 0.052, new THREE.MeshPhongMaterial({ color: 0x3a0a0a, shininess: 120 }), sd * 0.73, 0.92, -2.307);   // smoked inner strip
+    box(0.17, 0.52, 0.04, M.chrome, sd * 0.79, 0.90, -2.297);                                                   // bezel
     const h = box(0.26, 0.10, 0.05, tailMat(), sd * 0.66, 1.05, -2.30);
     const wrap = box(0.03, 0.30, 0.22, tailMat(), sd * (W / 2 - 0.005), 0.92, -2.18);
     box(0.10, 0.06, 0.055, new THREE.MeshBasicMaterial({ color: 0xf1f5f9 }), sd * 0.80, 0.76, -2.31);   // reverse lamp
@@ -197,6 +200,19 @@ function buildCrystaShell(chassis, M, plateTex) {
     seal(0.70, 0.905, 0.75); seal(0.70, -0.905, 0.75); seal(0.70, 0.01, 0.75);
   });
 
+  // shut lines: thin dark gaps around the doors, hood, tailgate and the fuel lid
+  const gapM = new THREE.MeshBasicMaterial({ color: 0x15171a });
+  [-1, 1].forEach(sd => {
+    const x = sd * (W / 2 + 0.004);
+    [0.905, 0.01, -0.905].forEach(z => box(0.006, 0.66, 0.006, gapM, x, 0.74, z));
+    box(0.006, 0.006, 1.80, gapM, x, 0.405, 0.0);
+    box(0.012, 0.006, 1.10, gapM, sd * (W / 2 - 0.10), 1.035 + 0.01, 1.62);       // hood edge
+    box(0.006, 0.52, 0.006, gapM, sd * (W / 2 - 0.13), 0.90, -2.33);             // tailgate edge
+    box(0.03, 0.035, 0.022, M.chrome, x, 1.095, -1.55).scale.set(0.5, 0.5, 60);   // chrome window line, rear quarter
+  });
+  { const fuel = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.004, 4, 24), gapM); fuel.rotation.y = Math.PI / 2; fuel.scale.set(1, 1, 1.2); fuel.position.set(-(W / 2 + 0.005), 0.92, -1.62); chassis.add(fuel); }
+  box(W + 0.01, 0.006, 0.006, gapM, 0, 1.0, 2.20);                                // hood front shut line
+
   // ---------------- 6. folding mirrors with indicator strip
   [-1, 1].forEach(sd => {
     const g = new THREE.Group(); g.position.set(sd * (W / 2 - 0.02), 1.06, 0.90);
@@ -222,10 +238,11 @@ function buildCrystaShell(chassis, M, plateTex) {
   surround.position.z = FZ - 0.03; chassis.add(surround);
   const insert = faceExtrude([[-0.44, 0.89], [0.44, 0.89], [0.60, 0.49], [-0.60, 0.49]], 0.06, M.pianoBlack);
   insert.position.z = FZ - 0.025; chassis.add(insert);
-  [0.80, 0.72, 0.64, 0.56].forEach((y, i) => {
+  [0.835, 0.79, 0.745, 0.70, 0.655, 0.61, 0.565, 0.52].forEach(y => {   // horizontal chrome slats
     const half = 0.44 + (0.89 - y) / 0.40 * 0.16;
-    box(half * 2 - 0.04, 0.018, 0.02, M.chrome, 0, y, FZ + 0.04);
+    box(half * 2 - 0.05, y > 0.8 || y < 0.54 ? 0.012 : 0.02, 0.02, M.chrome, 0, y, FZ + 0.04);
   });
+  box(1.10, 0.03, 0.03, M.chrome, 0, 0.455, FZ + 0.03);                // chrome lower bar under the grille
   const emblem = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.017, 6, 24), M.chrome);
   emblem.scale.y = 0.68; emblem.position.set(0, 0.84, FZ + 0.05); chassis.add(emblem);
   const emb2 = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.012, 6, 16), M.chrome);
@@ -245,6 +262,11 @@ function buildCrystaShell(chassis, M, plateTex) {
     proj.rotation.x = Math.PI / 2; proj.position.set(sd * 0.74, 0.85, FZ + 0.005); g.add(proj);
     const drl = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.016, 0.01), new THREE.MeshBasicMaterial({ color: 0xe0f2fe }));
     drl.position.set(sd * 0.68, 0.90 - 0.015, FZ + 0.01); drl.rotation.z = -sd * 0.05; g.add(drl);
+    const ledM = new THREE.MeshBasicMaterial({ color: 0xf0f9ff });
+    const led2 = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.012, 0.01), ledM); led2.position.set(sd * 0.70, 0.795, FZ + 0.016); led2.rotation.z = sd * 0.06; g.add(led2);
+    const led3 = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.09, 0.01), ledM); led3.position.set(sd * 0.85, 0.845, FZ + 0.016); g.add(led3);
+    const proj2 = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.03, 16), M.chrome);
+    proj2.rotation.x = Math.PI / 2; proj2.position.set(sd * 0.60, 0.855, FZ + 0.002); g.add(proj2);
     const side = box(0.03, 0.10, 0.20, lensMat, sd * (W / 2 - 0.01), 0.85, 2.24);
     chassis.add(g);
     frontHeadlights.push(proj);
