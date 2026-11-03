@@ -1569,5 +1569,5 @@ const TrafficModels = (function () {
   return { auto: baked(auto), bike: baked(bike), splendor: baked(splendor), scooter: baked(scooter), classic: baked(classic), classic2: baked(classic2),
     sport: baked(sport), faired: baked(faired), cycle: baked(cycle), mpv: baked(mpv), fortuner: baked(fortuner), fortunerBlack: baked(fortunerBlack),
     swift: baked(swift), dzire: baked(dzire), alto: baked(alto), bolero: baked(bolero), scorpio: baked(scorpio), ace: baked(ace),
-    TWO_WHEELERS: ['bike', 'splendor', 'scooter', 'classic', 'classic2', 'sport', 'faired', 'cycle'], hatch: baked(hatch), suv: baked(suv), tractor: baked(tractor), lorry: baked(lorry), bus: baked(bus), bullockCart: baked(bullockCart), bake };
+    TWO_WHEELERS: ['bike', 'splendor', 'scooter', 'classic', 'classic2', 'sport', 'faired', 'cycle'], hatch: baked(hatch), suv: baked(suv), tractor: baked(tractor), lorry: baked(lorry), bus: baked(bus), bullockCart: baked(bullockCart), bake, mergeUnder };
 })();

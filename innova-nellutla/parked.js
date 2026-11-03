@@ -15,7 +15,7 @@ const Parked = (function () {
   const pk = vk => PLAYER_KIND[vk] || vk;
   const HOME_BIKES = ['bike', 'bike', 'bike', 'scooter', 'scooter', 'scooter', 'classic', 'classic2', 'sport', 'faired', 'cycle', 'cycle'];
   const HOME_CARS = ['swift', 'swift', 'alto', 'alto', 'alto', 'dzire', 'bolero', 'bolero', 'scorpio', 'ace', 'mpv'];
-  const NEAR = 130, FAR = 520;         // full detail inside NEAR, box proxy inside FAR, nothing beyond
+  const NEAR = 130, FAR = ({ low: 300, medium: 380 }[window.Quality && Quality.tier]) || 520;       // full detail inside NEAR, box proxy inside FAR, nothing beyond
 
   // seeded random so the village looks the same every load
   let seed = 20261102;

@@ -362,7 +362,31 @@ function buildToyotaInnovaCrysta() {
     wheelMeshes.push({ anchor: wAnchor, tire: wTireGroup, isFront: wp.isFront, obj: wAnchor, x: wp.x, z: wp.z, baseY: wheelRadius });
   });
 
+  mergeCrystaStatic(chassisMesh);
   scene.add(playerCarGroup);
+}
+
+// The shell + cabin are ~400 small meshes (400 draw calls, again in the shadow pass). Merge the static ones
+// into one mesh per material; every animated / recoloured handle (doors, mirrors, hood, trunk, sunroof,
+// wipers, lamps, NOS flames, steering wheel) stays its own object, each merged internally.
+function mergeCrystaStatic(chassis) {
+  if (typeof TrafficModels === 'undefined' || !TrafficModels.mergeUnder) return;
+  const handles = [hoodMesh, trunkMesh, sunroofMesh, chassis.userData.steeringWheel, ...wiperMeshes, ...nosFlameJets,
+    ...Object.values(doorMeshes).map(d => d.group), ...Object.values(mirrorMeshes).map(d => d.group)].filter(Boolean);
+  const lamps = [...rearBrakeLights, ...frontHeadlights];
+  const keep = new Set([...handles, ...lamps]);
+  // many parts build their own identical material: share them so the merge yields fewer buckets
+  const canon = new Map(), hex = c => (c && c.isColor ? c.getHexString() : '');
+  chassis.traverse(o => {
+    if (!o.isMesh || Array.isArray(o.material) || lamps.includes(o)) return;
+    const m = o.material;
+    const k = [m.type, hex(m.color), hex(m.emissive), hex(m.specular), m.shininess, m.opacity, m.transparent, m.side, m.depthWrite,
+      m.map && m.map.uuid, m.envMap && m.envMap.uuid, m.reflectivity, m.combine, m.vertexColors, m.polygonOffset, m.polygonOffsetFactor].join('|');
+    if (!canon.has(k)) canon.set(k, m); else o.material = canon.get(k);
+  });
+  TrafficModels.mergeUnder(chassis, keep);
+  for (const h of handles) if (h.isObject3D && !h.isMesh) TrafficModels.mergeUnder(h, new Set([...handles, ...lamps].filter(x => x !== h)));
+  for (const w of wheelMeshes) { TrafficModels.mergeUnder(w.tire, new Set()); TrafficModels.mergeUnder(w.anchor, new Set([w.tire])); }
 }
 
 // ======================================================================

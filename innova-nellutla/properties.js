@@ -628,7 +628,7 @@
     if (!lots.length && lotsTried < 30 && (t > lotsTried * 2)) { lotsTried++; initLots(); }
     // markers pulse; hide far ones
     const cp = G.carPos, pulse = 0.55 + 0.45 * Math.sin(t * 3);
-    for (const p of props) { const d = Math.hypot(p.x - cp.x, p.z - cp.z), m = p.marker; m.visible = d < 140; if (m.visible) { m.userData.ring.material.opacity = 0.5 + 0.45 * pulse; m.userData.beam.material.opacity = 0.08 + 0.1 * pulse; m.userData.ring.rotation.y = t; } p.board.visible = d < 260; }
+    for (const p of props) { const d = Math.hypot(p.x - cp.x, p.z - cp.z), m = p.marker; m.visible = d < 140; if (m.visible) { m.userData.ring.material.opacity = 0.5 + 0.45 * pulse; m.userData.beam.material.opacity = 0.08 + 0.1 * pulse; m.userData.ring.rotation.y = t; } p.board.visible = d < 170; }
     for (const L of lots) L.marker.visible = Math.hypot(L.x - cp.x, L.z - cp.z) < 140;
     // construction
     for (const p of props) {

@@ -440,6 +440,11 @@ const HumanModel = (function () {
     }
     if (acc.towel && !low) mesh(ribbon('towel', [[0.13, 0.47, 0.06], [0.15, 0.5, -0.02], [0.13, 0.48, -0.07], [-0.13, 0.48, -0.07], [-0.15, 0.5, -0.02], [-0.13, 0.47, 0.06]], 0.08), cloth(0xf4f0e0, 'check', true), torso);
 
+    // ~30 small meshes per figure: merge each joint's own meshes into one mesh per material (joints still pose)
+    if (typeof TrafficModels !== 'undefined' && TrafficModels.mergeUnder) {
+      const pv = Object.values(parts).filter(p => p && p.isObject3D), all = new Set(pv);
+      for (const p of pv) TrafficModels.mergeUnder(p, new Set(pv.filter(q => q !== p)));
+    }
     group.traverse(m => { if (m.isMesh) m.castShadow = true; });
     animateIdle(parts, Math.random() * 10);
     const res = { group, parts, hipHeight: hipH * s, scale: s, appearance: o };

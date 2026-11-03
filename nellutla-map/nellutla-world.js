@@ -2485,6 +2485,34 @@
         addBox(nandi, 0.7, 0.6, 1.3, L(0x3a3a3a), 0, 0.35, 0); addBox(nandi, 0.4, 0.45, 0.45, L(0x3a3a3a), 0, 0.75, 0.55); g.add(nandi);
       }
       solid(g.position.x, g.position.z - 2 * S2, 3.6 * S2, 4.6 * S2);
+      mergeByMaterial(g);    // ~110 boxes -> one mesh per material (8 draw calls instead of 110)
+    }
+    // merge every plain mesh under g into one mesh per material (geometry baked into g's local frame)
+    function mergeByMaterial(g) {
+      g.updateMatrixWorld(true); const inv = new THREE.Matrix4().copy(g.matrixWorld).invert(), m = new THREE.Matrix4();
+      const buckets = new Map(), victims = [];
+      g.traverse(o => {
+        if (!o.isMesh || o.isInstancedMesh || Array.isArray(o.material)) return;
+        const geo = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+        geo.applyMatrix4(m.multiplyMatrices(inv, o.matrixWorld));
+        const b = buckets.get(o.material) || buckets.set(o.material, { geos: [], cs: false, rs: false }).get(o.material);
+        b.geos.push(geo); b.cs = b.cs || o.castShadow; b.rs = b.rs || o.receiveShadow; victims.push(o);
+      });
+      if (victims.length < 2) return;
+      victims.forEach(o => o.parent.remove(o));
+      for (const [mat, b] of buckets) {
+        const names = ['position', 'normal', 'uv'].filter(n => b.geos.every(q => q.attributes[n]));
+        const total = b.geos.reduce((a, q) => a + q.attributes.position.count, 0), out = new THREE.BufferGeometry();
+        for (const n of names) {
+          const sz = n === 'uv' ? 2 : 3, arr = new Float32Array(total * sz); let off = 0;
+          for (const q of b.geos) { arr.set(q.attributes[n].array.subarray(0, q.attributes.position.count * sz), off); off += q.attributes.position.count * sz; }
+          out.setAttribute(n, new THREE.BufferAttribute(arr, sz));
+        }
+        if (!out.attributes.normal) out.computeVertexNormals();
+        out.computeBoundingSphere();
+        const mesh = new THREE.Mesh(out, mat); mesh.castShadow = b.cs; mesh.receiveShadow = b.rs; g.add(mesh);
+        b.geos.forEach(q => q.dispose());
+      }
     }
     function school(g, l) {
       // compound wall with an arched gate, name board and national flag
