@@ -12,6 +12,8 @@
   (window.NELLUTLA_EXCLUDE = window.NELLUTLA_EXCLUDE || []).push({ x: 69.7, z: -269.0, r: 3 });
   // villagers keep off the lane in front of the safe house (nellutla-world.js people loop)
   (window.NELLUTLA_QUIET = window.NELLUTLA_QUIET || []).push({ x: 42, z: -272, r: 16 });
+  // the open earth plaza at the junction is drivable: world poles/trees/walls keep out of it (nellutla-world.js roadHit)
+  (window.NELLUTLA_CLEAR = window.NELLUTLA_CLEAR || []).push({ x: 64, z: -268, r: 10.5 });
 
   const LANE = [[20.3, -288.8], [53.3, -270.7], [79.4, -257.9], [110.2, -248.1]];   // = east_diag in nellutla-map/tools/traced.json
   const SEG = []; let TOT = 0;
@@ -132,7 +134,9 @@
       for (let i = 0; i < 26; i++) { const a = -26 + rnd() * 18, b = -1.5 + rnd() * 14.5; const r = 0.5 + rnd() * 0.5; FO.blob(O.x + a * UX - b * UZ, r * 0.8, O.z + a * UZ + b * UX, r, r * 0.8, r, 45, [['#4d8a2e', 2], ['#6a9a35', 2], ['#8a9a45', 1]], 0.35); } }
 
     // ---------- concrete electric poles, sagging wires
-    const poleN = [2, 26, 46, 70, 90].map(d => at(d, -3.6)), poleS = [14, 46, 58, 80].map(d => at(d, 3.4));
+    // keep every pole off the open plaza at the junction (it is driven across): slide along the lane until clear
+    const offPlaza = (d, o) => { let p = at(d, o); for (let k = 0; k < 40 && Math.hypot((p.x - 64) / 11.5, (p.z + 268) / 9.4) < 1; k++) p = at(d += (d < 50 ? -0.5 : 0.5), o); return p; };
+    const poleN = [2, 26, 46, 70, 90].map(d => offPlaza(d, -3.6)), poleS = [14, 46, 58, 80].map(d => offPlaza(d, 3.4));
     for (const p of [...poleN, ...poleS]) { B.obox(p.x, p.z, p.ang, 0.18, 0, 8, 0.24, '#a9a69c'); B.obox(p.x, p.z, p.ang + Math.PI / 2, 1.2, 7.3, 7.4, 0.1, '#6b6b6b'); collider(p.x, p.z, p.ang, 0.25, 0.3); }
     const wire = [], sag = (a, b, y, s, n, cb) => { for (let i = 0; i < n; i++) { const t0 = i / n, t1 = (i + 1) / n, Y = t => y - s * 4 * t * (1 - t); wire.push(a.x + (b.x - a.x) * t0, Y(t0), a.z + (b.z - a.z) * t0, a.x + (b.x - a.x) * t1, Y(t1), a.z + (b.z - a.z) * t1); if (cb) cb(a.x + (b.x - a.x) * t0, Y(t0), a.z + (b.z - a.z) * t0, Math.atan2(-(b.z - a.z), b.x - a.x)); } };
     for (let i = 0; i < poleN.length - 1; i++) for (const off of [-0.5, 0, 0.5]) sag({ x: poleN[i].x + poleN[i].dz * off, z: poleN[i].z - poleN[i].dx * off }, { x: poleN[i + 1].x + poleN[i + 1].dz * off, z: poleN[i + 1].z - poleN[i + 1].dx * off }, 7.35, 0.7, 12);

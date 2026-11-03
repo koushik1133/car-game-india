@@ -287,30 +287,31 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>window.NELLUTLA_EXCLUDE = window.NELLUTLA_EXCLUDE || [];   // [{x, z, r}]: buildings whose centre is inside are skipped (custom-modelled by a feature module)</script>
 <script src="../nellutla-map/map-data.js?v=1793665390"></script>
-<script src="../nellutla-map/nellutla-world.js?v=1793665679"></script>
+<script src="../nellutla-map/nellutla-world.js?v=1793665802"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script src="crysta-body.js?v=1793665390"></script>
 <script src="crysta-detail.js?v=1793665390"></script>
 <script src="crysta.js?v=1793665390"></script>
 <script src="device.js?v=1793665390"></script>
 <script src="quality.js?v=1793665390"></script>
-<script src="ambient.js?v=1793665390"></script>
-<script src="engine-audio.js?v=1793665390"></script>
-<script src="traffic-models.js?v=1793665390"></script>
+<script src="ambient.js?v=1793670001"></script>
+<script src="engine-audio.js?v=1793700100"></script>
+<script src="traffic-models.js?v=1793700002"></script>
 <script src="glb-car.js?v=1793665390"></script>
 <script src="multiplayer/mp.js?v=1793665390"></script>
 <script src="people-models.js?v=1793666001"></script>
 <script src="assets.js?v=1793665390"></script>
-<script src="player.js?v=1793666001"></script>
+<script src="player.js?v=1793667342"></script>
 <!-- Feature modules. Each registers itself on GameHooks (init/update/key) and owns its own file. -->
 <script>window.GameHooks = { init: [], update: [], key: [] };</script>
-<script src="parked.js?v=1793665390"></script>
+<script src="parked.js?v=1793700002"></script>
 <script src="character-creator.js?v=1793665390"></script>
 <script src="properties.js?v=1793665390"></script>
 <script src="safehouse.js?v=1793665390"></script>
 <script src="safehouse2.js?v=1793665679"></script>
-<script src="streetscape.js?v=1793665679"></script>
-<script src="animals.js?v=1793666501"></script>
+<script src="streetscape.js?v=1793665801"></script>
+<script src="animals.js?v=1793670001"></script>
+<script src="sfx.js?v=1793670001"></script>
 <script src="touch-controls.js?v=1793665390"></script>
 <script src="auto-rides.js?v=1793665390"></script>
 <script>
@@ -450,10 +451,22 @@ function showComboPopup(msg) {
 }
 
 // ---------------------------------------------------------------- village traffic following real roads
+// Traffic AI: every vehicle is an oriented bounding box (its real length/width) for following, avoidance and
+// collisions (separating-axis test). Lateral position inside the road is a smooth offset `lat` (+ = left/keep-left
+// side), used for overtaking, pulling aside on the horn and driving round obstacles. Stuck vehicles reverse and
+// try to go round; as a last resort they respawn somewhere the player can't see.
 const traffic = [];
+// per-type driving character: accel/brake (m/s²), time headway (s), standstill gap (m)
+const TRAFFIC_KIND = {
+  auto: { acc: 1.8, brk: 5, hw: 1.0, gap: 1.6 }, bike: { acc: 2.8, brk: 6, hw: 0.8, gap: 1.2 },
+  hatch: { acc: 2.2, brk: 6.5, hw: 1.2, gap: 2.0 }, suv: { acc: 2.0, brk: 6.5, hw: 1.3, gap: 2.2 },
+  tractor: { acc: 0.8, brk: 3.5, hw: 1.6, gap: 2.5 }, lorry: { acc: 0.7, brk: 4, hw: 1.9, gap: 3.0 },
+  bus: { acc: 0.8, brk: 4, hw: 1.9, gap: 3.0 }, bullockCart: { acc: 0.4, brk: 2, hw: 1.5, gap: 1.5 },
+};
+const TRAFFIC_ROUTES = {};
+const trafficRouteLen = r => r.p.reduce((sum, p, i) => i ? sum + Math.hypot(p[0] - r.p[i-1][0], p[1] - r.p[i-1][1]) : 0, 0);
 (function spawnTraffic() {
-  const routeLen = r => r.p.reduce((sum, p, i) => i ? sum + Math.hypot(p[0] - r.p[i-1][0], p[1] - r.p[i-1][1]) : 0, 0);
-  const all = world.roads.filter(r => r.p.length >= 2).map(r => ({ r, len: routeLen(r) })).filter(o => o.len > 100);
+  const all = world.roads.filter(r => r.p.length >= 2).map(r => ({ r, len: trafficRouteLen(r) })).filter(o => o.len > 100);
   const on = types => all.filter(o => types.includes(o.r.t));
   // kind, how many, which roads, speed (m/s)
   const PLAN = [
@@ -464,11 +477,15 @@ const traffic = [];
   ];
   for (const [kind, n, types, spd] of PLAN) {
     const routes = on(types); if (!routes.length) continue;
+    TRAFFIC_ROUTES[kind] = { routes, spd };
     for (let i = 0; i < n; i++) {
       const o = routes[Math.floor(Math.random() * routes.length)];
       const v = TrafficModels[kind]();
-      const speed = spd * (o.r.t === 'highway' ? 1.7 : 1) * (0.85 + Math.random() * 0.3);
-      traffic.push({ ...v, model: kind, r: o.r, len: o.len, s: Math.random() * o.len, dir: Math.random() < 0.5 ? 1 : -1, speed, cur: speed, len2: v.len / 2, wheelR: 0.4 });
+      const drv = 0.85 + Math.random() * 0.3;                     // this driver's temperament (speed + headway)
+      const speed = spd * (o.r.t === 'highway' ? 1.7 : 1) * drv;
+      traffic.push({ ...v, model: kind, r: o.r, len: o.len, s: Math.random() * o.len, dir: Math.random() < 0.5 ? 1 : -1, speed, cur: speed,
+        len2: v.len / 2, wheelR: 0.4, drv, K: TRAFFIC_KIND[kind] || TRAFFIC_KIND.hatch, lat: null, latT: null, latV: 0,
+        mode: 'drive', modeT: 0, stuckT: 0, tries: 0, followT: 0 });
       scene.add(v.g);
     }
   }
@@ -480,45 +497,284 @@ function pointAt(r, s) {
     s -= L;
   }
 }
+// real footprint: userData.dims from the model if present, else a Box3 measured once in the model's own frame
+function trafficDims(t) {
+  if (!t._dims) {
+    const g = t.g, p = g.position.clone(), r = g.rotation.y, par = g.parent;
+    if (par) par.remove(g);
+    g.position.set(0, 0, 0); g.rotation.y = 0; g.updateMatrixWorld(true);
+    const b = new THREE.Box3();
+    g.traverse(c => { if (c.isMesh && c.geometry && !(c.userData && c.userData.human)) { if (!c.geometry.boundingBox) c.geometry.computeBoundingBox(); b.union(c.geometry.boundingBox.clone().applyMatrix4(c.matrixWorld)); } });
+    g.position.copy(p); g.rotation.y = r; if (par) par.add(g); g.updateMatrixWorld(true);
+    const sz = b.isEmpty() ? new THREE.Vector3(1.6, 1.5, t.len2 * 2) : b.getSize(new THREE.Vector3());
+    const L = Math.min(t.len2 * 2 * 1.3, Math.max(t.len2 * 2 * 0.8, sz.z));   // guard against stray glow/light meshes
+    const ctr = b.isEmpty() ? new THREE.Vector3() : b.getCenter(new THREE.Vector3());
+    t._dims = { L, W: Math.max(0.6, Math.min(3.0, sz.x)), cx: ctr.x, cz: ctr.z };   // centre offset: model origin is often an axle
+  }
+  const ud = t.g.userData && t.g.userData.dims, D = t._dims;
+  if (ud && ud.length > 0 && ud.width > 0) return { L: ud.length, W: ud.width, cx: ud.cx != null ? ud.cx : D.cx, cz: ud.cz != null ? ud.cz : D.cz };
+  return D;
+}
+// OBB: centre, forward unit (fx,fz), half length along forward, half width along left (fz,-fx)
+function trafficOBB(x, z, rot, L, W) { return { x, z, fx: Math.sin(rot), fz: Math.cos(rot), hl: L / 2, hw: W / 2 }; }
+// a traffic vehicle's box: the measured footprint centre (local cx left, cz forward) moved into world space
+function trafficBox(t) {
+  const r = t.g.rotation.y, fx = Math.sin(r), fz = Math.cos(r), cx = t.cx || 0, cz = t.cz || 0;
+  return { x: t.g.position.x + fx * cz + fz * cx, z: t.g.position.z + fz * cz - fx * cx, fx, fz, hl: t.L / 2, hw: t.W / 2 };
+}
+// separating-axis test of two OBBs: null when apart, else {depth, nx, nz} with n pointing from a to b
+function obbOverlap(a, b) {
+  let best = Infinity, nx = 0, nz = 0; const dx = b.x - a.x, dz = b.z - a.z;
+  const axes = [a.fx, a.fz, a.fz, -a.fx, b.fx, b.fz, b.fz, -b.fx];
+  for (let i = 0; i < 8; i += 2) {
+    const ax = axes[i], az = axes[i + 1];
+    const ra = a.hl * Math.abs(a.fx * ax + a.fz * az) + a.hw * Math.abs(a.fz * ax - a.fx * az);
+    const rb = b.hl * Math.abs(b.fx * ax + b.fz * az) + b.hw * Math.abs(b.fz * ax - b.fx * az);
+    const d = dx * ax + dz * az, o = ra + rb - Math.abs(d);
+    if (o <= 0) return null;
+    if (o < best) { best = o; const s = d < 0 ? -1 : 1; nx = ax * s; nz = az * s; }
+  }
+  return { depth: best, nx, nz };
+}
+// clear distance from the nose of box a to box b along a's heading, if b intrudes on a's corridor
+// (a's width + margin, widened sideways by `shift`, + = left); Infinity when b is not in the corridor ahead
+function obbGapAhead(a, b, margin, shift, only) {
+  let amin = Infinity, amax = -Infinity, smin = Infinity, smax = -Infinity;
+  for (const [u, v] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+    const cx = b.x + b.fx * b.hl * u + b.fz * b.hw * v - a.x, cz = b.z + b.fz * b.hl * u - b.fx * b.hw * v - a.z;
+    const al = cx * a.fx + cz * a.fz, sd = cx * a.fz - cz * a.fx;
+    if (al < amin) amin = al; if (al > amax) amax = al; if (sd < smin) smin = sd; if (sd > smax) smax = sd;
+  }
+  const lo = (only ? shift : Math.min(0, shift)) - a.hw - margin, hi = (only ? shift : Math.max(0, shift)) + a.hw + margin;
+  if (smax < lo || smin > hi) return Infinity;
+  if (amax <= 0) return Infinity;                       // behind us
+  return amin - a.hl;
+}
+// the player's footprint (car/vehicle/on foot)
+function playerOBB() {
+  const mode = typeof Player !== 'undefined' ? Player.mode : 'crysta';
+  if (mode === 'foot') return { box: trafficOBB(carPos.x, carPos.z, carRot, 0.5, 0.5), solid: false, v: 0 };
+  if (mode === 'passenger') return null;
+  if (mode === 'vehicle' && Player.active) {
+    const a = Player.active, hw = a.hw || ((Player.PARAMS[a.model] || {}).hw) || 0.9;
+    return { box: trafficOBB(carPos.x, carPos.z, carRot, a.len || 4, hw * 2), solid: true, v: carSpeed / 3.6 };
+  }
+  return { box: trafficOBB(carPos.x, carPos.z, carRot, 4.735, 1.83), solid: true, v: carSpeed / 3.6 };   // Innova Crysta
+}
+const _trFrustum = new THREE.Frustum(), _trM = new THREE.Matrix4(), _trS = new THREE.Sphere();
+function trafficOnScreen(t) {
+  _trM.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _trFrustum.setFromProjectionMatrix(_trM);
+  _trS.center.copy(t.g.position); _trS.radius = t.len2 + 1;
+  return _trFrustum.intersectsSphere(_trS) && t.g.position.distanceTo(camera.position) < 400;
+}
+// move a vehicle to a fresh spot on its kind's roads, out of the player's sight and clear of other traffic
+function trafficRespawn(t) {
+  const R = TRAFFIC_ROUTES[t.model]; if (!R) return false;
+  for (let k = 0; k < 40; k++) {
+    const o = R.routes[Math.floor(Math.random() * R.routes.length)], s = Math.random() * o.len;
+    const [x, z] = pointAt(o.r, s);
+    if (Math.hypot(x - carPos.x, z - carPos.z) < 150) continue;
+    if (traffic.some(q => q !== t && q.r === o.r && Math.abs(q.s - s) < 15)) continue;
+    t.r = o.r; t.len = o.len; t.s = s; t.dir = Math.random() < 0.5 ? 1 : -1; t.cur = 0;
+    t.speed = R.spd * (o.r.t === 'highway' ? 1.7 : 1) * t.drv;
+    t.lat = t.latT = null; t.latV = 0; t.mode = 'drive'; t.stuckT = 0; t.tries = 0; t.g.scale.setScalar(1); t.respawns = (t.respawns || 0) + 1;
+    return true;
+  }
+  return false;
+}
+// horn: vehicles behind overtake the player, oncoming vehicles slow and keep to their edge, blockers ahead pull aside
+function trafficHorn() {
+  const pb = playerOBB(); if (!pb) return 0;
+  const P = pb.box; let n = 0;
+  for (const t of traffic) {
+    if (!t.box || t.mode === 'reverse' || t.mode === 'respawn') continue;
+    const dx = t.g.position.x - P.x, dz = t.g.position.z - P.z;
+    if (dx * dx + dz * dz > 50 * 50) continue;
+    const along = dx * P.fx + dz * P.fz, side = dx * P.fz - dz * P.fx, hd = t.box.fx * P.fx + t.box.fz * P.fz;
+    if (Math.abs(side) > 8) continue;
+    if (hd > 0.5 && along < -1) { t.mode = 'overtake'; t.passing = 'player'; t.modeT = 0; n++; }          // behind, same way: go round
+    else if (hd > 0.5 && along > 0) { t.mode = 'yield'; t.modeT = 0; t.yieldT = 6; n++; }                 // ahead, same way: pull aside
+    else if (hd < -0.5 && along > -2) { t.mode = 'yield'; t.modeT = 0; t.yieldT = 4; n++; }               // oncoming: slow, keep to edge
+  }
+  return n;
+}
+if (typeof triggerHorn === 'function') { const _horn = triggerHorn; triggerHorn = function () { _horn.apply(this, arguments); trafficHorn(); }; }
+
 function updateTraffic(dt) {
   const night = stars.material.opacity > 0.4;
+  dt = Math.min(dt, 0.1);
+  const pl = playerOBB();
+  const animals = (window.VillageAnimals && VillageAnimals.all) || [];
+  const people = world.people || [];
+  // 1. boxes from current positions
   for (const t of traffic) {
-    // slow down for the player or a vehicle ahead in the same lane
-    const fx = Math.sin(t.g.rotation.y), fz = Math.cos(t.g.rotation.y);
-    let want = t.speed;
-    const px = carPos.x - t.g.position.x, pz = carPos.z - t.g.position.z, ahead = px * fx + pz * fz, side = Math.abs(px * fz - pz * fx);
-    if (ahead > 0 && ahead < t.len2 + 10 && side < 3) want = Math.min(want, Math.max(0, (ahead - t.len2 - 3) * 0.8));
-    for (const o of traffic) {
-      if (o === t || o.r !== t.r || o.dir !== t.dir) continue;
-      const gap = (o.s - t.s) * t.dir;
-      if (gap > 0 && gap < t.len2 + o.len2 + 8) want = Math.min(want, o.cur * 0.9);
+    const d = trafficDims(t); t.L = d.L; t.W = d.W; t.cx = d.cx; t.cz = d.cz;
+    t.box = trafficBox(t);
+  }
+  for (const t of traffic) {
+    const K = t.K, B = t.box, farAway = Math.abs(B.x - camera.position.x) + Math.abs(B.z - camera.position.z) > 600;
+    const off = Math.min(2.2, t.r.w / 4), maxLat = Math.max(off, t.r.w / 2 - t.W / 2 - 0.15);
+    if (t.lat === null) { t.lat = t.latT = off; }
+    t.modeT += dt;
+    // ---- lateral target from the mode
+    let latT = off, cruise = t.speed;
+    if (t.mode === 'overtake') {
+      latT = -Math.min(off, maxLat); cruise = t.speed * 1.25 + 1;
+      const tgt = t.passing === 'player' ? (pl && pl.box) : (t.passing && t.passing.box);
+      const done = !tgt || ((tgt.x - B.x) * B.fx + (tgt.z - B.z) * B.fz < -(B.hl + tgt.hl + 4));
+      if (done || t.modeT > 18) { t.mode = 'drive'; t.passing = null; t.followT = 0; }
+    } else if (t.mode === 'yield') {
+      latT = maxLat; cruise = t.speed * 0.4;
+      if (t.modeT > (t.yieldT || 5)) t.mode = 'drive';
+    } else if (t.mode === 'bypass') {
+      latT = t.bypassLat; cruise = Math.min(t.speed, 4);
+      if (t.modeT > 8 || Math.abs(t.s - t.bypassS) > t.L + 12) t.mode = 'drive';
     }
-    t.cur += (want - t.cur) * Math.min(1, dt * 2.5);
+    // ---- want speed: cruise, then obstacles ahead in our corridor (OBB gap, speed based headway)
+    let want = cruise, leader = null, minGap = Infinity, blockedBy = null;
+    const shift = latT - t.lat;
+    const consider = (box, v, kind, ref) => {
+      const dx = box.x - B.x, dz = box.z - B.z;
+      if (dx * dx + dz * dz > 70 * 70) return;
+      // corridor: current lane plus where we're steering to; widen a little for soft things (animals, people)
+      // while changing lane on purpose, look down the target lane; the current footprint only has to not scrape
+      const steering = (t.mode === 'overtake' || t.mode === 'bypass') && Math.abs(shift) > 0.3;
+      let gap = obbGapAhead(B, box, kind === 'soft' ? 0.6 : 0.15, shift, steering);
+      if (steering) { const g0 = obbGapAhead(B, box, 0.05, 0, true); if (g0 < 1.0) { want = 0; gap = Math.min(gap, g0); } }
+      if (gap === Infinity) return;
+      const vAlong = v * (box.fx * B.fx + box.fz * B.fz);                      // obstacle speed along our heading
+      const stop = K.gap + (kind === 'soft' ? 1.5 : 0);
+      const lim = Math.max(0, Math.min(Math.max(0, vAlong) + (gap - stop) * 0.6, (gap - stop) / K.hw));
+      if (lim < want) { want = gap < stop ? 0 : lim; }
+      if (gap < minGap) { minGap = gap; leader = ref; blockedBy = kind; }
+    };
+    for (const o of traffic) if (o !== t && o.box && o.mode !== 'respawn') consider(o.box, o.cur * (o.mode === 'reverse' ? -1 : 1), 'traffic', o);
+    if (pl) consider(pl.box, pl.v, pl.solid ? 'player' : 'soft', 'player');
+    if (!farAway) {
+      for (const a of animals) { if (a && typeof a.x === 'number' && Math.abs(a.x - B.x) + Math.abs(a.z - B.z) < 40) { const r = (a.sp && a.sp.rig ? a.sp.rig.r : 0.6) * (a.scale || 1); consider(trafficOBB(a.x, a.z, 0, r * 2, r * 2), 0, 'soft', 'animal'); } }
+      for (const p of people) { if (p.x !== 0 && Math.abs(p.x - B.x) + Math.abs(p.z - B.z) < 30) consider(trafficOBB(p.x, p.z, 0, 0.5, 0.5), 0, 'soft', 'person'); }
+    }
+    // walls / buildings: sweep probes (spaced under the half width, so thin walls can't slip between) from the
+    // nose out to the stopping distance, drifting toward the lateral target; brake to stop short of the first hit
+    let wallHit = false;
+    if (!farAway && world.collide) {
+      const r = Math.max(0.3, B.hw * 0.9), body = Math.max(0, B.hl - r), reach = 1.5 + t.cur * t.cur / (1.6 * K.brk) + t.cur * 0.4;
+      const n = Math.min(28, Math.ceil((reach + body) / r) + 1);
+      for (let k = 0; k < n; k++) {
+        const ahead = (k / Math.max(1, n - 1)) * (reach + body), d = ahead - body, sh = shift * Math.min(1, Math.max(0, d) / 6);
+        const q = { x: B.x + B.fx * ahead + B.fz * sh, z: B.z + B.fz * ahead - B.fx * sh }, c = world.collide(q, r);
+        if (c && c.hit) {
+          wallHit = d < 1.6; const lim = Math.sqrt(2 * K.brk * Math.max(0, d - 1.2));
+          if (lim < want) { want = d < 1.6 ? 0 : lim; blockedBy = 'wall'; }
+          break;
+        }
+      }
+    }
+    t.leaderRef = leader; t.blockedBy = blockedBy; t.gapAheadM = minGap;
+    // ---- automatic overtake of slow traffic when the other half is clear of oncoming vehicles
+    if (t.mode === 'drive' && leader && leader !== 'player' && typeof leader === 'object' && leader.dir === t.dir && leader.r === t.r
+        && minGap < 18 && leader.cur < t.speed * 0.6 && t.r.w >= 5.5) {
+      t.followT += dt;
+      if (t.followT > 2.5) {
+        const sh = -off - t.lat;
+        const clear = !traffic.some(o => o !== t && o !== leader && o.box && obbGapAhead(B, o.box, 0.3, sh) < 70 + t.speed * 3 && (o.box.fx * B.fx + o.box.fz * B.fz) < 0);
+        if (clear) { t.mode = 'overtake'; t.passing = leader; t.modeT = 0; }
+      }
+    } else if (t.mode === 'drive') t.followT = Math.max(0, t.followT - dt);
+    // ---- stuck detection and recovery
+    if (t.mode === 'reverse') {
+      want = 0; t.cur = 0; latT = t.bypassLat;
+      // look behind before backing up: a flipped copy of our box against everything else
+      const back = { x: B.x, z: B.z, fx: -B.fx, fz: -B.fz, hl: B.hl, hw: B.hw };
+      let clearBehind = Infinity;
+      for (const o of traffic) if (o !== t && o.box) clearBehind = Math.min(clearBehind, obbGapAhead(back, o.box, 0.15, 0));
+      if (pl) clearBehind = Math.min(clearBehind, obbGapAhead(back, pl.box, 0.25, 0));
+      if (clearBehind > 1.0) { t.s -= t.dir * 1.5 * dt; t.revLeft -= 1.5 * dt; } else t.revLeft = 0;   // boxed in: just steer out
+      if (t.revLeft <= 0) { t.mode = 'bypass'; t.modeT = 0; t.bypassS = t.s; }
+    } else if (t.mode === 'respawn') {
+      want = 0; t.cur = 0;
+      const k = Math.max(0, 1 - t.modeT / 0.6); t.g.scale.setScalar(Math.max(0.01, k));
+      if ((k === 0 || !trafficOnScreen(t)) && trafficRespawn(t)) { /* placed */ }
+    } else {
+      // a stopped vehicle ahead only counts as "stuck" if it is itself stuck, faces us (head-on on a narrow lane)
+      // or is waiting on us (a deadlock), otherwise we just queue behind it
+      const lt = leader && typeof leader === 'object' ? leader : null;
+      const deadlock = lt && lt.cur < 0.3 && (lt.leaderRef === t || (lt.box.fx * B.fx + lt.box.fz * B.fz) < 0);
+      const blockedHard = t.cur < 0.3 && t.speed > 1 && Math.abs(t.latT - t.lat) < 0.25 && blockedBy && (blockedBy !== 'traffic' || (lt && lt.stuckT > 1.5) || deadlock || wallHit);
+      if (blockedHard) t.stuckT += dt; else t.stuckT = Math.max(0, t.stuckT - dt * 2);
+      const patience = blockedBy === 'player' ? 6 : blockedBy === 'soft' ? 5 : 2.5;   // wait a while for the player / an animal to move
+      if (t.stuckT > patience) {
+        t.tries++; t.stuckT = 0;
+        if (t.tries > 3) { if (!trafficOnScreen(t)) trafficRespawn(t); else { t.mode = 'respawn'; t.modeT = 0; } }
+        else if (blockedBy === 'soft') { t.mode = 'bypass'; t.modeT = 0; t.bypassS = t.s; t.bypassLat = (t.tries % 2 ? -1 : 1) * maxLat; }   // steer round a cow, no need to back up
+        else { t.mode = 'reverse'; t.modeT = 0; t.revLeft = 3 + t.tries; t.bypassLat = (t.tries % 2 ? -1 : 1) * maxLat; }
+      }
+      if (t.mode === 'drive' && t.cur > 3) t.tries = Math.max(0, t.tries - dt * 0.05);
+    }
+    // ---- longitudinal: accel/brake limited by the vehicle type
+    const dv = want - t.cur;
+    t.cur += Math.max(-K.brk * dt * (want === 0 || want < t.cur * 0.7 ? 1.6 : 1), Math.min(K.acc * dt, dv));   // hard braking when it's urgent
+    if (t.cur < 0) t.cur = 0;
     t.s += t.dir * t.cur * dt;
-    if (t.s > t.len) { t.s = t.len; t.dir = -1; } else if (t.s < 0) { t.s = 0; t.dir = 1; }
+    if (t.s > t.len || t.s < 0) {
+      // end of the road: out of sight it carries on elsewhere; in view it turns round (lateral offset mirrored so the
+      // body doesn't jump across the road, then it eases over to its new left side)
+      if (!trafficOnScreen(t) && trafficRespawn(t)) continue;
+      t.s = t.s > t.len ? t.len : 0; t.dir = -t.dir; t.mode = 'drive'; t.lat = -t.lat; t.latV = 0;
+    }
+    // ---- lateral: smooth, speed-dependent steering into the target offset (no jumps)
+    t.latT = Math.max(-maxLat, Math.min(maxLat, latT));
+    const latRate = 0.6 + Math.min(1.4, t.cur * 0.18);
+    const latErr = t.latT - t.lat, latVt = Math.max(-latRate, Math.min(latRate, latErr * 1.2));
+    t.latV += (latVt - t.latV) * Math.min(1, dt * 3);
+    t.lat += t.latV * dt;
     const [x, z, h] = pointAt(t.r, t.s), rot = t.dir > 0 ? h : h + Math.PI;
-    const off = Math.min(2.2, t.r.w / 4);           // keep left
-    { const gx = x + Math.cos(rot) * off, gz = z - Math.sin(rot) * off; t.g.position.set(gx, groundY(gx, gz), gz); }
-    t.g.rotation.y += Math.atan2(Math.sin(rot - t.g.rotation.y), Math.cos(rot - t.g.rotation.y)) * Math.min(1, dt * 6);
-    const farAway = Math.abs(t.g.position.x - camera.position.x) + Math.abs(t.g.position.z - camera.position.z) > 600;
+    { const gx = x + Math.cos(rot) * t.lat, gz = z - Math.sin(rot) * t.lat; t.g.position.set(gx, groundY(gx, gz), gz); }
+    const steer = Math.atan2(t.latV, Math.max(1.5, t.cur)) * (t.mode === 'reverse' ? -1 : 1);   // nose points where it's drifting
+    const rotW = rot - steer;
+    t.g.rotation.y += Math.atan2(Math.sin(rotW - t.g.rotation.y), Math.cos(rotW - t.g.rotation.y)) * Math.min(1, dt * 6);
+    t.box = trafficBox(t);
     t.g.visible = !farAway;                                                   // far traffic isn't drawn (or shadowed)
     const near = !farAway && Math.abs(t.g.position.x - camera.position.x) + Math.abs(t.g.position.z - camera.position.z) < 160;
     if (t._peopleShown !== near) { t._peopleShown = near; t.g.children.forEach(c => { if (c.userData && c.userData.human) c.visible = near; }); }   // drivers/passengers only up close
-    if (!farAway) for (const w of t.wheels) w.rotation.x += t.cur * dt / t.wheelR;
+    if (!farAway) for (const w of t.wheels) w.rotation.x += (t.mode === 'reverse' ? -1.5 : t.cur) * dt / t.wheelR;
     if (t.night !== night) {
       t.night = night;
       t.head.forEach(m => m.material.color.setHex(night ? 0xfff2c0 : 0x777766));
       t.tail.forEach(m => m.material.color.setHex(night ? 0xff2020 : 0x661111));
     }
-    // collide with player
-    const dx = carPos.x - t.g.position.x, dz = carPos.z - t.g.position.z, d = Math.hypot(dx, dz);
-    const r = 1.7 + Math.min(t.len2, 2.5);
-    if (d < r && d > 0.01) {
-      const push = r - d; carPos.x += dx / d * push; carPos.z += dz / d * push;
-      if (Math.abs(carSpeed) > 25) showComboPopup('CRASH!'); carSpeed *= 0.4;
+    // ---- hard contact with the player: OBB vs OBB, push the player out along the minimum translation vector
+    if (pl && pl.solid && t.mode !== 'respawn') {
+      const hit = obbOverlap(t.box, pl.box);
+      if (hit) {
+        carPos.x += hit.nx * hit.depth; carPos.z += hit.nz * hit.depth;
+        pl.box.x = carPos.x; pl.box.z = carPos.z;
+        const tvx = t.box.fx * t.cur, tvz = t.box.fz * t.cur;
+        if (Player.mode === 'crysta') {
+          const rvn = (vel.x - tvx) * hit.nx + (vel.z - tvz) * hit.nz;   // closing speed along the contact normal
+          if (rvn < 0) { vel.x -= 1.2 * rvn * hit.nx; vel.z -= 1.2 * rvn * hit.nz; if (-rvn > 7) showComboPopup('CRASH!'); }
+          carSpeed = lastSpeed = (vel.x * Math.sin(carRot) + vel.z * Math.cos(carRot)) * 3.6;
+        } else { if (Math.abs(carSpeed) > 25) showComboPopup('CRASH!'); carSpeed *= 0.6; }
+        t.cur *= 0.5;
+      }
+    }
+  }
+  // ---- traffic vs traffic hard contact (should be rare: the gap logic keeps them apart): the one behind yields
+  for (let i = 0; i < traffic.length; i++) {
+    const a = traffic[i]; if (!a.g.visible) continue;
+    for (let j = i + 1; j < traffic.length; j++) {
+      const b = traffic[j];
+      if (Math.abs(a.box.x - b.box.x) + Math.abs(a.box.z - b.box.z) > a.box.hl + b.box.hl + 4) continue;
+      const hit = obbOverlap(a.box, b.box);
+      if (!hit) continue;
+      const bAhead = (b.box.x - a.box.x) * a.box.fx + (b.box.z - a.box.z) * a.box.fz > 0;
+      const back = bAhead ? a : b; back.cur = 0; back.stuckT += dt;
+      if (back.mode !== 'reverse') back.s = Math.max(0, Math.min(back.len, back.s - back.dir * Math.min(hit.depth, 0.3)));   // ease the rear one back out
+      if (window.TrafficAI) TrafficAI.contacts++;
     }
   }
 }
+window.TrafficAI = { traffic, horn: trafficHorn, obb: trafficOBB, overlap: obbOverlap, gapAhead: obbGapAhead, dims: trafficDims, playerOBB, respawn: trafficRespawn, contacts: 0 };
 
 // ---------------------------------------------------------------- vehicle dynamics: Innova Crysta 2.4 GD, 6-speed auto, RWD
 // Real figures: 2100 kg, 150 PS @3400, 360 Nm @1600-2400, wheelbase 2.75 m, 0-100 km/h about 12.5 s, top about 175 km/h.

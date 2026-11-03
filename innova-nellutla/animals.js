@@ -101,6 +101,22 @@
       headP: [0, 0.6, 0.3], tailP: [0, 0.56, -0.3], hips: [[-0.07, 0.45, 0.22, 1], [0.07, 0.45, 0.22, 1], [-0.07, 0.46, -0.24, 0], [0.07, 0.46, -0.24, 0]],
       hipY: 0.45, stride: 0.75, r: 0.35, len: 0.5, castShadow: true };
   }
+  function catRig() {        // slim village cat: small head, pointed ears, long curving tail
+    const T = new Kit(), H = new Kit(), Tl = new Kit(), U = new Kit(), Lw = new Kit();
+    T.ball([0, 0.27, 0], [0.075, 0.08, 0.19], W, 9); T.ball([0, 0.28, 0.12], [0.075, 0.085, 0.09], W, 7);
+    H.ball([0, 0.06, 0.06], [0.06, 0.055, 0.058], W, 8); H.ball([0, 0.04, 0.11], [0.03, 0.025, 0.025], W, 6);
+    H.ball([0, 0.045, 0.135], [0.008, 0.007, 0.006], 0x3a1a1a, 4);
+    for (const sx of [-1, 1]) {
+      H.add(new THREE.ConeGeometry(0.022, 0.05, 4), W, [sx * 0.035, 0.115, 0.05], [1, 1, 0.6], [0, 0, -sx * 0.2]);
+      H.ball([sx * 0.025, 0.075, 0.105], [0.01, 0.012, 0.006], 0x9acd32, 4);
+    }
+    Tl.tube([0, 0, 0], [0, 0.12, -0.12], 0.016, 0.013, W, 5); Tl.tube([0, 0.12, -0.12], [0, 0.26, -0.1], 0.013, 0.01, W, 5);
+    U.tube([0, 0.01, 0], [0, -0.12, 0], 0.022, 0.016, W, 5);
+    Lw.tube([0, 0, 0], [0, -0.12, 0], 0.014, 0.012, W, 5); Lw.ball([0, -0.125, 0.01], [0.016, 0.01, 0.02], W, 4);
+    return { torso: T.geo(), head: H.geo(), tail: Tl.geo(), upper: U.geo(), lower: Lw.geo(), Lu: 0.12,
+      headP: [0, 0.32, 0.18], tailP: [0, 0.3, -0.18], hips: [[-0.04, 0.24, 0.12, 1], [0.04, 0.24, 0.12, 1], [-0.04, 0.25, -0.14, 0], [0.04, 0.25, -0.14, 0]],
+      hipY: 0.24, stride: 0.4, r: 0.2, len: 0.3, castShadow: false };
+  }
   function goatRig() {
     const T = new Kit(), H = new Kit(), Tl = new Kit(), U = new Kit(), Lw = new Kit();
     T.ball([0, 0.56, 0], [0.14, 0.16, 0.32], W, 10); T.ball([0, 0.6, 0.2], [0.13, 0.16, 0.15], W, 8);
@@ -221,6 +237,7 @@
   function tail(a, t, speed) {
     const P = a.pose;
     if (a.kind === 'dog') { P.tailX = speed > 0.3 ? -0.2 : 0; P.tailZ = Math.sin(t * (a.wag ? 14 : 2) + a.seed) * (a.wag ? 0.5 : 0.1); return; }
+    if (a.kind === 'cat') { P.tailX = speed > 0.3 ? 0.3 : 0.1; P.tailZ = Math.sin(t * 1.5 + a.seed) * 0.3; return; }
     if (a.kind === 'goat' || a.kind === 'hen') { P.tailX = 0; P.tailZ = Math.sin(t * 6 + a.seed) * 0.15 * (Math.sin(t * 0.7 + a.seed) > 0.6 ? 1 : 0); return; }
     // cattle: lazy swish with bursts (flies)
     const burst = Math.max(0, Math.sin(t * 0.37 + a.seed * 5)) ** 4;
@@ -292,6 +309,26 @@
   // tries the random search near the player, then anywhere in a wider ring (and never throws)
   function findSpot(fn, p, rMin, rMax, ...rest) { return fn(p, rMin, rMax, ...rest) || fn(p, rMin, rMax * 1.6, ...rest); }
 
+  // nearest road segment to (x,z) within R: { s, t, d, ux, uz, nx, nz } (n = unit normal pointing to the animal's side)
+  function nearestRoad(x, z, R, types) {
+    let best = null;
+    for (const s of segsNear(x, z, R, types)) {
+      const ux = (s.b[0] - s.a[0]) / s.L, uz = (s.b[1] - s.a[1]) / s.L;
+      const t = Math.max(0, Math.min(s.L, (x - s.a[0]) * ux + (z - s.a[1]) * uz));
+      const px = s.a[0] + ux * t, pz = s.a[1] + uz * t, d = Math.hypot(x - px, z - pz);
+      if (d < R && (!best || d < best.d)) { const side = (x - px) * -uz + (z - pz) * ux >= 0 ? 1 : -1; best = { s, t, d, ux, uz, px, pz, nx: -uz * side, nz: ux * side }; }
+    }
+    return best;
+  }
+  // a target across the nearest road (dogs/cats) or standing on the carriageway (cattle)
+  function roadTarget(a, across) {
+    const n = nearestRoad(a.x, a.z, 25, ['cc', 'lane', 'dirt', 'tar']); if (!n) return false;
+    const along = rnd(-6, 6), off = across ? -(n.s.w / 2 + rnd(1, 3)) : rnd(-n.s.w * 0.3, n.s.w * 0.3);
+    const x = n.px + n.ux * along + n.nx * off, z = n.pz + n.uz * along + n.nz * off;
+    if (blocked(x, z, a.sp.rig.r)) return false;
+    a.tx = x; a.tz = z; return true;
+  }
+
   // ------------------------------------------------------------------ animals
   const COATS = {
     cow: [0xf2efe8, 0xe9e4da, 0xdcd6cc, 0xd0c8bc, 0xefe8dc],
@@ -299,6 +336,7 @@
     buffalo: [0x2a2826, 0x232120, 0x302c29],
     dog: [0xc8945a, 0xb07a44, 0xd8ac72, 0x6a4a30, 0x2a2624, 0xe0c49a],
     goat: [0x1d1b1a, 0x2a2624, 0x6b4a32, 0x8a6240, 0xe8e2d8, 0x3a3029],
+    cat: [0x2a2624, 0xd08a40, 0xe8e2d8, 0x8a8078, 0x6a4a30, 0xc8a070],
     hen: [0x8a4a22, 0xa65e2a, 0xe8e0d0, 0x3a2a20, 0x6a3a1c],
   };
   const all = [];
@@ -307,19 +345,20 @@
       pose: newPose(sp.rig.hips.length), coat: new THREE.Color(pick(COATS[kind])), scale: 1, vis: false, state: 'stand', timer: rnd(2, 10),
       tx: at.x, tz: at.z, speed: 0, vx: 0, vz: 0, role: role || 'free', headBase: 0.05, home: { x: at.x, z: at.z }, field: at.field, scared: 0, bump: 0 };
     if (kind === 'bull') a.scale = rnd(1.08, 1.16); else if (kind === 'cow') a.scale = rnd(0.9, 1.0); else if (kind === 'buffalo') a.scale = rnd(0.95, 1.05);
-    else if (kind === 'dog') a.scale = rnd(0.9, 1.08); else if (kind === 'goat') a.scale = rnd(0.85, 1.05);
+    else if (kind === 'dog') a.scale = rnd(0.9, 1.08); else if (kind === 'cat') a.scale = rnd(0.85, 1.05); else if (kind === 'goat') a.scale = rnd(0.85, 1.05);
     else if (kind === 'hen') { a.rooster = Math.random() < 0.2; a.scale = a.rooster ? 1.25 : rnd(0.9, 1.0); if (a.rooster) a.coat.setHex(0x9a3a14); }
     sp.list.push(a); all.push(a); return a;
   }
   function respawnFree(a, p, rMin, rMax) {
     let at = null;
     if (a.kind === 'hen') at = findSpot(byHouse, p, rMin, rMax);
+    else if (a.kind === 'cat') at = Math.random() < 0.6 ? findSpot(byHouse, p, rMin, rMax) : findSpot(roadside, p, rMin, rMax, ['cc', 'lane', 'dirt'], rnd(0.3, 2));
     else if (a.kind === 'dog') at = Math.random() < 0.5 ? findSpot(byHouse, p, rMin, rMax) : findSpot(roadside, p, rMin, rMax, ['cc', 'lane']);
     else if (a.kind === 'goat') at = findSpot(roadside, p, rMin, rMax, ['dirt', 'lane'], rnd(2, 8));
     else at = (Math.random() < 0.55 && findSpot(inField, p, rMin, rMax)) || findSpot(roadside, p, rMin, rMax, ['dirt', 'lane', 'cc'], rnd(1, 5));
     if (!at) return false;
     a.x = a.tx = a.home.x = at.x; a.z = a.tz = a.home.z = at.z; a.yaw = at.yaw || rnd(-3, 3); a.y = ground(a.x, a.z); a.field = at.field;
-    a.state = a.kind === 'dog' && Math.random() < 0.5 ? 'lie' : (a.kind !== 'hen' && Math.random() < 0.25 ? 'lie' : 'graze'); a.timer = rnd(4, 20);
+    a.state = (a.kind === 'dog' || a.kind === 'cat') && Math.random() < 0.5 ? 'lie' : (a.kind !== 'hen' && Math.random() < 0.25 ? 'lie' : 'graze'); a.timer = rnd(4, 20);
     return true;
   }
 
@@ -421,6 +460,7 @@
     a.wag = 0; a.barkT = 0.6;
     let ctx = null; try { ctx = typeof audioCtx !== 'undefined' ? audioCtx : null; } catch (e) {}
     if (!ctx || ctx.state !== 'running') return;
+    if (window.SFX && SFX.bark) { SFX.bark(a.x, a.z, a.scale < 1); return; }
     const d = Math.hypot(a.x - cam.x, a.z - cam.z), vol = Math.max(0, 0.35 * (1 - d / 60)); if (vol < 0.02) return;
     const n = 1 + (Math.random() * 3 | 0), small = a.scale < 1;
     for (let i = 0; i < n; i++) {
@@ -504,7 +544,7 @@
     let moved = 0, max = 0, trot = a.kind === 'dog', mode = 'stand';
     if (a.scared > 0) {
       a.scared -= dt; if (a.state === 'lie') a.state = 'stand';
-      max = { dog: 4.5, goat: 3, hen: 2.5, buffalo: 1.6 }[a.kind] || 2.0; trot = true;
+      max = { dog: 4.5, cat: 5.5, goat: 3, hen: 2.5, buffalo: 1.6 }[a.kind] || 2.0; trot = true;
       moved = moveTo(a, a.x + a.fleeX * 4, a.z + a.fleeZ * 4, max, dt); mode = 'move';
       if (a.kind === 'dog' && a.yelp) { a.yelp = false; bark(a, cam); }
     } else if (a.herd) {
@@ -517,19 +557,23 @@
     } else {
       a.timer -= dt;
       if (a.state === 'walk' || a.state === 'trot') {
-        max = a.kind === 'dog' ? (a.state === 'trot' ? 2.2 : 1.1) : a.kind === 'hen' ? 0.5 : a.kind === 'goat' ? 0.8 : 0.9;
+        max = a.kind === 'dog' ? (a.state === 'trot' ? 2.2 : 1.1) : a.kind === 'cat' ? (a.state === 'trot' ? 1.8 : 0.8) : a.kind === 'hen' ? 0.5 : a.kind === 'goat' ? 0.8 : 0.9;
         trot = a.state === 'trot';
         moved = moveTo(a, a.tx, a.tz, max, dt); mode = 'move';
-        if (Math.hypot(a.tx - a.x, a.tz - a.z) < 0.4 || a.timer < 0 || a.stuck > 1.5) { a.stuck = 0; a.state = a.kind === 'dog' && Math.random() < 0.3 ? 'lie' : 'graze'; a.timer = rnd(4, 14); }
+        if (Math.hypot(a.tx - a.x, a.tz - a.z) < 0.4 || a.timer < 0 || a.stuck > 1.5) { a.stuck = 0; a.state = (a.kind === 'dog' || a.kind === 'cat') && Math.random() < 0.3 ? 'lie' : 'graze'; a.timer = rnd(4, 14);
+          if (a.roadStand) { a.roadStand = false; a.state = 'stand'; a.timer = rnd(20, 60); a.home.x = a.x; a.home.z = a.z; } }   // cow parks itself on the road
       } else if (a.timer < 0) {
         const r = Math.random();
         if (night && a.kind !== 'dog') { a.state = a.kind === 'hen' ? 'graze' : 'lie'; a.timer = rnd(20, 60); }
         else if (a.state === 'lie' && r < 0.6) { a.state = 'stand'; a.timer = rnd(2, 5); }
-        else if (r < 0.55) { wanderTarget(a, a.kind === 'dog' ? 30 : a.kind === 'hen' ? 5 : 12); a.state = a.kind === 'dog' && Math.random() < 0.5 ? 'trot' : 'walk'; a.timer = rnd(8, 20); }
+        else if ((a.kind === 'dog' || a.kind === 'cat') && r < 0.3 && roadTarget(a, true)) { a.state = a.kind === 'cat' ? 'trot' : 'walk'; a.timer = rnd(10, 20); }   // amble across the road
+        else if ((a.kind === 'cow' || a.kind === 'bull' || a.kind === 'buffalo') && !night && r < 0.14 && roadTarget(a, false)) { a.state = 'walk'; a.roadStand = true; a.timer = rnd(15, 30); }
+        else if (r < 0.55) { wanderTarget(a, a.kind === 'dog' ? 30 : a.kind === 'cat' ? 15 : a.kind === 'hen' ? 5 : 12); a.state = (a.kind === 'dog' || a.kind === 'cat') && Math.random() < 0.5 ? 'trot' : 'walk'; a.timer = rnd(8, 20); }
         else if (r < 0.8 || a.kind === 'hen') { a.state = 'graze'; a.timer = rnd(5, 15); }
         else { a.state = 'lie'; a.timer = rnd(15, 45); }
       }
       // dogs notice someone on foot nearby, and cars rolling slowly past
+      if (a.kind === 'cat' && cam.foot && a.scared <= 0) { const dx = a.x - cam.px, dz = a.z - cam.pz, d = Math.hypot(dx, dz); if (d < 4) { a.scared = 1.5; a.fleeX = dx / (d || 1); a.fleeZ = dz / (d || 1); } }
       if (a.kind === 'dog' && cam.foot && Math.hypot(cam.px - a.x, cam.pz - a.z) < 9 && Math.random() < dt * 0.6) { a.wag = 1; bark(a, cam); }
       if (a.kind === 'dog' && veh && Math.abs(veh.v) > 2 && Math.abs(veh.v) < 9 && Math.hypot(veh.x - a.x, veh.z - a.z) < 14 && Math.random() < dt * 0.4) bark(a, cam);
     }
@@ -539,10 +583,10 @@
     a.phase = (a.phase + moved / stride) % 1;
     const sp = moved / Math.max(dt, 1e-4), k = Math.min(1, sp / (trot ? 1.2 : 0.5));
     if (mode === 'move' && k > 0.05) { a.headBase = a.kind === 'hen' ? 0.1 : 0.05; gaitPose(a, k, trot); }
-    else if (a.state === 'lie' && !a.herd) liePose(a, t, a.kind === 'dog' && !night ? Math.sin(a.seed) > 0 : false);
+    else if (a.state === 'lie' && !a.herd) liePose(a, t, (a.kind === 'dog' || a.kind === 'cat') && !night ? Math.sin(a.seed) > 0 : false);
     else {
       standPose(a, t);
-      const grazing = (a.state === 'graze' || (a.herd && a.grazing && !a.herd.moving)) && a.kind !== 'dog';
+      const grazing = (a.state === 'graze' || (a.herd && a.grazing && !a.herd.moving)) && a.kind !== 'dog' && a.kind !== 'cat';
       if (a.kind === 'hen') {        // peck: quick dips with pauses
         const pk = Math.sin(t * 2.3 + a.seed); a.pose.headX = pk > 0.55 ? 1.2 : 0.1; a.pose.headY = Math.sin(t * 0.8 + a.seed) * 0.4;
       } else if (grazing) {
@@ -560,7 +604,7 @@
   function tierCounts() {
     const t = (window.Quality && Quality.tier) || 'high', f = t === 'low' ? 0.35 : t === 'medium' ? 0.6 : 1;
     const c = n => Math.max(1, Math.round(n * f));
-    return { cow: c(16), bull: c(6), buffalo: c(10), dog: c(14), goat: c(8), hen: c(20), crow: c(24), herds: t === 'low' ? 1 : t === 'medium' ? 2 : 3, leads: t === 'low' ? 1 : 2, goatHerds: t === 'low' ? 0 : 1 };
+    return { cow: c(16), bull: c(6), buffalo: c(10), dog: c(24), cat: c(10), goat: c(8), hen: c(20), crow: c(24), herds: t === 'low' ? 1 : t === 'medium' ? 2 : 3, leads: t === 'low' ? 1 : 2, goatHerds: t === 'low' ? 0 : 1 };
   }
   function build(game) {
     G = game; world = game.world; scene = game.scene;
@@ -570,13 +614,13 @@
     // herds add their own animals on top of the free ones
     SP = {
       cow: new Species(cattle.cow, counts.cow + 14), bull: new Species(cattle.bull, counts.bull + 8), buffalo: new Species(cattle.buffalo, counts.buffalo + 8),
-      dog: new Species(dogRig(), counts.dog), goat: new Species(goatRig(), counts.goat + 12), hen: new Species(henRig(), counts.hen),
+      dog: new Species(dogRig(), counts.dog), cat: new Species(catRig(), counts.cat), goat: new Species(goatRig(), counts.goat + 12), hen: new Species(henRig(), counts.hen),
     };
     crowIM = new THREE.InstancedMesh(crowGeo(), new THREE.MeshLambertMaterial({ vertexColors: true }), counts.crow); crowIM.count = 0;   /* own material: no instanceColor */ crowIM.frustumCulled = false; scene.add(crowIM);
     ropeGeo = new THREE.BufferGeometry(); ropeGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(6 * 6), 3));
     ropeLine = new THREE.LineSegments(ropeGeo, new THREE.LineBasicMaterial({ color: 0x8a6a3a })); ropeLine.frustumCulled = false; scene.add(ropeLine);
     const p = game.carPos;
-    for (const k of ['cow', 'bull', 'buffalo', 'dog', 'goat', 'hen']) for (let i = 0; i < counts[k]; i++) {
+    for (const k of ['cow', 'bull', 'buffalo', 'dog', 'cat', 'goat', 'hen']) for (let i = 0; i < counts[k]; i++) {
       const a = spawnAnimal(k, SP[k], { x: p.x, z: p.z });
       if (!respawnFree(a, p, 15, 140)) { a.dead = true; }
     }
@@ -608,7 +652,9 @@
       if (m) { m.userData._animalsHidden = true; m.visible = false; }
     }
   }
-  let tAcc = 0, recycleT = 0;
+  let tAcc = 0, recycleT = 0, lastHornT = -1;
+  // positions of animals near the player, refreshed every frame, for the traffic AI to avoid: [{x, z, r, kind}]
+  const RA = [], raPool = []; window.RoadAnimals = RA;
   function update(dt, game) {
     if (!built) return;
     tAcc += dt; const t = tAcc;
@@ -645,12 +691,32 @@
         }
       }
     }
+    // a horn (window.HornEvent = {x, z, t, r} set by sfx.js / traffic) scatters animals near it; cattle shuffle off slowly
+    const he = window.HornEvent;
+    if (he && he.t !== lastHornT) {
+      lastHornT = he.t;
+      for (const a of all) {
+        if (a.dead || a.herd) continue;
+        const dx = a.x - he.x, dz = a.z - he.z, d = Math.hypot(dx, dz), R = he.r || 22;
+        if (d > R) continue;
+        const cattle = a.kind === 'cow' || a.kind === 'bull' || a.kind === 'buffalo';
+        if (cattle && Math.random() < 0.4) continue;                      // some cows just ignore it
+        // away from the horn and off the road
+        const n = nearestRoad(a.x, a.z, 12); let fx = dx / (d || 1), fz = dz / (d || 1);
+        if (n) { fx = fx * 0.4 + n.nx; fz = fz * 0.4 + n.nz; const L = Math.hypot(fx, fz) || 1; fx /= L; fz /= L; }
+        a.fleeX = fx; a.fleeZ = fz; a.scared = cattle ? 2.5 : 2 + Math.random(); a.roadStand = false;
+        if (a.kind === 'dog' && Math.random() < 0.5) a.yelp = true;
+        if (cattle && a.state === 'stand' && Math.random() < 0.3 && window.SFX && SFX.moo) SFX.moo(a.x, a.z);
+      }
+    }
     // free + herd animals
+    RA.length = 0;
     for (const a of all) {
       if (a.dead) continue;
       const d = Math.hypot(a.x - cp.x, a.z - cp.z);
       a.vis = d < LOD_R;
       if (a.vis || a.herd) stepAnimal(a, a.vis ? dt : Math.min(dt * 4, 0.2), t, veh, cam);
+      if (d < 200 && a.kind !== 'hen') { const o = raPool[RA.length] || (raPool[RA.length] = { x: 0, z: 0, r: 0, kind: '' }); o.x = a.x; o.z = a.z; o.r = a.sp.rig.r * a.scale + 0.2; o.kind = a.kind; RA.push(o); }
     }
     // ropes: herder's hand to the halter of each led animal
     const rp = ropeGeo.attributes.position.array; let ri = 0;

@@ -1,0 +1,294 @@
+// sfx.js: procedural (WebAudio, no sample files) game sound effects for Nellutla.
+// - 3D traffic engines: a small pool of voices (tiered by Quality.tier) is handed to the nearest traffic vehicles each
+//   frame; each voice is a firing-pulse oscillator pair + combustion noise gated at the firing rate, low-passed by
+//   load, through a PannerNode (inverse distance, equal-power pan). Every type has its own recipe; bikes are rolled
+//   per vehicle into commuter / Bullet (slow 500cc thump) / scooter (CVT whine) / KTM (raspy, high revving).
+// - Lorry / bus air-brake hiss when they stop, horns distinct per type (car disc horns, bike buzzers, auto "paa-paa",
+//   lorry air horns), tyre skid on hard braking, impact sounds scaled by speed change, bike fall clatter,
+//   doors on get in/out, footsteps that depend on the surface, positional dog barks and cow moos.
+// Exposes window.SFX and window.HornEvent ({x, z, t, r}: animals.js scatters animals near the latest horn).
+(function () {
+  'use strict';
+  if (typeof GameHooks === 'undefined') return;
+  let ctx = null, master = null, nb = null;
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  function ok() {
+    if (!ctx) { try { ctx = typeof audioCtx !== 'undefined' ? audioCtx : null; } catch (e) { ctx = null; } }
+    if (!ctx) return false;
+    if (!master) {
+      master = ctx.createGain(); master.gain.value = 0.9; master.connect(ctx.destination);
+      nb = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+      const d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    return ctx.state === 'running';
+  }
+  const noise = (loop) => { const s = ctx.createBufferSource(); s.buffer = nb; s.loop = !!loop; return s; };
+  // destination at a world position (null x = non-positional, "in the player's head")
+  function dest(x, z, vol, ref) {
+    const g = ctx.createGain(); g.gain.value = vol;
+    if (x == null) { g.connect(master); return g; }
+    const p = ctx.createPanner(); p.panningModel = 'equalpower'; p.distanceModel = 'inverse'; p.refDistance = ref || 6; p.maxDistance = 300; p.rolloffFactor = 1.1;
+    if (p.positionX) { p.positionX.value = x; p.positionY.value = 1; p.positionZ.value = z; } else p.setPosition(x, 1, z);
+    g.connect(p); p.connect(master); return g;
+  }
+  function env(g, t0, a, peak, d) { g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t0 + a); g.gain.exponentialRampToValueAtTime(0.0001, t0 + a + d); }
+  function burst(out, t0, { type = 'bandpass', f = 1000, q = 1, a = 0.003, peak = 0.5, d = 0.1, f2 }) {
+    const s = noise(), fl = ctx.createBiquadFilter(), g = ctx.createGain();
+    fl.type = type; fl.frequency.setValueAtTime(f, t0); if (f2) fl.frequency.exponentialRampToValueAtTime(f2, t0 + a + d); fl.Q.value = q;
+    env(g, t0, a, peak, d); s.connect(fl); fl.connect(g); g.connect(out); s.start(t0, Math.random() * 1.5); s.stop(t0 + a + d + 0.05);
+  }
+  function tone(out, t0, { type = 'sine', f = 100, f2, a = 0.005, peak = 0.5, d = 0.2, lp }) {
+    const o = ctx.createOscillator(), g = ctx.createGain(); o.type = type; o.frequency.setValueAtTime(f, t0);
+    if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + a + d);
+    env(g, t0, a, peak, d);
+    if (lp) { const l = ctx.createBiquadFilter(); l.type = 'lowpass'; l.frequency.value = lp; o.connect(l); l.connect(g); } else o.connect(g);
+    g.connect(out); o.start(t0); o.stop(t0 + a + d + 0.05);
+  }
+
+  // ------------------------------------------------------------------ horns, distinct per vehicle type
+  // [frequencies, waveform, band centre, length s, beeps, attack]
+  const HORNS = {
+    crysta: [[415, 523], 'sawtooth', 2200, 0.42, 1, 0.01],     // twin disc horns
+    hatch: [[460, 560], 'square', 2400, 0.3, 1, 0.008],
+    suv: [[370, 465], 'sawtooth', 1900, 0.45, 1, 0.01],
+    bike: [[590], 'square', 2600, 0.22, 2, 0.005],             // weak electromagnetic buzzer, two taps
+    scooter: [[720], 'square', 2800, 0.18, 2, 0.005],
+    bullet: [[440, 470], 'square', 2000, 0.3, 1, 0.006],
+    ktm: [[520, 650], 'square', 2600, 0.25, 1, 0.005],
+    auto: [[480, 600], 'square', 1800, 0.15, 2, 0.01],          // the classic paa-paa
+    tractor: [[310], 'sawtooth', 1400, 0.4, 1, 0.01],
+    lorry: [[233, 294, 349], 'sawtooth', 1200, 1.0, 1, 0.08],   // air horn chord
+    bus: [[262, 330], 'sawtooth', 1300, 0.8, 1, 0.06],
+  };
+  function horn(kind, x, z, local) {
+    if (!ok()) return;
+    const H = HORNS[kind] || HORNS.hatch, out = dest(local ? null : x, z, local ? 0.32 : 0.45, 10);
+    const bp = ctx.createBiquadFilter(); bp.type = 'peaking'; bp.frequency.value = H[2]; bp.Q.value = 1; bp.gain.value = 8;
+    const sh = ctx.createWaveShaper(), c = new Float32Array(256); for (let i = 0; i < 256; i++) { const v = i / 128 - 1; c[i] = Math.tanh(v * 2.5); } sh.curve = c;
+    bp.connect(sh); sh.connect(out);
+    for (let b = 0; b < H[4]; b++) {
+      const t0 = ctx.currentTime + b * (H[3] + 0.08), g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.35 / H[0].length + 0.1, t0 + H[5]);
+      g.gain.setValueAtTime(0.35 / H[0].length + 0.1, t0 + H[3]); g.gain.exponentialRampToValueAtTime(0.0001, t0 + H[3] + 0.05);
+      g.connect(bp);
+      for (const f of H[0]) {
+        const o = ctx.createOscillator(); o.type = H[1]; o.frequency.value = f * rnd(0.995, 1.005);
+        if (kind === 'auto') { o.frequency.setValueAtTime(f * 0.9, t0); o.frequency.linearRampToValueAtTime(f, t0 + 0.04); }
+        o.connect(g); o.start(t0); o.stop(t0 + H[3] + 0.08);
+      }
+    }
+    window.HornEvent = { x, z, t: performance.now(), r: kind === 'lorry' || kind === 'bus' ? 35 : 24 };
+  }
+
+  // ------------------------------------------------------------------ impacts, skids, falls, doors, footsteps
+  function impact(strength, x, z, local) {            // strength 0..1 (from speed lost in the hit)
+    if (!ok()) return;
+    const s = Math.max(0.05, Math.min(1, strength)), out = dest(local ? null : x, z, 0.4 + s * 0.6, 8), t0 = ctx.currentTime;
+    tone(out, t0, { f: 90, f2: 35, peak: 0.6 * s + 0.2, d: 0.25 + s * 0.3 });                       // body thump
+    burst(out, t0, { type: 'lowpass', f: 900 + s * 1500, peak: 0.5 * s + 0.15, d: 0.15 + s * 0.2 });  // crunch
+    burst(out, t0 + 0.01, { f: 2600, q: 3, peak: 0.25 * s, d: 0.25 + s * 0.4 });                      // sheet metal
+    if (s > 0.55) for (let i = 0; i < 8; i++) tone(out, t0 + 0.05 + Math.random() * 0.35, { type: 'triangle', f: rnd(3000, 7000), peak: 0.06, d: rnd(0.05, 0.15) });   // glass
+  }
+  function bikeFall(x, z, local) {
+    if (!ok()) return;
+    const out = dest(local ? null : x, z, 0.7, 8), t0 = ctx.currentTime;
+    tone(out, t0, { f: 120, f2: 50, peak: 0.6, d: 0.25 });
+    burst(out, t0 + 0.05, { type: 'highpass', f: 2500, peak: 0.3, a: 0.02, d: 0.9 });                 // scrape along the road
+    for (let i = 0; i < 5; i++) tone(out, t0 + 0.08 + i * rnd(0.08, 0.18), { type: 'square', f: rnd(700, 1600), peak: 0.08, d: 0.06, lp: 3000 });   // clatter of bits
+  }
+  function door(close, x, z, local) {
+    if (!ok()) return;
+    const out = dest(local ? null : x, z, 0.5, 4), t0 = ctx.currentTime;
+    if (close) { tone(out, t0, { f: 110, f2: 60, peak: 0.5, d: 0.12 }); burst(out, t0, { type: 'lowpass', f: 700, peak: 0.4, d: 0.1 }); burst(out, t0 + 0.005, { f: 3000, q: 4, peak: 0.12, d: 0.03 }); }
+    else { burst(out, t0, { f: 2500, q: 5, peak: 0.2, d: 0.03 }); burst(out, t0 + 0.05, { f: 1200, q: 3, peak: 0.1, d: 0.08 }); }
+  }
+  function kickstand(local) { if (!ok()) return; const out = dest(null, 0, 0.35); tone(out, ctx.currentTime, { type: 'triangle', f: 1400, f2: 1100, peak: 0.2, d: 0.12 }); }
+  const HARD = { cc: 1, tar: 1, highway: 1, lane: 1, plinth: 1 };
+  function footstep(surface, run, x, z) {
+    if (!ok()) return;
+    const out = dest(null, 0, run ? 0.32 : 0.22), t0 = ctx.currentTime, hard = HARD[surface];
+    if (hard) { tone(out, t0, { f: 140, f2: 70, peak: 0.25, d: 0.05 }); burst(out, t0, { f: 2200, q: 1.5, peak: 0.18, d: 0.04 }); burst(out, t0 + 0.03, { f: 3500, q: 2, peak: 0.06, d: 0.03 }); }   // chappal slap on concrete
+    else { for (let i = 0; i < 3; i++) burst(out, t0 + i * 0.012, { f: rnd(500, 1300), q: 0.8, peak: 0.16, d: 0.05 }); tone(out, t0, { f: 90, f2: 50, peak: 0.15, d: 0.06 }); }   // gritty dirt crunch
+  }
+  function bark(x, z, small) {
+    if (!ok()) return;
+    const out = dest(x, z, 0.6, 5), n = 1 + (Math.random() * 3 | 0);
+    for (let i = 0; i < n; i++) {
+      const t0 = ctx.currentTime + i * rnd(0.22, 0.38), f0 = small ? 560 : 420;
+      const o = ctx.createOscillator(), o2 = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(f0 * 0.8, t0); o.frequency.linearRampToValueAtTime(f0, t0 + 0.03); o.frequency.exponentialRampToValueAtTime(f0 * 0.6, t0 + 0.14);
+      o2.type = 'square'; o2.frequency.setValueAtTime(f0 * 0.5, t0); o2.frequency.exponentialRampToValueAtTime(f0 * 0.3, t0 + 0.14);
+      f.type = 'bandpass'; f.frequency.setValueAtTime(1100, t0); f.frequency.linearRampToValueAtTime(700, t0 + 0.14); f.Q.value = 1.6;
+      env(g, t0, 0.008, 0.6, 0.13); o.connect(f); o2.connect(f); f.connect(g); g.connect(out);
+      burst(out, t0, { f: 1500, q: 1, peak: 0.25, d: 0.08 });
+      o.start(t0); o2.start(t0); o.stop(t0 + 0.2); o2.stop(t0 + 0.2);
+    }
+  }
+  function moo(x, z) {
+    if (!ok()) return;
+    const out = dest(x, z, 0.7, 8), t0 = ctx.currentTime, L = rnd(1.1, 1.8);
+    const o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(), f1 = ctx.createBiquadFilter(), f2 = ctx.createBiquadFilter();
+    o.type = 'sawtooth'; o2.type = 'sawtooth';
+    for (const [osc, m] of [[o, 1], [o2, 1.01]]) { osc.frequency.setValueAtTime(110 * m, t0); osc.frequency.linearRampToValueAtTime(150 * m, t0 + L * 0.3); osc.frequency.linearRampToValueAtTime(95 * m, t0 + L); }
+    // "mm" -> "ooo" formant sweep
+    f1.type = 'bandpass'; f1.Q.value = 5; f1.frequency.setValueAtTime(250, t0); f1.frequency.linearRampToValueAtTime(450, t0 + L * 0.35); f1.frequency.linearRampToValueAtTime(320, t0 + L);
+    f2.type = 'lowpass'; f2.frequency.value = 1200;
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.9, t0 + 0.2); g.gain.setValueAtTime(0.9, t0 + L * 0.7); g.gain.exponentialRampToValueAtTime(0.0001, t0 + L);
+    o.connect(f1); o2.connect(f1); f1.connect(f2); f2.connect(g); g.connect(out); o.start(t0); o2.start(t0); o.stop(t0 + L + 0.05); o2.stop(t0 + L + 0.05);
+  }
+  function airBrake(x, z, local) {
+    if (!ok()) return;
+    const out = dest(local ? null : x, z, 0.6, 8), t0 = ctx.currentTime;
+    burst(out, t0, { type: 'highpass', f: 3000, a: 0.01, peak: 0.45, d: 0.9 });
+    burst(out, t0, { f: 5000, q: 2, a: 0.01, peak: 0.2, d: 0.5 });
+  }
+
+  // continuous skid voice (player)
+  let skidG = null, skidBP = null, skidTone = null;
+  function skidSet(level) {
+    if (!ok()) return;
+    if (!skidG) {
+      const s = noise(true); skidBP = ctx.createBiquadFilter(); skidBP.type = 'bandpass'; skidBP.frequency.value = 1100; skidBP.Q.value = 4;
+      skidG = ctx.createGain(); skidG.gain.value = 0; s.connect(skidBP); skidBP.connect(skidG); skidG.connect(master); s.start();
+      skidTone = ctx.createOscillator(); skidTone.type = 'triangle'; skidTone.frequency.value = 950; const tg = ctx.createGain(); tg.gain.value = 0.15; skidTone.connect(tg); tg.connect(skidBP); skidTone.start();
+    }
+    skidG.gain.setTargetAtTime(Math.min(0.35, level), ctx.currentTime, level > 0 ? 0.03 : 0.1);
+    skidTone.frequency.setTargetAtTime(850 + Math.random() * 200, ctx.currentTime, 0.05);
+  }
+
+  // ------------------------------------------------------------------ 3D traffic engine voices
+  // fire0/fire1: firing pulse Hz at rest / top speed; vs: speed (m/s) for fire1; bright: low-pass Hz; rough: noise share
+  const TV = {
+    auto: { fire0: 22, fire1: 55, vs: 12, bright: 1500, rough: 0.7, vol: 0.5, w: 'sawtooth' },
+    bike: { fire0: 14, fire1: 48, vs: 16, bright: 1200, rough: 0.45, vol: 0.4, w: 'sawtooth' },
+    bullet: { fire0: 9, fire1: 24, vs: 16, bright: 450, rough: 0.6, vol: 0.6, w: 'square' },
+    scooter: { fire0: 30, fire1: 75, vs: 13, bright: 2200, rough: 0.15, vol: 0.3, w: 'triangle' },
+    ktm: { fire0: 18, fire1: 95, vs: 20, bright: 2600, rough: 0.5, vol: 0.5, w: 'sawtooth' },
+    hatch: { fire0: 27, fire1: 90, vs: 20, bright: 1100, rough: 0.2, vol: 0.35, w: 'sawtooth' },
+    suv: { fire0: 25, fire1: 75, vs: 22, bright: 800, rough: 0.4, vol: 0.45, w: 'sawtooth' },
+    tractor: { fire0: 16, fire1: 32, vs: 6, bright: 380, rough: 0.8, vol: 0.75, w: 'square' },
+    lorry: { fire0: 30, fire1: 65, vs: 18, bright: 520, rough: 0.6, vol: 0.85, w: 'sawtooth' },
+    bus: { fire0: 30, fire1: 65, vs: 18, bright: 560, rough: 0.55, vol: 0.8, w: 'sawtooth' },
+  };
+  function sndOf(tc) {      // per-vehicle sound identity, rolled once
+    if (!tc._snd) {
+      let type = tc.model;
+      if (type === 'bike') { const r = Math.random(); type = r < 0.3 ? 'bullet' : r < 0.55 ? 'scooter' : r < 0.67 ? 'ktm' : 'bike'; }
+      tc._snd = { type, pitch: rnd(0.92, 1.08), lastV: 0, stopT: 0 };
+    }
+    return tc._snd;
+  }
+  const voices = [];
+  function makeVoice() {
+    const o = ctx.createOscillator(), sub = ctx.createOscillator(), og = ctx.createGain(), sg = ctx.createGain();
+    const n = noise(true), nAM = ctx.createGain(), fire = ctx.createOscillator(), fd = ctx.createGain();
+    const lp = ctx.createBiquadFilter(), g = ctx.createGain(), p = ctx.createPanner();
+    sub.type = 'sine'; fire.type = 'square'; fd.gain.value = 0.5; nAM.gain.value = 0;
+    lp.type = 'lowpass'; lp.Q.value = 1.5; g.gain.value = 0;
+    p.panningModel = 'equalpower'; p.distanceModel = 'inverse'; p.refDistance = 5; p.maxDistance = 200; p.rolloffFactor = 1.3;
+    o.connect(og); sub.connect(sg); og.connect(lp); sg.connect(lp);
+    fire.connect(fd); fd.connect(nAM.gain); n.connect(nAM); nAM.connect(lp);
+    lp.connect(g); g.connect(p); p.connect(master);
+    o.start(); sub.start(); fire.start(); n.start();
+    return { o, sub, og, sg, nAM, fd, fire, lp, g, p, tc: null, type: null };
+  }
+  function setPos(p, x, z) { if (p.positionX) { p.positionX.setTargetAtTime(x, ctx.currentTime, 0.03); p.positionY.value = 0.8; p.positionZ.setTargetAtTime(z, ctx.currentTime, 0.03); } else p.setPosition(x, 0.8, z); }
+  function voiceCount() { const t = (window.Quality && Quality.tier) || 'high'; return t === 'low' ? 2 : t === 'medium' ? 4 : 6; }
+  function updateTraffic(dt, game) {
+    const T = game.traffic || [], cp = game.camera.position;
+    while (voices.length < voiceCount()) voices.push(makeVoice());
+    // nearest vehicles with an engine
+    const near = [];
+    for (const tc of T) {
+      if (!tc.g || tc.model === 'bullockCart' || tc.g.visible === false) continue;
+      const d = Math.hypot(tc.g.position.x - cp.x, tc.g.position.z - cp.z);
+      if (d < 90) near.push([d, tc]);
+      // air brakes: lorry / bus coming to a stop
+      if (tc.model === 'lorry' || tc.model === 'bus') {
+        const S = sndOf(tc), v = Math.abs(tc.cur != null ? tc.cur : tc.speed || 0);
+        if (S.lastV > 3 && v < 0.5 && d < 120 && performance.now() - S.stopT > 6000) { S.stopT = performance.now(); airBrake(tc.g.position.x, tc.g.position.z); }
+        S.lastV = v;
+      }
+    }
+    near.sort((a, b) => a[0] - b[0]);
+    const pick = near.slice(0, voices.length).map(n => n[1]);
+    // keep voices on vehicles that are still picked (no clicks), hand the free ones to new vehicles
+    for (const v of voices) if (v.tc && !pick.includes(v.tc)) v.tc = null;
+    for (const tc of pick) if (!voices.some(v => v.tc === tc)) { const v = voices.find(q => !q.tc); if (v) { v.tc = tc; v.fresh = true; } }
+    const now = ctx.currentTime;
+    for (const v of voices) {
+      if (!v.tc) { v.g.gain.setTargetAtTime(0, now, 0.15); continue; }
+      const S = sndOf(v.tc), E = TV[S.type] || TV.hatch, sp = Math.abs(v.tc.cur != null ? v.tc.cur : v.tc.speed || 0);
+      const r = Math.min(1, sp / E.vs), fire = (E.fire0 + (E.fire1 - E.fire0) * r) * S.pitch;
+      if (v.type !== S.type) { v.o.type = E.w; v.type = S.type; }
+      if (v.fresh) { setPos(v.p, v.tc.g.position.x, v.tc.g.position.z); v.fresh = false; }
+      else setPos(v.p, v.tc.g.position.x, v.tc.g.position.z);
+      v.o.frequency.setTargetAtTime(fire, now, 0.08); v.sub.frequency.setTargetAtTime(fire * 0.5, now, 0.08); v.fire.frequency.setTargetAtTime(fire, now, 0.08);
+      v.og.gain.value = 0.35 * (1 - E.rough * 0.5); v.sg.gain.value = S.type === 'bullet' || S.type === 'tractor' ? 0.6 : 0.25;
+      v.nAM.gain.value = 0.5 * E.rough; v.fd.gain.value = 0.5 * E.rough;   // noise gated 0..rough at the firing rate
+      v.lp.frequency.setTargetAtTime(E.bright * (0.7 + r * 0.8), now, 0.1);
+      v.g.gain.setTargetAtTime(E.vol * (0.5 + r * 0.5), now, 0.15);
+    }
+  }
+
+  // ------------------------------------------------------------------ player-side events
+  let lastMode = null, lastSpd = 0, lastPos = null, stepAcc = 0, lastStopV = 0, fallT = 0;
+  function playerKind() {
+    const P = typeof Player !== 'undefined' ? Player : null; if (!P) return 'crysta';
+    if (P.mode === 'crysta') return 'crysta';
+    const a = P.active; if (!a) return 'crysta';
+    if (a.model === 'bike') return (a._snd && a._snd.type) || 'bike';
+    return a.model || 'hatch';
+  }
+  function update(dt, game) {
+    if (!ok() || dt <= 0) return;
+    const P = typeof Player !== 'undefined' ? Player : null, mode = P ? P.mode : 'crysta', pos = game.carPos;
+    const spd = typeof carSpeed === 'number' ? Math.abs(carSpeed) : 0;            // km/h
+    const jumped = lastPos && Math.hypot(pos.x - lastPos.x, pos.z - lastPos.z) > 6;   // respawn / teleport
+    // doors when getting in / out (bikes: just the stand)
+    if (lastMode && mode !== lastMode && !jumped) {
+      const veh = mode === 'foot' ? lastKindCache : playerKind();
+      const two = veh === 'bike' || veh === 'bullet' || veh === 'scooter' || veh === 'ktm';
+      if ((mode === 'foot' && (lastMode === 'crysta' || lastMode === 'vehicle')) || (lastMode === 'foot' && (mode === 'crysta' || mode === 'vehicle'))) {
+        if (two) kickstand(); else if (veh !== 'tractor') { door(false, 0, 0, true); setTimeout(() => door(true, 0, 0, true), 550); }
+      }
+    }
+    if (mode !== 'foot') lastKindCache = playerKind();
+    // driving: skid on hard braking, impacts on sudden speed loss, air brakes
+    if (mode === 'crysta' || mode === 'vehicle') {
+      const decel = (lastSpd - spd) / 3.6 / dt;                                     // m/s^2
+      const braking = typeof inputState !== 'undefined' && inputState.brake;
+      const k = playerKind(), two = k === 'bike' || k === 'bullet' || k === 'scooter' || k === 'ktm';
+      skidSet(!jumped && braking && spd > 15 && decel > 5 ? Math.min(1, (decel - 5) / 8) * (two ? 0.5 : 1) * Math.min(1, spd / 40) * (mode === 'crysta' ? 0.6 : 1) : 0);
+      if (!jumped && decel > 35 && lastSpd > 8) {
+        const s = Math.min(1, (lastSpd - spd) / 70);
+        impact(s, 0, 0, true);
+        if (two && lastSpd > 18 && performance.now() - fallT > 3000) { fallT = performance.now(); setTimeout(() => bikeFall(0, 0, true), 120); }
+      }
+      if ((k === 'lorry' || k === 'bus') && lastStopV > 12 && spd < 1) airBrake(0, 0, true);
+      lastStopV = spd < 1 ? 0 : Math.max(lastStopV * 0.995, spd);
+    } else skidSet(0);
+    // on foot: footsteps from distance walked
+    if (mode === 'foot' && lastPos && !jumped && Math.abs(pos.y - (lastPos.y || 0)) < 0.5) {
+      const d = Math.hypot(pos.x - lastPos.x, pos.z - lastPos.z), run = spd > 12;
+      stepAcc += d;
+      const stride = run ? 1.25 : 0.75;
+      if (stepAcc > stride) { stepAcc = 0; const surf = game.world && game.world.surfaceAt ? game.world.surfaceAt(pos.x, pos.z) : 'dirt'; footstep(pos.y > 0.3 ? 'plinth' : surf, run); }
+    }
+    lastMode = mode; lastSpd = spd; lastPos = { x: pos.x, y: pos.y, z: pos.z };
+    updateTraffic(dt, game);
+  }
+  let lastKindCache = 'crysta';
+
+  // the player's horn: replace crysta.js's single recipe with the per-vehicle one
+  function playerHorn() {
+    try { if (typeof audioCtx === 'undefined' || !audioCtx) initAudio(); } catch (e) {}
+    const p = (window.GAME && GAME.carPos) || { x: 0, z: 0 };
+    horn(playerKind(), p.x, p.z, true);
+  }
+  window.triggerHorn = playerHorn;
+  try { triggerHorn = playerHorn; } catch (e) {}
+
+  window.SFX = { horn, impact, bikeFall, door, footstep, bark, moo, airBrake, skid: skidSet, playerHorn, voices };
+  GameHooks.update.push((dt, game) => { try { update(dt, game); } catch (e) { console.warn('sfx', e); } });
+})();

@@ -142,7 +142,7 @@ function VillageAmbience(ctx, world) {
     if ((dawn || (hour > 8 && hour < 11)) && due('koel', 8, 20)) koel(...around(p, 80));
     if (!night && due('bird', dawn ? 0.4 : 1.2, dawn ? 1.5 : 4)) bird(...around(p, 60));
     if (!night && due('crow', 4, 12)) crow(...around(p, 90));
-    if (!night && due('moo', 15, 40)) moo(...around(p, 70).map((v, i) => i === 1 ? 1 : v));
+    if (!night && due('moo', 15, 40)) { const q = around(p, 70); if (window.SFX) SFX.moo(q[0], q[2]); else moo(q[0], 1, q[2]); }
     if (due('bark', night ? 5 : 18, night ? 16 : 45)) bark(...around(p, inVillage ? 50 : 120).map((v, i) => i === 1 ? 0.5 : v));
     // temple bells at prayer times, louder when close
     if ((dawn || dusk || Math.random() < 0.2) && due('bell', dawn || dusk ? 3 : 10, dawn || dusk ? 7 : 25)) {
@@ -150,8 +150,8 @@ function VillageAmbience(ctx, world) {
       if (tp && tp[0] < 300) bell(tp[1].x, 4, tp[1].z);
     }
     if (!night && traffic && traffic.length && due('horn', 5, 14)) {
-      const near = traffic.filter(tc => Math.hypot(tc.g.position.x - p.x, tc.g.position.z - p.z) < 150);
-      if (near.length) { const tc = near[Math.floor(Math.random() * near.length)]; autoHorn(tc.g.position.x, 1, tc.g.position.z); }
+      const near = traffic.filter(tc => tc.model !== 'bullockCart' && Math.hypot(tc.g.position.x - p.x, tc.g.position.z - p.z) < 150);
+      if (near.length) { const tc = near[Math.floor(Math.random() * near.length)]; if (window.SFX) SFX.horn(tc._snd ? tc._snd.type : tc.model, tc.g.position.x, tc.g.position.z); else autoHorn(tc.g.position.x, 1, tc.g.position.z); }
     }
     if (night && lakes.length && due('frog', 0.6, 2.5)) {
       const lk = lakes.find(c => Math.hypot(c[0] - p.x, c[1] - p.z) < 400);

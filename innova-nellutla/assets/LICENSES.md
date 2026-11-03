@@ -44,3 +44,7 @@ Note: `plaster_col.jpg` is converted to light grey so `material.color` can tint 
 | models/barrel_03.glb | Barrel 03 | Serhii Khromov (All) | https://polyhaven.com/a/barrel_03 | CC0 |
 | models/hand_truck.glb | Hand Truck | Mutanzom3D (All) | https://polyhaven.com/a/hand_truck | CC0 |
 | models/industrial_pastic_container.glb | Industrial Plastic Container | Galo Benivegna (All) | https://polyhaven.com/a/industrial_pastic_container | CC0 |
+
+## Audio
+
+No audio sample files are used. Every sound (engines, horns, skids, impacts, doors, footsteps, animals, ambience) is synthesized at runtime with the WebAudio API in `engine-audio.js`, `sfx.js`, `ambient.js` and `animals.js` (original code, no third-party recordings).

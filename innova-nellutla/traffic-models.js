@@ -1,9 +1,30 @@
 // Indian village traffic models, built procedurally (three.js r128): Bajaj-RE-style auto-rickshaw,
-// Splendor-style motorbike with rider, Swift-style hatchback, Bolero-style SUV, 575-style tractor with
-// trolley, 1109-style lorry, Palle-Velugu-style village bus and a bullock cart.
-// Each builder returns { g, wheels: [Group], head: [Mesh], tail: [Mesh], len, kind }. Vehicles face +z, sit on y = 0.
-// Wheels spin on local x. head/tail meshes share one per-vehicle material whose colour the game switches.
-// Geometries are cached and shared between instances; materials are cached by colour.
+// two-wheelers (Splendor-style commuter, Activa-style scooter, Bullet-style and Jawa-style classics, Duke-style
+// naked sport, hardtail mountain bicycle), Swift-style hatchback, Bolero-style SUV, Innova-style MPV, 575-style
+// tractor with trolley, 1109-style lorry, Palle-Velugu-style village bus and a bullock cart. All generic, unbranded.
+//
+// Builders: TrafficModels.auto | bike | splendor | scooter | classic | classic2 | sport | cycle | hatch | suv | mpv |
+//           tractor | lorry | bus | bullockCart. bike() is a random mix of the motor two-wheelers (kind stays 'bike');
+//           bike('scooter') forces one type. TrafficModels.TWO_WHEELERS lists the two-wheeler builder names.
+// Each returns v = { g, wheels: [Group], head: [Mesh], tail: [Mesh], len, kind, steer: [Group], userData }.
+// Vehicles face +z, sit on y = 0. Wheels spin on local x (w.rotation.x += dist / radius). head/tail meshes share one
+// per-vehicle material whose colour the game switches. Geometries are cached; materials are cached by colour.
+//
+// userData contract (on the returned object v, NOT on v.g, because it holds object references):
+//   v.userData.wheels = [{ mesh: Group, radius: metres, front: bool }]  - every wheel; spin mesh.rotation.x.
+//                       Tractor: front r 0.38, rear r 0.72 (lugged); trolley/rear wheels front:false.
+//   v.userData.steer  = [Group]  - steering pivots; set .rotation.y (radians, + = left) to steer.
+//                       Cars/lorries/buses/tractor/auto: one vertical pivot per front wheel (wheel is its child).
+//                       Two-wheelers: ONE raked pivot 'fork_0' holding fork legs, bars, headlamp, front guard and
+//                       the front wheel (rotation.y turns about the real raked steering axis). Bullock cart: [].
+//   v.userData.fork   = the two-wheeler fork pivot (same object as steer[0]) or null.
+//   v.userData.dims   = { length, width, height }  - true bounding size (m) of the vehicle, people excluded.
+//   v.userData.center = { x, y, z }  - centre of that box in the vehicle frame (models are NOT all centred on 0:
+//                       e.g. the tractor+trolley extends far back). Oriented box = position + rot * center, half dims.
+//   v.userData.type   = specific model ('splendor', 'scooter', 'classic', 'classic2', 'sport', 'cycle', 'mpv', ...).
+//   v.userData.twoWheeler = bool; v.userData.seat = [x, y, z, pose] rider seat (two-wheelers, mpv) when known.
+// v.g.userData.dims / .center / .type hold plain-number copies (these survive Object3D.clone()).
+// Wheel groups are named 'wheel_<i>[_front]', steering pivots 'steer_<i>' / 'fork_0'.
 const TrafficModels = (function () {
   const geo = {}, mats = {};
   const G = (key, fn) => geo[key] || (geo[key] = fn());
@@ -62,19 +83,20 @@ const TrafficModels = (function () {
   const tor = (r, t, rs, ts, arc) => G(['to', r, t, rs, ts, arc].join(), () => new THREE.TorusGeometry(r, t, rs, ts, arc));
 
   function kit() {
-    const g = new THREE.Group(), wheels = [], head = [], tail = [];
+    const g = new THREE.Group(), wheels = [], head = [], tail = [], steer = [];
     const headM = new THREE.MeshBasicMaterial({ color: 0x777766 }), tailM = new THREE.MeshBasicMaterial({ color: 0x661111 });
     const add = (geom, m, x, y, z, parent) => { const o = new THREE.Mesh(geom, m); o.position.set(x || 0, y || 0, z || 0); o.castShadow = true; (parent || g).add(o); return o; };
     // wheel: lathe tyre + dished rim; a spoke bar keeps rotation visible on plain rims
     const wheel = (r, w, x, y, z, opts) => {
       opts = opts || {};
-      const wg = new THREE.Group(); wg.position.set(x, y, z);
+      const wg = new THREE.Group(); wg.position.set(x, y, z); wg.userData.radius = r; wg.name = 'wheel';
       add(tyreGeo(r, w, opts.low), rubber, 0, 0, 0, wg);
       const side = Math.sign(x) || 1;
       const rim = add(rimGeo(r * (opts.low ? 0.66 : 0.56), w * 0.9), opts.rim || rimMat, 0, 0, 0, wg); rim.scale.x = side;
       if (!opts.noSpoke) for (let i = 0; i < (opts.spokes || 4); i++) {
-        const sp = add(G('spk', () => new THREE.BoxGeometry(0.02, 1, 0.05)), opts.rim || rimMat, side * w * 0.42, 0, 0, wg);
-        sp.scale.y = r * (opts.low ? 1.2 : 1.0); sp.rotation.x = i * Math.PI / (opts.spokes || 4);
+        const sp = opts.thin ? add(G('spkT', () => new THREE.BoxGeometry(0.008, 1, 0.008)), opts.spokeMat || opts.rim || rimMat, 0, 0, 0, wg)
+                             : add(G('spk', () => new THREE.BoxGeometry(0.02, 1, 0.05)), opts.rim || rimMat, side * w * 0.42, 0, 0, wg);
+        sp.scale.y = opts.thin ? r * 1.9 : r * (opts.low ? 1.2 : 1.0); sp.rotation.x = i * Math.PI / (opts.spokes || 4);
       }
       g.add(wg); wheels.push(wg); return wg;
     };
@@ -84,9 +106,9 @@ const TrafficModels = (function () {
       const geom = G(key, () => round ? new THREE.CircleGeometry(w / 2, 14) : new THREE.ShapeGeometry((() => { const s = new THREE.Shape(); roundRect(s, w, h, Math.min(w, h) * 0.3); return s; })(), 4));
       const m = add(geom, front ? headM : tailM, x, y, z); if (!front) m.rotation.y = Math.PI;
       const lens = add(G(key + 'L', () => { const gg = geom.clone(); return gg; }), lensMat, x, y, z + (front ? 0.008 : -0.008)); lens.rotation.y = m.rotation.y; lens.castShadow = false;
-      (front ? head : tail).push(m); m.castShadow = false; return m;
+      (front ? head : tail).push(m); m.castShadow = false; m.lens = lens; return m;
     };
-    return { g, wheels, head, tail, add, wheel, lamp };
+    return { g, wheels, head, tail, steer, add, wheel, lamp };
   }
   function plate(k, z, y, front, x) {
     const c = document.createElement('canvas'); c.width = 128; c.height = 32; const t = c.getContext('2d');
@@ -114,10 +136,13 @@ const TrafficModels = (function () {
   }
   // mirrors on stalks
   function mirrors(k, xs, y, z, m) {
+    const out = [];
     for (const x of xs) {
       const st = k.add(cyl(0.012, 0.012, 0.18, 5), plastic, x, y, z); st.rotation.z = Math.sign(x) * 1.0;
       const hd = k.add(rbox(0.16, 0.1, 0.05, 0.03), m || plastic, x + Math.sign(x) * 0.09, y + 0.06, z); hd.rotation.y = -Math.sign(x) * 0.2;
+      out.push(st, hd);
     }
+    return out;
   }
 
   // ---------------------------------------------------------------- auto-rickshaw (Bajaj RE style, 2.63 x 1.30 x 1.70)
@@ -171,45 +196,276 @@ const TrafficModels = (function () {
     return { g: k.g, wheels: k.wheels, head: k.head, tail: k.tail, len: 2.8, kind: 'auto' };
   }
 
-  // ---------------------------------------------------------------- motorbike (Splendor style)
-  function bike() {
+  // ---------------------------------------------------------------- two-wheeler helpers
+  const _up = new THREE.Vector3(0, 1, 0);
+  // straight tube between two points a, b = [x, y, z]
+  function tube(k, a, b, r, m, parent) {
+    const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), L = d.length();
+    const o = k.add(cyl(r, r, 1, 6), m, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2, parent);
+    o.scale.y = L; o.quaternion.setFromUnitVectors(_up, d.normalize()); return o;
+  }
+  // Steering head pivot of a two-wheeler: a group at the steering head (y, z), tilted back by `rake` so that
+  // rotation.y turns the bars, fork and front wheel together about the real (raked) steering axis.
+  function forkPivot(k, hy, hz, rake, parts) {
+    const p = new THREE.Group(); p.name = 'fork'; p.position.set(0, hy, hz); p.rotation.x = -rake; k.g.add(p);
+    k.g.updateMatrixWorld(true);
+    for (const o of parts) if (o) p.attach(o);
+    k.steer.push(p); return p;
+  }
+  const lampParts = m => [m, m.lens];
+  // rider astride (helmet sometimes), maybe a pillion
+  function riders(k, y, z, pz, helmetP, pillionP) {
+    const r = person(k, 0, y, z, { outfit: Math.random() < 0.7 ? 'shirt' : 'lungi', color: [0xffffff, 0x8fa9c4, 0x2e4a7a, 0xb0a080][Math.random() * 4 | 0] }, 'bike');
+    if (r && Math.random() < helmetP) { const hl = new THREE.Mesh(sph(0.13, 10, 8), paint([0x222222, 0xb71c1c, 0xf5f5f5, 0x1565c0][Math.random() * 4 | 0])); hl.position.set(0, 0.1, 0); hl.scale.set(0.92, 0.95, 1.05); r.parts.head.add(hl); }
+    if (pz != null && Math.random() < pillionP) person(k, 0, y + 0.04, pz, Math.random() < 0.5 ? { gender: 'f', outfit: Math.random() < 0.5 ? 'saree' : 'salwar' } : { outfit: 'shirt' }, 'bike');
+  }
+  // front / rear mudguard arcs over a wheel at (y = r, z)
+  function guard(k, r, z, m, arc, tilt, fat) {
+    const o = k.add(tor(r + 0.03, 0.035 * (fat || 1), 3, 12, Math.PI * arc), m, 0, r, z); o.rotation.y = Math.PI / 2; o.rotation.z = Math.PI * tilt; o.scale.z = 1.6 * (fat || 1); return o;
+  }
+  const two = (k, len, kind, type, seat, extra) => Object.assign({ g: k.g, wheels: k.wheels, head: k.head, tail: k.tail, steer: k.steer, len, kind, type, seat, twoWheeler: true }, extra || {});
+
+  // ---------------------------------------------------------------- commuter motorbike (Splendor style, 1.98 x 0.72 x 1.05)
+  function splendor() {
     const k = kit(), body = paint([0xb71c1c, 0x111111, 0x1565c0, 0x6d6d6d, 0x5b2a86][Math.random() * 5 | 0]), black = M(0x161616);
-    k.wheel(0.3, 0.085, 0.001, 0.3, 0.64, { low: true, spokes: 9, rim: chrome }); k.wheel(0.3, 0.085, 0.001, 0.3, -0.64, { low: true, spokes: 9, rim: chrome });
-    // fuel tank: rounded side profile with heavy bevel
+    const fw = k.wheel(0.3, 0.085, 0.001, 0.3, 0.64, { low: true, spokes: 9, rim: chrome }); k.wheel(0.3, 0.085, 0.001, 0.3, -0.64, { low: true, spokes: 9, rim: chrome });
+    fw.userData.front = true;
     k.add(sideGeo('bikeTank', s => { s.moveTo(-0.12, 0.82); s.quadraticCurveTo(-0.05, 0.98, 0.2, 0.98); s.quadraticCurveTo(0.38, 0.96, 0.42, 0.86); s.lineTo(0.36, 0.76); s.quadraticCurveTo(0.1, 0.72, -0.12, 0.82); }, 0.26, 0.09, 10), body);
-    // side panels under the seat
     k.add(sideGeo('bikePanel', s => { s.moveTo(-0.15, 0.82); s.lineTo(-0.55, 0.84); s.quadraticCurveTo(-0.62, 0.72, -0.5, 0.62); s.lineTo(-0.15, 0.62); }, 0.22, 0.04), body);
-    // seat
     k.add(sideGeo('bikeSeat', s => { s.moveTo(-0.08, 0.86); s.quadraticCurveTo(-0.12, 0.93, -0.25, 0.92); s.lineTo(-0.72, 0.92); s.quadraticCurveTo(-0.8, 0.9, -0.76, 0.84); s.lineTo(-0.1, 0.82); }, 0.24, 0.05), black);
-    // rear mudguard + tail
     const rmg = k.add(tor(0.34, 0.04, 3, 10, Math.PI * 0.6), body, 0, 0.3, -0.64); rmg.rotation.y = Math.PI / 2; rmg.rotation.z = Math.PI * 0.35; rmg.scale.z = 1.6;
     const fmg = k.add(tor(0.33, 0.035, 3, 10, Math.PI * 0.5), body, 0, 0.3, 0.64); fmg.rotation.y = Math.PI / 2; fmg.rotation.z = Math.PI * 0.2; fmg.scale.z = 1.5;
-    // engine block and cylinder fins
     k.add(rbox(0.22, 0.26, 0.34, 0.06), M(0x7a7d80), 0, 0.5, 0.08);
     for (let i = 0; i < 4; i++) k.add(rbox(0.24, 0.02, 0.2, 0.01), M(0x8a8d90), 0, 0.62 + i * 0.035, 0.24).rotation.x = -0.6;
-    // frame tubes, fork, handlebar, headlamp nacelle
     const down = k.add(cyl(0.022, 0.022, 0.62, 6), black, 0, 0.62, 0.34); down.rotation.x = 0.75;
+    const fork = [fw, fmg];
     for (const sx of [-1, 1]) {
-      const f = k.add(cyl(0.02, 0.02, 0.7, 6), chrome, sx * 0.07, 0.62, 0.55); f.rotation.x = -0.4;
-      const sw = k.add(cyl(0.016, 0.016, 0.66, 5), black, sx * 0.09, 0.42, -0.35); sw.rotation.x = Math.PI / 2 + 0.25;   // swingarm
-      const sh = k.add(cyl(0.022, 0.022, 0.4, 6), chrome, sx * 0.12, 0.62, -0.55); sh.rotation.x = -0.3;            // shock
+      const f = k.add(cyl(0.02, 0.02, 0.7, 6), chrome, sx * 0.07, 0.62, 0.55); f.rotation.x = -0.4; fork.push(f);
+      const sw = k.add(cyl(0.016, 0.016, 0.66, 5), black, sx * 0.09, 0.42, -0.35); sw.rotation.x = Math.PI / 2 + 0.25;
+      const sh = k.add(cyl(0.022, 0.022, 0.4, 6), chrome, sx * 0.12, 0.62, -0.55); sh.rotation.x = -0.3;
+      k.add(cyl(0.012, 0.012, 0.16, 5), chrome, sx * 0.14, 0.4, -0.05).rotation.z = Math.PI / 2;          // foot pegs
     }
-    const hb = k.add(cyl(0.012, 0.012, 0.66, 6), chrome, 0, 1.0, 0.43); hb.rotation.z = Math.PI / 2;
-    for (const sx of [-1, 1]) k.add(cyl(0.02, 0.02, 0.1, 6), black, sx * 0.3, 1.0, 0.43).rotation.z = Math.PI / 2;
-    const nac = k.add(sph(0.11, 10, 8), body, 0, 0.92, 0.62); nac.scale.set(1, 0.9, 0.8);
-    k.lamp(0.13, 0.13, 0, 0.92, 0.705, true, true);
-    mirrors(k, [-0.22, 0.22], 1.08, 0.42, chrome);
-    for (const sx of [-1, 1]) { k.add(sph(0.025, 5, 4), amberMat, sx * 0.12, 0.92, 0.66); k.add(sph(0.025, 5, 4), amberMat, sx * 0.12, 0.78, -0.86); }
+    const hb = k.add(cyl(0.012, 0.012, 0.66, 6), chrome, 0, 1.0, 0.43); hb.rotation.z = Math.PI / 2; fork.push(hb);
+    for (const sx of [-1, 1]) { const gp = k.add(cyl(0.02, 0.02, 0.1, 6), black, sx * 0.3, 1.0, 0.43); gp.rotation.z = Math.PI / 2; fork.push(gp); }
+    const nac = k.add(sph(0.11, 10, 8), body, 0, 0.92, 0.62); nac.scale.set(1, 0.9, 0.8); fork.push(nac);
+    fork.push(...lampParts(k.lamp(0.13, 0.13, 0, 0.92, 0.705, true, true)));
+    fork.push(...mirrors(k, [-0.22, 0.22], 1.08, 0.42, chrome));
+    for (const sx of [-1, 1]) { fork.push(k.add(sph(0.025, 5, 4), amberMat, sx * 0.12, 0.92, 0.66)); k.add(sph(0.025, 5, 4), amberMat, sx * 0.12, 0.78, -0.86); }
     k.lamp(0.1, 0.06, 0, 0.8, -0.86);
-    // chain guard and silencer
     k.add(sideGeo('bikeChain', s => { s.moveTo(0.08, 0.36); s.lineTo(-0.6, 0.33); s.quadraticCurveTo(-0.7, 0.36, -0.6, 0.4); s.lineTo(0.08, 0.44); }, 0.03, 0.01), black).position.x = -0.12;
     const sil = k.add(cyl(0.05, 0.04, 0.6, 8), chrome, 0.16, 0.38, -0.4); sil.rotation.x = Math.PI / 2 - 0.12;
     plate(k, -0.87, 0.6, false);
-    // rider (helmet sometimes), maybe a pillion
-    const r = person(k, 0, 0.9, -0.28, { outfit: 'shirt' }, 'bike');
-    if (r && Math.random() < 0.4) { const hl = new THREE.Mesh(sph(0.13, 10, 8), paint(0x222222)); hl.position.set(0, 0.1, 0); hl.scale.set(0.92, 0.95, 1.05); r.parts.head.add(hl); }
-    if (Math.random() < 0.4) person(k, 0, 0.94, -0.62, Math.random() < 0.5 ? { gender: 'f', outfit: 'saree' } : { outfit: 'shirt' }, 'bike');
-    return { g: k.g, wheels: k.wheels, head: k.head, tail: k.tail, len: 2.0, kind: 'bike' };
+    forkPivot(k, 0.98, 0.45, 0.4, fork);
+    riders(k, 0.9, -0.28, -0.62, 0.4, 0.4);
+    return two(k, 2.0, 'bike', 'splendor', [0, 0.9, -0.28, 'bike']);
+  }
+
+  // ---------------------------------------------------------------- scooter (Activa-style gearless step-through, 1.80 x 0.70 x 1.15)
+  function scooter() {
+    const k = kit(), body = paint([0xf5f5f5, 0xb71c1c, 0x1d2a44, 0x8d9296, 0x2e7d32, 0xd7c8a6, 0x111111][Math.random() * 7 | 0]), black = M(0x161616), dark = M(0x26282b);
+    const fw = k.wheel(0.25, 0.1, 0.001, 0.25, 0.62, { low: true, spokes: 3, rim: M(0x55595e) }); fw.userData.front = true;
+    k.wheel(0.25, 0.11, 0.001, 0.25, -0.6, { low: true, spokes: 3, rim: M(0x55595e) });
+    // leg shield / front apron, floorboard, swoopy rear body, seat
+    k.add(sideGeo('scApron', s => { s.moveTo(0.3, 0.34); s.lineTo(0.48, 0.38); s.quadraticCurveTo(0.6, 0.62, 0.56, 0.9); s.lineTo(0.48, 1.0); s.lineTo(0.38, 0.99); s.quadraticCurveTo(0.33, 0.7, 0.26, 0.38); }, 0.46, 0.07, 10), body);
+    const inner = k.add(rbox(0.38, 0.56, 0.03, 0.05), dark, 0, 0.66, 0.29); inner.rotation.x = -0.2;
+    k.add(rbox(0.34, 0.05, 0.56, 0.02), dark, 0, 0.36, 0.0);
+    k.add(sideGeo('scRear', s => { s.moveTo(-0.2, 0.36); s.lineTo(-0.16, 0.62); s.quadraticCurveTo(-0.16, 0.8, -0.32, 0.8); s.lineTo(-0.8, 0.79); s.quadraticCurveTo(-0.98, 0.76, -0.94, 0.6); s.quadraticCurveTo(-0.88, 0.42, -0.62, 0.38); s.lineTo(-0.2, 0.36); }, 0.44, 0.1, 12), body);
+    k.add(sideGeo('scSeat', s => { s.moveTo(-0.17, 0.79); s.quadraticCurveTo(-0.2, 0.89, -0.32, 0.9); s.lineTo(-0.66, 0.9); s.quadraticCurveTo(-0.72, 0.95, -0.86, 0.93); s.quadraticCurveTo(-0.92, 0.88, -0.86, 0.8); s.lineTo(-0.2, 0.78); }, 0.34, 0.06, 8), black);
+    for (const sx of [-1, 1]) k.add(cyl(0.014, 0.014, 0.42, 5), M(0x3a3c40), sx * 0.2, 0.84, -0.66).rotation.x = Math.PI / 2;   // grab rail
+    // CVT / engine unit on the left (acts as swingarm), muffler on the right, centre stand
+    k.add(rbox(0.12, 0.2, 0.6, 0.05), M(0x6e7276), -0.15, 0.32, -0.38);
+    const muf = k.add(cyl(0.055, 0.05, 0.38, 8), M(0x3a3c40), 0.16, 0.3, -0.55); muf.rotation.x = Math.PI / 2 - 0.1;
+    k.add(rbox(0.04, 0.12, 0.28, 0.02), M(0x8a8d90), 0.2, 0.32, -0.55);
+    guard(k, 0.25, -0.6, dark, 0.45, 0.45);
+    // front: mudguard, telescopic fork legs, handlebar cover with the headlamp, indicators
+    const fork = [fw, guard(k, 0.25, 0.62, body, 0.45, 0.2, 1.2)];
+    for (const sx of [-1, 1]) fork.push(tube(k, [sx * 0.07, 0.25, 0.62], [sx * 0.06, 0.82, 0.42], 0.022, M(0x55595e)));
+    fork.push(k.add(sideGeo('scBars', s => { s.moveTo(0.3, 0.98); s.lineTo(0.55, 1.0); s.quadraticCurveTo(0.6, 1.06, 0.52, 1.12); s.lineTo(0.32, 1.12); s.quadraticCurveTo(0.26, 1.05, 0.3, 0.98); }, 0.36, 0.05), body));
+    for (const sx of [-1, 1]) { const gp = k.add(cyl(0.022, 0.022, 0.13, 6), black, sx * 0.26, 1.07, 0.4); gp.rotation.z = Math.PI / 2; fork.push(gp); }
+    fork.push(...lampParts(k.lamp(0.2, 0.08, 0, 1.06, 0.6, true)));
+    fork.push(...mirrors(k, [-0.2, 0.2], 1.14, 0.4, black));
+    for (const sx of [-1, 1]) { k.add(rbox(0.06, 0.04, 0.03, 0.01), amberMat, sx * 0.16, 0.86, 0.58); k.add(rbox(0.06, 0.04, 0.03, 0.01), amberMat, sx * 0.15, 0.72, -0.95); }
+    k.add(sph(0.05, 8, 6), body, 0, 0.84, 0.6).scale.set(1.4, 1, 0.6);          // front cowl "nose"
+    k.lamp(0.18, 0.07, 0, 0.72, -0.96);
+    plate(k, -0.93, 0.52, false);
+    forkPivot(k, 0.95, 0.43, 0.45, fork);
+    riders(k, 0.86, -0.36, -0.7, 0.3, 0.45);
+    return two(k, 1.85, 'scooter', 'scooter', [0, 0.86, -0.36, 'bike']);
+  }
+
+  // ---------------------------------------------------------------- retro singles: Bullet-style classic and Jawa-style classic
+  // jawa = false: long teardrop tank with pinstripes, sprung saddle + pillion pad, casquette headlamp with pilot
+  // lamps, deep valanced guards, single peashooter. jawa = true: slimmer tank with chrome knee panels, flat
+  // bench seat, fork gaiters, twin peashooters.
+  function retro(jawa) {
+    const k = kit(), black = M(0x161616);
+    const body = paint(jawa ? [0x6d1a1a, 0x111111, 0x5f6a6f, 0x24452f][Math.random() * 4 | 0] : [0x111111, 0x5a1414, 0x3d4a2a, 0x1c2f4a, 0x8a8f94][Math.random() * 5 | 0]);
+    const gold = paint(0xc9a14a), alloy = M(0xb9bcc0);
+    const R = jawa ? 0.32 : 0.34, ZF = jawa ? 0.68 : 0.72, ZR = jawa ? -0.64 : -0.68;
+    const fw = k.wheel(R, 0.09, 0.001, R, ZF, { spokes: 14, rim: chrome, thin: true, spokeMat: chrome }); fw.userData.front = true;
+    k.wheel(R, 0.11, 0.001, R, ZR, { spokes: 14, rim: chrome, thin: true, spokeMat: chrome });
+    for (const z of [ZF, ZR]) { const hub = k.add(cyl(0.07, 0.07, 0.12, 10), alloy, 0, R, z); hub.rotation.z = Math.PI / 2; }
+    // frame: single downtube cradle, backbone, rear subframe
+    tube(k, [0, 1.0, 0.46], [0, 0.42, 0.3], 0.024, black); tube(k, [0, 0.42, 0.3], [0, 0.34, -0.2], 0.024, black);
+    tube(k, [0, 1.0, 0.46], [0, 0.9, -0.3], 0.026, black);
+    for (const sx of [-1, 1]) {
+      tube(k, [sx * 0.1, 0.44, -0.2], [sx * 0.1, R, ZR], 0.02, black);                          // swingarm
+      tube(k, [sx * 0.11, 0.95, -0.35], [sx * 0.11, R + 0.08, ZR + 0.06], 0.028, chrome);       // twin shocks
+      tube(k, [sx * 0.11, 0.88, -0.25], [sx * 0.11, 0.88, -0.95], 0.016, black);                 // seat rails
+      k.add(cyl(0.012, 0.012, 0.16, 5), chrome, sx * 0.16, 0.36, 0.05).rotation.z = Math.PI / 2;
+    }
+    // tall finned engine with timing cover, gearbox
+    k.add(rbox(0.24, 0.28, 0.4, 0.08), alloy, 0, 0.48, 0.05);
+    for (let i = 0; i < 6; i++) k.add(rbox(0.22 - i * 0.008, 0.018, 0.22, 0.008), alloy, 0, 0.64 + i * 0.04, 0.16).rotation.x = -0.25;
+    k.add(cyl(0.12, 0.12, 0.05, 14), chrome, -0.14, 0.46, 0.08).rotation.z = Math.PI / 2;
+    k.add(rbox(0.2, 0.2, 0.22, 0.05), alloy, 0, 0.42, -0.2);
+    tube(k, [0, 0.95, 0.12], [0, 1.0, 0.0], 0.02, black);
+    if (!jawa) {
+      k.add(sideGeo('bulTank', s => { s.moveTo(0.44, 0.86); s.quadraticCurveTo(0.46, 1.06, 0.24, 1.08); s.quadraticCurveTo(-0.02, 1.08, -0.12, 0.98); s.lineTo(-0.1, 0.88); s.quadraticCurveTo(0.16, 0.8, 0.44, 0.86); }, 0.32, 0.11, 12), body);
+      for (const sx of [-1, 1]) {
+        k.add(sideShape('bulStripe', [[0.36, 0.95], [0.38, 0.97], [0.0, 1.03], [-0.04, 1.01]]), gold, sx * 0.162, 0, 0);
+        k.add(G('bulBadge', () => new THREE.CircleGeometry(0.045, 12)), chrome, sx * 0.163, 0.96, 0.2).rotation.y = sx * Math.PI / 2;
+        k.add(rbox(0.06, 0.2, 0.3, 0.03), body, sx * 0.15, 0.68, -0.35);                         // tool box / battery box
+      }
+      k.add(sideGeo('bulSaddle', s => { s.moveTo(-0.1, 0.95); s.quadraticCurveTo(-0.12, 1.02, -0.25, 1.03); s.lineTo(-0.4, 1.02); s.quadraticCurveTo(-0.46, 0.98, -0.42, 0.94); s.lineTo(-0.12, 0.93); }, 0.3, 0.05), M(0x2a1a12));
+      for (const sx of [-1, 1]) tube(k, [sx * 0.08, 0.93, -0.4], [sx * 0.08, 0.86, -0.42], 0.012, chrome);         // saddle springs
+      k.add(rbox(0.24, 0.07, 0.3, 0.03), M(0x2a1a12), 0, 0.95, -0.66);
+      guard(k, R, ZR, body, 0.6, 0.38, 1.6);
+      const ex = k.add(cyl(0.045, 0.045, 0.95, 10), chrome, 0.17, 0.4, -0.38); ex.rotation.x = Math.PI / 2 - 0.08;
+      tube(k, [0.06, 0.62, 0.28], [0.17, 0.4, 0.1], 0.025, chrome);
+      for (const sx of [-1, 1]) tube(k, [sx * 0.08, 0.42, 0.36], [sx * 0.24, 0.62, 0.32], 0.016, chrome);         // crash guard
+      tube(k, [-0.24, 0.62, 0.32], [0.24, 0.62, 0.32], 0.016, chrome);
+    } else {
+      k.add(sideGeo('jawTank', s => { s.moveTo(0.42, 0.88); s.quadraticCurveTo(0.44, 1.03, 0.25, 1.05); s.lineTo(0.0, 1.03); s.quadraticCurveTo(-0.08, 1.0, -0.08, 0.92); s.quadraticCurveTo(0.16, 0.84, 0.42, 0.88); }, 0.28, 0.09, 12), body);
+      for (const sx of [-1, 1]) {
+        k.add(sideShape('jawPanel', [[0.3, 0.92], [0.32, 0.99], [0.05, 0.99], [0.02, 0.92]]), chrome, sx * 0.142, 0, 0);
+        k.add(sideGeo('jawSide', s => { s.moveTo(-0.15, 0.86); s.lineTo(-0.45, 0.86); s.quadraticCurveTo(-0.48, 0.7, -0.38, 0.62); s.lineTo(-0.15, 0.64); }, 0.04, 0.01), body).position.x = sx * 0.13;
+        const ex = k.add(cyl(0.04, 0.04, 0.9, 10), chrome, sx * 0.17, 0.42, -0.42); ex.rotation.x = Math.PI / 2 - 0.1;
+        tube(k, [sx * 0.05, 0.62, 0.28], [sx * 0.17, 0.42, 0.06], 0.024, chrome);
+      }
+      k.add(sideGeo('jawSeat', s => { s.moveTo(-0.08, 0.92); s.quadraticCurveTo(-0.1, 1.0, -0.2, 1.0); s.lineTo(-0.82, 0.99); s.quadraticCurveTo(-0.88, 0.96, -0.84, 0.9); s.lineTo(-0.1, 0.9); }, 0.28, 0.05), M(0x3a2618));
+      k.add(rbox(0.3, 0.02, 0.02, 0.008), chrome, 0, 0.93, -0.84);
+      guard(k, R, ZR, body, 0.45, 0.38, 1.2);
+    }
+    // front: fork, guard, headlamp (with pilot lamps on the Bullet), bars with chrome levers
+    const fork = [fw, guard(k, R, ZF, body, jawa ? 0.4 : 0.55, 0.18, jawa ? 1.1 : 1.5)];
+    for (const sx of [-1, 1]) {
+      fork.push(tube(k, [sx * 0.08, R, ZF], [sx * 0.08, 0.95, 0.5], 0.024, chrome));
+      if (jawa) fork.push(tube(k, [sx * 0.08, R + 0.22, ZF - 0.08], [sx * 0.08, R + 0.42, ZF - 0.13], 0.034, black));      // gaiters
+      else fork.push(tube(k, [sx * 0.085, 0.82, 0.55], [sx * 0.085, 1.0, 0.5], 0.04, body));                                  // fork covers
+    }
+    const hl = k.add(cyl(0.11, 0.09, 0.14, 14), jawa ? chrome : body, 0, 0.95, 0.6); hl.rotation.x = Math.PI / 2; fork.push(hl);
+    fork.push(...lampParts(k.lamp(0.19, 0.19, 0, 0.95, 0.672, true, true)));
+    if (!jawa) for (const sx of [-1, 1]) { const pl = k.add(cyl(0.035, 0.03, 0.06, 8), chrome, sx * 0.13, 0.98, 0.58); pl.rotation.x = Math.PI / 2; fork.push(pl, k.add(sph(0.026, 6, 4), amberMat, sx * 0.13, 0.98, 0.615)); }
+    else for (const sx of [-1, 1]) fork.push(k.add(sph(0.028, 6, 4), amberMat, sx * 0.14, 0.95, 0.56));
+    const hb = tube(k, [-0.36, 1.12, 0.38], [0.36, 1.12, 0.38], 0.013, chrome); fork.push(hb);
+    for (const sx of [-1, 1]) { fork.push(tube(k, [sx * 0.07, 1.0, 0.48], [sx * 0.12, 1.12, 0.4], 0.014, chrome)); const gp = k.add(cyl(0.021, 0.021, 0.11, 6), black, sx * 0.32, 1.12, 0.38); gp.rotation.z = Math.PI / 2; fork.push(gp); }
+    fork.push(...mirrors(k, [-0.26, 0.26], 1.18, 0.38, chrome));
+    const spd = k.add(cyl(0.04, 0.04, 0.03, 10), chrome, 0, 1.06, 0.5); spd.rotation.x = 0.6; fork.push(spd);
+    for (const sx of [-1, 1]) k.add(sph(0.026, 6, 4), amberMat, sx * 0.14, 0.78, ZR - 0.3);
+    k.lamp(0.1, 0.06, 0, 0.82, ZR - 0.32);
+    plate(k, ZR - 0.33, 0.66, false);
+    forkPivot(k, 1.0, 0.5, 0.48, fork);
+    riders(k, 0.98, -0.28, jawa ? -0.66 : -0.68, 0.55, 0.3);
+    const L = ZF - ZR + 2 * R + 0.12;
+    return two(k, Math.round(L * 100) / 100, jawa ? 'classic2' : 'classic', jawa ? 'classic2' : 'classic', [0, 0.98, -0.28, 'bike']);
+  }
+  const classic = () => retro(false), classic2 = () => retro(true);
+
+  // ---------------------------------------------------------------- naked sport (Duke-style: trellis frame, angular shrouds, 2.0 x 0.84 x 1.1)
+  function sport() {
+    const k = kit(), black = M(0x141414);
+    const [main, accent] = [[0xf0640a, 0xf5f5f5], [0xf0640a, 0x141414], [0xf5f5f5, 0xf0640a], [0x1c1c1c, 0xf0640a]][Math.random() * 4 | 0];
+    const body = paint(main), acc = paint(accent), frameM = paint(0xf0640a), steel = M(0x8c9196);
+    const fw = k.wheel(0.3, 0.11, 0.001, 0.3, 0.7, { low: true, spokes: 3, rim: frameM }); fw.userData.front = true;
+    k.wheel(0.31, 0.16, 0.001, 0.31, -0.66, { low: true, spokes: 3, rim: frameM });
+    // brake discs
+    for (const sx of [-1, 1]) { const d = k.add(cyl(0.15, 0.15, 0.008, 16), steel, sx * 0.07, 0.3, 0.7); d.rotation.z = Math.PI / 2; fw.attach(d); }
+    // trellis frame
+    for (const sx of [-1, 1]) {
+      tube(k, [sx * 0.05, 1.0, 0.46], [sx * 0.13, 0.52, -0.18], 0.017, frameM);
+      tube(k, [sx * 0.05, 0.9, 0.5], [sx * 0.13, 0.7, 0.05], 0.017, frameM);
+      tube(k, [sx * 0.13, 0.7, 0.05], [sx * 0.13, 0.85, -0.25], 0.017, frameM);
+      tube(k, [sx * 0.13, 0.52, -0.18], [sx * 0.13, 0.85, -0.25], 0.017, frameM);
+      tube(k, [sx * 0.13, 0.85, -0.25], [sx * 0.09, 0.95, -0.75], 0.014, frameM);
+      tube(k, [sx * 0.1, 0.5, -0.18], [sx * 0.1, 0.31, -0.66], 0.03, steel);               // swingarm
+      k.add(cyl(0.012, 0.012, 0.14, 5), steel, sx * 0.18, 0.5, -0.22).rotation.z = Math.PI / 2;
+    }
+    tube(k, [0, 0.55, -0.15], [0, 0.85, -0.3], 0.03, frameM);                                 // mono shock spring
+    // engine, radiator, belly exhaust with a short end can
+    k.add(rbox(0.26, 0.32, 0.38, 0.06), black, 0, 0.5, 0.06);
+    k.add(rbox(0.22, 0.14, 0.16, 0.04), M(0x2a2a2a), 0, 0.72, 0.12);
+    const rad = k.add(rbox(0.34, 0.26, 0.05, 0.02), black, 0, 0.66, 0.34); rad.rotation.x = -0.25;
+    k.add(rbox(0.16, 0.1, 0.42, 0.04), M(0x3a3a3a), 0.02, 0.26, -0.1);
+    const can = k.add(cyl(0.06, 0.06, 0.24, 10), M(0x3a3a3a), 0.12, 0.3, -0.38); can.rotation.x = Math.PI / 2;
+    // angular tank + shrouds, split seat, sharp tail with tail-tidy
+    k.add(sideGeo('spTank', s => { s.moveTo(0.4, 0.84); s.lineTo(0.5, 0.98); s.lineTo(0.3, 1.1); s.lineTo(-0.02, 1.07); s.lineTo(-0.14, 0.95); s.lineTo(0.04, 0.82); }, 0.36, 0.05), body);
+    for (const sx of [-1, 1]) {
+      k.add(sideGeo('spShroud', s => { s.moveTo(0.52, 0.92); s.lineTo(0.62, 0.86); s.lineTo(0.42, 0.66); s.lineTo(0.2, 0.74); s.lineTo(0.3, 0.92); }, 0.03, 0.008), acc).position.x = sx * 0.2;
+      k.add(sideShape('spDecal', [[0.36, 0.95], [0.46, 0.97], [0.18, 1.05], [0.1, 1.02]]), acc, sx * 0.181, 0, 0);
+    }
+    k.add(sideGeo('spSeat', s => { s.moveTo(-0.12, 0.94); s.lineTo(-0.5, 0.97); s.lineTo(-0.56, 1.05); s.lineTo(-0.86, 1.09); s.lineTo(-0.88, 1.04); s.lineTo(-0.52, 0.92); s.lineTo(-0.12, 0.88); }, 0.26, 0.03), black);
+    k.add(sideGeo('spTail', s => { s.moveTo(-0.4, 0.86); s.lineTo(-0.98, 1.06); s.lineTo(-0.95, 1.0); s.lineTo(-0.5, 0.78); }, 0.22, 0.02), body);
+    tube(k, [0, 0.9, -0.85], [0, 0.66, -1.0], 0.025, black);
+    k.add(rbox(0.3, 0.03, 0.08, 0.01), black, 0, 0.66, -1.0);
+    k.lamp(0.12, 0.04, 0, 1.03, -0.975);
+    for (const sx of [-1, 1]) k.add(rbox(0.05, 0.02, 0.02, 0.005), amberMat, sx * 0.12, 0.7, -1.0);
+    plate(k, -1.03, 0.56, false);
+    // front: USD fork, flat bar, compact angular headlamp mask, short fender
+    const fork = [fw, guard(k, 0.3, 0.7, body, 0.28, 0.12, 0.9)];
+    for (const sx of [-1, 1]) { fork.push(tube(k, [sx * 0.085, 0.3, 0.7], [sx * 0.085, 0.72, 0.56], 0.03, M(0x2a2a2a))); fork.push(tube(k, [sx * 0.085, 0.72, 0.56], [sx * 0.085, 1.02, 0.46], 0.038, gold2)); }
+    fork.push(tube(k, [-0.38, 1.13, 0.4], [0.38, 1.13, 0.4], 0.014, black));
+    for (const sx of [-1, 1]) { const gp = k.add(cyl(0.022, 0.022, 0.12, 6), black, sx * 0.34, 1.13, 0.4); gp.rotation.z = Math.PI / 2; fork.push(gp); }
+    const mask = k.add(sideGeo('spMask', s => { s.moveTo(0.52, 0.8); s.lineTo(0.66, 0.9); s.lineTo(0.62, 1.04); s.lineTo(0.5, 1.07); s.lineTo(0.48, 0.86); }, 0.22, 0.03), black); fork.push(mask);
+    const hlm = k.lamp(0.14, 0.11, 0, 0.94, 0.665, true); hlm.rotation.x = -0.4; hlm.lens.rotation.x = -0.4; fork.push(...lampParts(hlm));
+    fork.push(...mirrors(k, [-0.28, 0.28], 1.2, 0.4, black));
+    for (const sx of [-1, 1]) fork.push(k.add(rbox(0.05, 0.02, 0.02, 0.005), amberMat, sx * 0.12, 0.98, 0.62));
+    const dash = k.add(rbox(0.14, 0.09, 0.03, 0.01), black, 0, 1.12, 0.5); dash.rotation.x = -0.6; fork.push(dash);
+    forkPivot(k, 1.02, 0.46, 0.42, fork);
+    riders(k, 1.0, -0.32, -0.72, 0.8, 0.2);
+    return two(k, 2.05, 'sport', 'sport', [0, 1.0, -0.32, 'bike']);
+  }
+  const gold2 = paint(0xd4a017);
+
+  // ---------------------------------------------------------------- mountain bicycle (hardtail, 27.5", 1.75 x 0.66 x 1.1)
+  function cycle() {
+    const k = kit(), frameM = paint([0xd32f2f, 0x1976d2, 0x111111, 0x2e7d32, 0xf9a825, 0xeceff1][Math.random() * 6 | 0]), black = M(0x161616), alloy = M(0x9ea3a8);
+    const R = 0.35, ZF = 0.56, ZR = -0.52;
+    const fw = k.wheel(R, 0.055, 0.001, R, ZF, { low: true, spokes: 12, rim: M(0x2a2a2a), thin: true, spokeMat: alloy }); fw.userData.front = true;
+    const rw = k.wheel(R, 0.055, 0.001, R, ZR, { low: true, spokes: 12, rim: M(0x2a2a2a), thin: true, spokeMat: alloy });
+    for (const w of [fw, rw]) { const hub = k.add(cyl(0.025, 0.025, 0.1, 8), alloy, 0, 0, 0, w); hub.rotation.z = Math.PI / 2; }
+    const d = k.add(cyl(0.08, 0.08, 0.005, 12), alloy, 0.04, 0, 0, fw); d.rotation.z = Math.PI / 2;          // disc rotors
+    const d2 = k.add(cyl(0.08, 0.08, 0.005, 12), alloy, 0.04, 0, 0, rw); d2.rotation.z = Math.PI / 2;
+    const BB = [0, 0.3, 0.0], HT = [0, 0.92, 0.38], HB = [0, 0.78, 0.43], ST = [0, 0.86, -0.14];
+    tube(k, HT, ST, 0.022, frameM); tube(k, HB, BB, 0.026, frameM); tube(k, BB, ST, 0.02, frameM); tube(k, HB, HT, 0.03, frameM);
+    for (const sx of [-1, 1]) { tube(k, [sx * 0.02, 0.3, 0], [sx * 0.06, R, ZR], 0.012, frameM); tube(k, [sx * 0.015, 0.85, -0.13], [sx * 0.06, R, ZR], 0.011, frameM); }
+    tube(k, ST, [0, 1.04, -0.21], 0.014, alloy);                                                     // seat post
+    k.add(sideGeo('cySaddle', s => { s.moveTo(-0.08, 1.04); s.quadraticCurveTo(-0.12, 1.08, -0.2, 1.08); s.lineTo(-0.32, 1.07); s.quadraticCurveTo(-0.34, 1.03, -0.3, 1.02); s.lineTo(-0.08, 1.02); }, 0.13, 0.025), black);
+    // drivetrain: chainring, cranks, pedals, chain, rear cassette
+    const ring = k.add(tor(0.09, 0.012, 4, 18), black, 0.06, 0.3, 0); ring.rotation.y = Math.PI / 2;
+    for (const sx of [-1, 1]) { tube(k, [sx * 0.07, 0.3, 0], [sx * 0.08, 0.3 - sx * 0.16, sx * 0.04], 0.012, alloy); k.add(rbox(0.09, 0.02, 0.07, 0.008), black, sx * 0.13, 0.3 - sx * 0.16, sx * 0.04); }
+    tube(k, [0.06, 0.39, 0], [0.06, R + 0.05, ZR], 0.006, M(0x3a3a3a)); tube(k, [0.06, 0.21, 0], [0.06, R - 0.05, ZR], 0.006, M(0x3a3a3a));
+    const cas = k.add(cyl(0.05, 0.05, 0.03, 10), alloy, 0.05, 0, 0, rw); cas.rotation.z = Math.PI / 2;
+    k.lamp(0.05, 0.03, 0, 0.82, -0.2);                                                              // rear reflector
+    // front: suspension fork, stem, riser bar, grips
+    const fork = [fw];
+    for (const sx of [-1, 1]) { fork.push(tube(k, [sx * 0.055, R, ZF], [sx * 0.055, 0.6, 0.5], 0.016, black)); fork.push(tube(k, [sx * 0.055, 0.6, 0.5], [sx * 0.05, 0.78, 0.44], 0.022, alloy)); }
+    fork.push(k.add(rbox(0.15, 0.04, 0.06, 0.015), black, 0, 0.78, 0.44));
+    fork.push(tube(k, [0, 0.92, 0.38], [0, 0.98, 0.43], 0.016, black));
+    fork.push(tube(k, [-0.34, 1.0, 0.42], [0.34, 1.0, 0.42], 0.011, black));
+    for (const sx of [-1, 1]) { const gp = k.add(cyl(0.018, 0.018, 0.1, 6), black, sx * 0.3, 1.0, 0.42); gp.rotation.z = Math.PI / 2; fork.push(gp); }
+    forkPivot(k, 0.92, 0.38, 0.3, fork);
+    riders(k, 1.02, -0.22, null, 0.15, 0);
+    return two(k, 1.8, 'cycle', 'cycle', [0, 1.02, -0.22, 'bike']);
+  }
+
+  // Traffic 'bike' is a mix of the motorbike types (kind stays 'bike' so existing PARAMS / SEATS keep working);
+  // bike('scooter') etc. builds one specific type. Pedal cycles are never mixed in (too slow for bike traffic).
+  const TWO = { splendor, scooter, classic, classic2, sport, cycle };
+  const BIKE_MIX = ['splendor', 'splendor', 'splendor', 'scooter', 'scooter', 'scooter', 'classic', 'classic2', 'sport'];
+  function bike(type) {
+    const t = TWO[type] ? type : BIKE_MIX[Math.random() * BIKE_MIX.length | 0];
+    const v = TWO[t](); v.kind = 'bike'; return v;
   }
 
   // shared car body builder: lower body with arches, cabin, window glass, bumpers
@@ -306,6 +562,44 @@ const TrafficModels = (function () {
     k.add(rbox(1.5, 0.08, 2.4, 0.03), M(0x2a2a2a), 0, 0.72, -0.5);
     person(k, 0.38, 0.86, -0.2, { outfit: Math.random() < 0.6 ? 'shirt' : 'lungi', color: 0xffffff }, 'car');
     return { g: k.g, wheels: k.wheels, head: k.head, tail: k.tail, len: 4.1, kind: 'car' };
+  }
+
+  // ---------------------------------------------------------------- MPV (Innova-style people mover, 4.73 x 1.83 x 1.80)
+  function mpv() {
+    const k = kit(), p = paint([0xf2f2f0, 0xb8bcc0, 0x3c3f44, 0x6b1f1f, 0x8a7a5e][Math.random() * 5 | 0]);
+    const W = 1.83, A = 0.4, FW = 1.45, RW = -1.3, AY = 0.35;
+    carShell(k, {
+      key: 'mpv', W, arch: A, archY: AY, wheelsZ: [FW, RW], pillars: [0.32, -0.62, -1.62], handles: [0.5, -0.4], handleY: 1.02, roofY: 1.76,
+      low: s => {
+        s.moveTo(-2.3, 0.32); s.lineTo(RW - A, 0.32); s.lineTo(RW - A, AY); s.absarc(RW, AY, A, Math.PI, 0, true); s.lineTo(FW - A, 0.32);
+        s.lineTo(FW - A, AY); s.absarc(FW, AY, A, Math.PI, 0, true); s.lineTo(2.3, 0.32);
+        s.quadraticCurveTo(2.38, 0.38, 2.37, 0.6); s.lineTo(2.33, 0.84); s.quadraticCurveTo(2.25, 0.98, 2.0, 1.0); s.lineTo(1.2, 1.1); s.lineTo(-2.25, 1.12);
+        s.quadraticCurveTo(-2.36, 1.1, -2.36, 0.95); s.lineTo(-2.36, 0.4); s.quadraticCurveTo(-2.35, 0.32, -2.3, 0.32);
+      },
+      cab: s => { s.moveTo(1.22, 1.08); s.lineTo(0.42, 1.74); s.quadraticCurveTo(0.2, 1.78, -0.2, 1.78); s.lineTo(-2.1, 1.76); s.quadraticCurveTo(-2.3, 1.74, -2.32, 1.5); s.lineTo(-2.34, 1.1); },
+      ws: s => { s.moveTo(1.18, 1.12); s.lineTo(0.44, 1.72); s.lineTo(0.39, 1.71); s.lineTo(1.12, 1.11); },
+      rw: s => { s.moveTo(-2.12, 1.72); s.quadraticCurveTo(-2.29, 1.7, -2.31, 1.48); s.lineTo(-2.33, 1.2); s.lineTo(-2.35, 1.2); s.lineTo(-2.33, 1.5); s.quadraticCurveTo(-2.31, 1.74, -2.12, 1.75); },
+      win: [[1.06, 1.15], [0.4, 1.7], [-2.05, 1.7], [-2.22, 1.18]],
+    }, p);
+    // bumpers, big trapezoid chrome grille, sweptback lamps, roof rails, side cladding
+    k.add(sideGeo('mpvBumpF', s => { s.moveTo(2.1, 0.32); s.lineTo(2.36, 0.33); s.quadraticCurveTo(2.43, 0.42, 2.41, 0.58); s.lineTo(2.1, 0.58); }, W - 0.04, 0.05), M(0x2a2a2a));
+    k.add(sideGeo('mpvBumpR', s => { s.moveTo(-2.1, 0.34); s.lineTo(-2.38, 0.34); s.quadraticCurveTo(-2.43, 0.42, -2.41, 0.6); s.lineTo(-2.1, 0.6); }, W - 0.04, 0.05), M(0x2a2a2a));
+    const gr = k.add(G('mpvGr', () => { const s = new THREE.Shape(); s.moveTo(-0.5, -0.2); s.lineTo(0.5, -0.2); s.lineTo(0.42, 0.18); s.lineTo(-0.42, 0.18); return new THREE.ShapeGeometry(s); }), grilleMat, 0, 0.74, 2.37); gr.rotation.x = -0.15;
+    for (let i = 0; i < 3; i++) k.add(rbox(0.86 - i * 0.06, 0.025, 0.02, 0.01), chrome, 0, 0.64 + i * 0.1, 2.385 - i * 0.012);
+    for (const sx of [-1, 1]) {
+      const h = k.lamp(0.42, 0.14, sx * 0.62, 0.9, 2.28, true); h.rotation.y = sx * 0.4; h.rotation.x = -0.35; h.lens.rotation.copy(h.rotation);
+      const t = k.lamp(0.12, 0.42, sx * 0.84, 1.0, -2.36); t.rotation.y = Math.PI - sx * 0.25; t.lens.rotation.copy(t.rotation);
+      k.add(rbox(0.03, 0.1, 3.0, 0.02), plastic, sx * (W / 2 + 0.01), 0.45, 0.05);
+      k.add(cyl(0.02, 0.02, 2.4, 5), M(0x2a2a2a), sx * 0.7, 1.83, -0.8).rotation.x = Math.PI / 2;
+      for (const z of [0.3, -0.8, -1.9]) k.add(cyl(0.02, 0.02, 0.07, 5), M(0x2a2a2a), sx * 0.7, 1.8, z);
+    }
+    k.add(sph(0.05, 8, 6), badgeMat, 0, 0.76, 2.39).scale.z = 0.3;
+    mirrors(k, [-0.93, 0.93], 1.15, 0.95, p);
+    for (const [x, z] of [[-0.79, FW], [0.79, FW], [-0.79, RW], [0.79, RW]]) k.wheel(0.34, 0.21, x, 0.34, z, { low: true, spokes: 3 });
+    plate(k, 2.42, 0.48, true); plate(k, -2.42, 0.68, false);
+    k.add(rbox(1.5, 0.08, 3.4, 0.03), M(0x2a2a2a), 0, 0.62, -0.4);
+    person(k, 0.4, 0.8, 0.0, { outfit: 'shirt', color: 0xffffff }, 'car');
+    return { g: k.g, wheels: k.wheels, head: k.head, tail: k.tail, len: 4.75, kind: 'car', seat: [0.4, 0.8, 0.0, 'car'] };
   }
 
   // tractor rear tyre: plain lathe carcass + chevron lugs (instanced so the whole tyre is 2 draw calls)
@@ -492,7 +786,7 @@ const TrafficModels = (function () {
     return b;
   }
   function cartWheel(k, x, y, z) {
-    const wg = new THREE.Group(); wg.position.set(x, y, z); k.g.add(wg); k.wheels.push(wg);
+    const wg = new THREE.Group(); wg.position.set(x, y, z); wg.userData.radius = 0.77; k.g.add(wg); k.wheels.push(wg);
     const wood = M(0x6b4a2c);
     const rim = k.add(tor(0.72, 0.05, 4, 16), wood, 0, 0, 0, wg); rim.rotation.y = Math.PI / 2; rim.scale.z = 1.6;
     k.add(tor(0.77, 0.012, 3, 16), M(0x3a3a3a), 0, 0, 0, wg).rotation.y = Math.PI / 2;            // iron tyre
@@ -514,7 +808,7 @@ const TrafficModels = (function () {
     cartWheel(k, -0.88, 0.78, -0.6); cartWheel(k, 0.88, 0.78, -0.6);
     for (const sx of [-1, 1]) k.lamp(0.1, 0.06, sx * 0.7, 1.0, -1.7);
     person(k, 0, 1.1, 0.45, { outfit: 'lungi', color: 0xffffff }, 'bench');
-    return { g: k.g, wheels: k.wheels, head: k.head, tail: k.tail, len: 4.5, kind: 'cart' };
+    return { g: k.g, wheels: k.wheels, head: k.head, tail: k.tail, len: 4.5, kind: 'cart', noSteer: true };
   }
   // ---------------------------------------------------------------- performance: merge static parts
   // A vehicle is built from ~100 small meshes; 52 of them were 5,000+ draw calls (twice, with the shadow pass).
@@ -556,14 +850,56 @@ const TrafficModels = (function () {
       b.geos.forEach(g => g.dispose());
     }
   }
+  // userData contract (see the header): steering pivots, wheel list, true bounding box
+  const _box = new THREE.Box3(), _tb = new THREE.Box3(), _sz = new THREE.Vector3(), _c = new THREE.Vector3();
+  function finalize(v) {
+    const ud = v.userData = v.userData || {};
+    let steer = v.steer || [];
+    // 3+ wheeled vehicles: wrap each wheel on the front axle in a vertical steering pivot
+    if (!steer.length && !v.noSteer && v.wheels.length >= 3) {
+      const zmax = Math.max(...v.wheels.map(w => w.position.z));
+      for (const w of v.wheels) if (w.parent === v.g && w.position.z > zmax - 0.05) {
+        const p = new THREE.Group(); p.name = 'steer'; p.position.copy(w.position); v.g.add(p);
+        w.position.set(0, 0, 0); p.add(w); w.userData.front = true; steer.push(p);
+      }
+    }
+    v.steer = steer;
+    v.wheels.forEach((w, i) => { if (!w.name || w.name === 'wheel') w.name = 'wheel_' + i + (w.userData.front ? '_front' : ''); });
+    steer.forEach((p, i) => { p.name = (p.name || 'steer') + '_' + i; });
+    // bounding box of the vehicle itself (people excluded), in the vehicle's local frame (v.g is at identity here)
+    v.g.updateMatrixWorld(true); _box.makeEmpty();
+    v.g.traverse(o => {
+      if (!o.isMesh || o.isInstancedMesh) return;
+      for (let q = o; q; q = q.parent) if (q.userData && q.userData.human) return;
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      _tb.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld); _box.union(_tb);
+    });
+    _box.getSize(_sz); _box.getCenter(_c);
+    const r2 = n => Math.round(n * 100) / 100;
+    ud.dims = { length: r2(_sz.z), width: r2(_sz.x), height: r2(_sz.y) };
+    ud.center = { x: r2(_c.x), y: r2(_c.y), z: r2(_c.z) };
+    ud.wheels = v.wheels.map(w => ({ mesh: w, radius: w.userData.radius || 0.4, front: !!w.userData.front }));
+    ud.steer = steer;
+    ud.fork = v.twoWheeler ? steer[0] || null : null;
+    ud.type = v.type || v.kind;
+    ud.twoWheeler = !!v.twoWheeler;
+    if (v.seat) ud.seat = v.seat;
+    // plain-number copy on the group survives Object3D.clone()
+    v.g.userData.dims = Object.assign({}, ud.dims); v.g.userData.center = Object.assign({}, ud.center); v.g.userData.type = ud.type;
+    return v;
+  }
   function bake(v) {
+    finalize(v);
     const lamps = new Set([...(v.head || []), ...(v.tail || [])]);
-    mergeUnder(v.g, new Set([...(v.wheels || []), ...lamps]));          // body: everything static
+    const forks = (v.steer || []).filter(p => p.name.startsWith('fork'));
+    mergeUnder(v.g, new Set([...(v.wheels || []), ...lamps, ...forks]));  // body: everything static
+    for (const f of forks) mergeUnder(f, new Set([...(v.wheels || []), ...lamps]));   // bike fork/bars turn as one piece
     for (const w of v.wheels || []) mergeUnder(w, lamps);               // each wheel spins as one piece
     // seated people are small: no shadows from them (their joints stay intact for carjacking)
     v.g.children.forEach(c => { if (c.userData && c.userData.human) c.traverse(o => { if (o.isMesh) o.castShadow = false; }); });
     return v;
   }
-  const baked = f => (...args) => bake(f(...args));
-  return { auto: baked(auto), bike: baked(bike), hatch: baked(hatch), suv: baked(suv), tractor: baked(tractor), lorry: baked(lorry), bus: baked(bus), bullockCart: baked(bullockCart), bake };
+  const baked = f => (...args) => { const v = f(...args); if (!v.type) v.type = f.name; return bake(v); };
+  return { auto: baked(auto), bike: baked(bike), splendor: baked(splendor), scooter: baked(scooter), classic: baked(classic), classic2: baked(classic2),
+    sport: baked(sport), cycle: baked(cycle), mpv: baked(mpv), TWO_WHEELERS: ['bike', 'splendor', 'scooter', 'classic', 'classic2', 'sport', 'cycle'], hatch: baked(hatch), suv: baked(suv), tractor: baked(tractor), lorry: baked(lorry), bus: baked(bus), bullockCart: baked(bullockCart), bake };
 })();

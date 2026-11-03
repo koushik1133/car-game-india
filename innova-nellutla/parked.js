@@ -5,9 +5,14 @@
 // Exposes window.Parked = { lots: [{ name, x, z, rot, bays: [{ x, z, rot, taken }] }], vehicles, count }.
 const Parked = (function () {
   const api = { lots: [], vehicles: [], count: 0 };
-  const KINDS = ['bike', 'hatch', 'suv', 'auto', 'tractor', 'lorry', 'bus', 'bullockCart'];
-  const VARIANTS = { bike: 5, hatch: 5, suv: 4, auto: 3, tractor: 2, lorry: 2, bus: 1, bullockCart: 1 };
-  const HW = { bike: 0.45, auto: 0.75, hatch: 0.85, suv: 0.95, tractor: 1.0, lorry: 1.2, bus: 1.3, bullockCart: 0.9 };
+  // Variant kinds (it.vk) pick the TrafficModels builder; the kind handed to player.js (it.kind / t.model) is what its
+  // PARAMS / SEATS know: every two-wheeler drives as 'bike', the Innova-style MPV as 'suv'.
+  const KINDS = ['bike', 'scooter', 'classic', 'classic2', 'sport', 'cycle', 'hatch', 'suv', 'mpv', 'auto', 'tractor', 'lorry', 'bus', 'bullockCart'];
+  const VARIANTS = { bike: 3, scooter: 3, classic: 2, classic2: 2, sport: 2, cycle: 2, hatch: 5, suv: 4, mpv: 1, auto: 3, tractor: 2, lorry: 2, bus: 1, bullockCart: 1 };
+  const HW = { bike: 0.45, scooter: 0.42, classic: 0.45, classic2: 0.45, sport: 0.45, cycle: 0.38, auto: 0.75, hatch: 0.85, suv: 0.95, mpv: 0.95, tractor: 1.0, lorry: 1.2, bus: 1.3, bullockCart: 0.9 };
+  const PLAYER_KIND = { scooter: 'bike', classic: 'bike', classic2: 'bike', sport: 'bike', cycle: 'bike', mpv: 'suv' };
+  const pk = vk => PLAYER_KIND[vk] || vk;
+  const HOME_BIKES = ['bike', 'bike', 'bike', 'scooter', 'scooter', 'scooter', 'classic', 'classic2', 'sport', 'cycle', 'cycle'];
   const NEAR = 130, FAR = 520;         // full detail inside NEAR, box proxy inside FAR, nothing beyond
 
   // seeded random so the village looks the same every load
@@ -66,7 +71,10 @@ const Parked = (function () {
     t.g.traverse(o => src.push(o)); g2.traverse(o => dst.push(o));
     dst.forEach(o => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(m => m.clone()) : o.material.clone(); });
     const map = o => dst[src.indexOf(o)];
-    return { g: g2, wheels: t.wheels.map(map), head: t.head.map(map), tail: t.tail.map(map), len: t.len, kind: t.kind };
+    const ud = t.userData || {}, steer = (t.steer || []).map(map);
+    const userData = Object.assign({}, ud, { wheels: (ud.wheels || []).map(w => ({ mesh: map(w.mesh), radius: w.radius, front: w.front })),
+      steer, fork: ud.fork ? map(ud.fork) : null, dims: ud.dims && { ...ud.dims }, center: ud.center && { ...ud.center } });
+    return { g: g2, wheels: t.wheels.map(map), head: t.head.map(map), tail: t.tail.map(map), steer, len: t.len, kind: t.kind, type: t.type, seat: t.seat, userData };
   }
 
   // ---------------------------------------------------------------- state
@@ -94,7 +102,7 @@ const Parked = (function () {
     opts = opts || {};
     const vi = opts.vi != null ? opts.vi : Math.floor(rnd() * variants[kind].length);
     const tpl = variants[kind][vi].tpl, hl = tpl.len / 2, hw = HW[kind];
-    const it = { kind, vi, x, z, rot, hw, hl, handle: world.addCollider ? world.addCollider(x, z, hw, hl, rot) : null, where: opts.where || 'road' };
+    const it = { kind: pk(kind), vk: kind, vi, x, z, rot, hw, hl, handle: world.addCollider ? world.addCollider(x, z, hw, hl, rot) : null, where: opts.where || 'road' };
     items.push(it); occupied.push([x, z, Math.max(hw, hl) * 0.9]);
     return it;
   }
@@ -121,7 +129,7 @@ const Parked = (function () {
       const wantCar = area > 120 && cars < maxCars && rnd() < 0.55;
       if (!wantCar && bikes >= maxBikes) continue;
       if (!wantCar && rnd() < 0.35) continue;              // not every house has a bike out front
-      const kind = wantCar ? (rnd() < 0.45 ? 'suv' : 'hatch') : 'bike';
+      const kind = wantCar ? (rnd() < 0.45 ? 'suv' : 'hatch') : pick(HOME_BIKES);
       const along = nr.ang, side = (rnd() - 0.5) * 3;
       let done = false;
       for (const gap of wantCar ? [1.6, 2.2, 2.8] : [0.9, 1.3, 1.8]) {
@@ -162,6 +170,32 @@ const Parked = (function () {
       if (tryPlace(kind, px, pz, rot, { where })) return true;
     }
     return false;
+  }
+
+  // ---------------------------------------------------------------- safe house: an Innova-style MPV and one of each bike
+  // Just outside the safe-house gate, on free ground (never on the road, inside walls/buildings, or within 3.5 m of
+  // the gate so the gate stays clear). Candidates must be farther from the house than the gate is (outside the
+  // compound) and are tried on rings of growing radius around the gate; orientation follows the nearest road.
+  const SAFE = { hx: 38.9, hz: -264.8, gx: 51.49, gz: -275.56 };
+  function safeHouseParking() {
+    const gateR = Math.hypot(SAFE.gx - SAFE.hx, SAFE.gz - SAFE.hz);
+    const want = ['mpv', 'scooter', 'classic', 'classic2', 'sport', 'cycle', 'bike'];
+    const placed = [];
+    for (const kind of want) {
+      const car = kind === 'mpv';
+      let ok = null;
+      for (let r = car ? 5 : 4; r < 26 && !ok; r += 0.75) for (let a = 0; a < 24 && !ok; a++) {
+        const an = a / 24 * Math.PI * 2, x = SAFE.gx + Math.sin(an) * r, z = SAFE.gz + Math.cos(an) * r;
+        if (Math.hypot(x - SAFE.hx, z - SAFE.hz) < gateR + 1.5) continue;
+        if (Math.hypot(x - SAFE.gx, z - SAFE.gz) < 3.5 + (car ? 2.4 : 1)) continue;
+        const nr = world.nearestRoad(x, z);
+        if (nr && nr.d < nr.r.w / 2 + HW[kind] + 0.4) continue;
+        const rot = nr ? (car ? nr.ang + (a % 2 ? 0 : Math.PI) : nr.ang + Math.PI / 2 + (a % 2 ? 0 : Math.PI) + 0.25) : an;
+        ok = tryPlace(kind, x, z, rot, { where: 'safehouse', vi: 0 });
+      }
+      if (ok) placed.push(kind + '@' + ok.x.toFixed(1) + ',' + ok.z.toFixed(1)); else console.warn('parked.js: no room by the safe house for', kind);
+    }
+    api.safeHouse = placed;
   }
 
   // ---------------------------------------------------------------- parking lots
@@ -328,7 +362,7 @@ const Parked = (function () {
   function buildMeshes() {
     const mat = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 50, specular: 0x333333, side: THREE.DoubleSide });
     for (const k of KINDS) for (const vr of variants[k]) {
-      const n = items.filter(it => it.kind === k && variants[k][it.vi] === vr).length;
+      const n = items.filter(it => it.vk === k && variants[k][it.vi] === vr).length;
       vr.im = new THREE.InstancedMesh(vr.geo, mat, Math.max(1, n)); vr.im.count = 0; vr.im.castShadow = true; vr.im.receiveShadow = true;
       vr.im.frustumCulled = false; vr.im.name = 'parked-' + k; scene.add(vr.im);
     }
@@ -337,7 +371,7 @@ const Parked = (function () {
     proxyIM.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, items.length) * 3), 3);
     proxyIM.count = 0; proxyIM.frustumCulled = false; proxyIM.name = 'parked-far'; scene.add(proxyIM);
   }
-  const PROXY_H = { bike: 1.1, auto: 1.75, hatch: 1.45, suv: 1.75, tractor: 2.2, lorry: 3.2, bus: 3.1, bullockCart: 1.8 };
+  const PROXY_H = { bike: 1.1, scooter: 1.1, classic: 1.15, classic2: 1.1, sport: 1.15, cycle: 1.05, mpv: 1.8, auto: 1.75, hatch: 1.45, suv: 1.75, tractor: 2.2, lorry: 3.2, bus: 3.1, bullockCart: 1.8 };
   function refreshInstances() {
     const cam = game.camera.position;
     for (const k of KINDS) for (const vr of variants[k]) vr.im.count = 0;
@@ -347,11 +381,11 @@ const Parked = (function () {
       const d = Math.hypot(it.x - cam.x, it.z - cam.z);
       if (d > FAR) continue;
       q.setFromAxisAngle(yAxis, it.rot);
-      const vr = variants[it.kind][it.vi];
+      const vr = variants[it.vk][it.vi];
       if (d < NEAR) { m4.compose(v3.set(it.x, 0, it.z), q, sc.set(1, 1, 1)); vr.im.setMatrixAt(vr.im.count++, m4); }
       else {
         const i = proxyIM.count++;
-        m4.compose(v3.set(it.x, 0.08, it.z), q, sc.set(it.hw * 1.9, PROXY_H[it.kind], it.hl * 1.9)); proxyIM.setMatrixAt(i, m4);
+        m4.compose(v3.set(it.x, 0.08, it.z), q, sc.set(it.hw * 1.9, PROXY_H[it.vk], it.hl * 1.9)); proxyIM.setMatrixAt(i, m4);
         proxyIM.setColorAt(i, vr.proxy);
       }
     }
@@ -371,9 +405,9 @@ const Parked = (function () {
     for (const it of items) { if (it.claimed) continue; if (Math.abs(it.x - p.x) > 12 || Math.abs(it.z - p.z) > 12) continue;
       const d = axisDist(p.x, p.z, it); if (d < 3 && (!best || d < best.d)) best = { it, d }; }
     if (!best) return;
-    const it = best.it, model = cloneModel(variants[it.kind][it.vi].tpl);
+    const it = best.it, model = cloneModel(variants[it.vk][it.vi].tpl);
     model.g.position.set(it.x, 0, it.z); model.g.rotation.y = it.rot; scene.add(model.g);
-    const t = { ...model, model: it.kind, parked: true, len2: model.len / 2, r: null, speed: 0, cur: 0, s: 0, dir: 1, len: 0, hw: it.hw, wheelR: 0.4 };
+    const t = { ...model, model: it.kind, type: it.vk, parked: true, len2: model.len / 2, r: null, speed: 0, cur: 0, s: 0, dir: 1, len: 0, hw: it.hw, wheelR: 0.4 };
     g.traffic.push(t);
     it.claimed = true; refreshInstances();
     // player.js runs right after this hook in the same keydown; if it took something else, undo
@@ -395,7 +429,7 @@ const Parked = (function () {
     for (const k of KINDS) {
       variants[k] = [];
       for (let i = 0; i < VARIANTS[k]; i++) {
-        const tpl = TrafficModels[k](); stripPeople(tpl.g);
+        const tpl = k === 'bike' ? TrafficModels.bike('splendor') : TrafficModels[k](); stripPeople(tpl.g);
         tpl.head.forEach(m => m.material.color && m.material.color.setHex(0x8a8a80));
         const b = bake(tpl.g); variants[k].push({ tpl, geo: b.geo, proxy: b.proxy });
       }
@@ -442,7 +476,8 @@ const Parked = (function () {
       if (tractors < 8) tractors += lineUp('tractor', p[0], p[1], 1, 8, rr => rr === r, 'field');
       else carts += lineUp('bullockCart', p[0], p[1], 1, 6, rr => rr === r, 'field');
     }
-    // homes: bikes at doors and gates, cars at the bigger houses
+    safeHouseParking();
+    // homes: bikes at doors and gates, cars at the bigger houses (all two-wheeler types mixed in)
     const target = 200 - items.length;
     placeAtHomes(Math.round(target * 0.74), Math.round(target * 0.26));
     api.count = items.length;

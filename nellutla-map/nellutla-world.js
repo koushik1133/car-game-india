@@ -1215,6 +1215,47 @@
     // quick lookups used while placing buildings and trees
     const roadSegs = [];
     for (const r of D.roads) for (let i = 0; i < r.p.length - 1; i++) roadSegs.push([r.p[i], r.p[i+1], r.t, r.w]);
+    // keep the carriageway clear: nearest road edge, push-off for props/poles, plus open areas other modules declare
+    // (window.NELLUTLA_CLEAR: [{x, z, r}] e.g. the earth plaza in streetscape.js)
+    const CLEAR = (typeof window !== 'undefined' && Array.isArray(window.NELLUTLA_CLEAR)) ? window.NELLUTLA_CLEAR.filter(e => e && isFinite(e.x) && isFinite(e.z) && isFinite(e.r)) : [];
+    function roadHit(x, z, pad) {           // deepest road (or clear zone) the point stands in: {dx, dz, need} push vector, or null
+      let best = null;
+      for (const [a, c, t, w] of roadSegs) {
+        if (t === 'river') continue;
+        if (Math.abs(a[0] - x) > 60 && Math.abs(c[0] - x) > 60) continue;
+        const dx = c[0]-a[0], dz = c[1]-a[1], L2 = dx*dx + dz*dz || 1, tt = Math.max(0, Math.min(1, ((x-a[0])*dx + (z-a[1])*dz) / L2));
+        const px = x - a[0] - tt*dx, pz = z - a[1] - tt*dz, d = Math.hypot(px, pz), need = w / 2 + pad - d;
+        if (need > 0 && (!best || need > best.need)) {
+          const L = Math.sqrt(L2), nx = d > 1e-3 ? px / d : -dz / L, nz = d > 1e-3 ? pz / d : dx / L;
+          best = { nx, nz, need };
+        }
+      }
+      for (const e of CLEAR) {
+        const px = x - e.x, pz = z - e.z, d = Math.hypot(px, pz), need = e.r + pad - d;
+        if (need > 0 && (!best || need > best.need)) best = { nx: d > 1e-3 ? px / d : 1, nz: d > 1e-3 ? pz / d : 0, need };
+      }
+      return best;
+    }
+    // move a point standing on a road to the nearest edge (+pad); null if it cannot be cleared (squeezed between roads)
+    function pushOffRoad(x, z, pad) {
+      for (let k = 0; k < 6; k++) { const h = roadHit(x, z, pad); if (!h) return [x, z]; x += h.nx * (h.need + 0.05); z += h.nz * (h.need + 0.05); }
+      return roadHit(x, z, pad) ? null : [x, z];
+    }
+    // compound walls never run across a carriageway: cut them, leaving an opening where the road passes
+    {
+      const out = [];
+      for (const w of D.walls) {
+        const L = Math.hypot(w[2]-w[0], w[3]-w[1]); if (L < 0.05) continue;
+        const n = Math.max(1, Math.ceil(L / 0.25)); let run = null;
+        const flush = (t1) => { if (run !== null && (t1 - run) * L > 0.6) out.push([w[0] + (w[2]-w[0]) * run, w[1] + (w[3]-w[1]) * run, w[0] + (w[2]-w[0]) * t1, w[1] + (w[3]-w[1]) * t1]); run = null; };
+        for (let i = 0; i <= n; i++) {
+          const t = i / n, blocked = !!roadHit(w[0] + (w[2]-w[0]) * t, w[1] + (w[3]-w[1]) * t, 0.1);
+          if (blocked) flush(Math.max(0, (i - 1) / n)); else if (run === null) run = t;
+        }
+        flush(1);
+      }
+      D.walls = out;
+    }
     function surfaceAtEarly(x, z) {
       let best = 'field', bd = 1e9;
       for (const [a, c, t, w] of roadSegs) {
@@ -1416,15 +1457,29 @@
       group.add(im);
     }
 
-    // ---------------- compound walls: weathered concrete with algae stains, pillars with caps
-    const cw = new Builder(), cwp = new Builder(), cwCols = ['#e8e4da', '#cfe3cf', '#dcd2c0', '#f0f0f0', '#c9dbe6', '#e9d6c8'];
+    // ---------------- compound walls: real village boundary walls - 23 cm brick/stone core, plastered (most), exposed
+    // brick or dry granite (some), darker plinth band at the foot, projecting concrete coping on top, piers every ~3 m
+    const cw = new Builder(), cwp = new Builder(), cwBrick = new Builder(), cwStone = new Builder(), cwCope = new Builder();
+    const cwCols = ['#e8e4da', '#cfe3cf', '#dcd2c0', '#f0f0f0', '#c9dbe6', '#e9d6c8', '#efe3b8', '#d9cbb0'];
     for (const w of D.walls) {
-      const cc = col.set(cwCols[Math.floor(Math.abs(w[0]*7 + w[1]*3)) % cwCols.length]).clone();
-      wallBox(cw, w[0], w[1], w[2], w[3], 1.45, 0.23, cc, 1.45);
+      const hw = hash(w[0] * 0.13 + w[2] * 0.07, w[1] * 0.11 + w[3] * 0.05);
+      const style = hw < 0.62 ? 'plaster' : hw < 0.84 ? 'brick' : 'stone';
+      const cc = style === 'plaster' ? col.set(cwCols[Math.floor(Math.abs(w[0]*7 + w[1]*3)) % cwCols.length]).clone()
+        : style === 'brick' ? col.setRGB(0.95 + hw * 0.05, 0.88, 0.84).clone() : col.setRGB(0.9, 0.88, 0.86).clone();
+      const H = style === 'stone' ? 1.25 : 1.5 + (hw * 17 % 1) * 0.3, T = style === 'stone' ? 0.42 : 0.25;
+      const body = style === 'plaster' ? cw : style === 'brick' ? cwBrick : cwStone;
+      wallBox(body, w[0], w[1], w[2], w[3], H, T, cc, style === 'stone' ? 1.2 : 1.45);
+      const plinth = cc.clone().multiplyScalar(0.62);                                       // splashed, darker foot
+      if (style !== 'stone') wallBox(style === 'brick' ? cwBrick : cw, w[0], w[1], w[2], w[3], 0.32, T + 0.06, plinth, 1.45);
+      const cope = style === 'plaster' ? cc.clone().multiplyScalar(0.92) : col.setRGB(0.78, 0.77, 0.74).clone();
+      if (style !== 'stone') wallBox(cwCope, w[0], w[1], w[2], w[3], H + 0.08, T + 0.1, cope, 1.45, H);
+      else wallBox(cwCope, w[0], w[1], w[2], w[3], H + 0.1, T + 0.04, col.setRGB(0.62, 0.6, 0.58).clone(), 1.2, H - 0.02); // flat capstones
       const L = Math.hypot(w[2]-w[0], w[3]-w[1]), k = Math.max(1, Math.round(L / 3));
-      for (let i = 0; i <= k; i++) {
-        const x = w[0] + (w[2]-w[0]) * i / k, z = w[1] + (w[3]-w[1]) * i / k, ux = (w[2]-w[0]) / (L || 1) * 0.18, uz = (w[3]-w[1]) / (L || 1) * 0.18;
-        wallBox(cwp, x - ux, z - uz, x + ux, z + uz, 1.7, 0.36, cc, 1.45);
+      if (style !== 'stone') for (let i = 0; i <= k; i++) {
+        const x = w[0] + (w[2]-w[0]) * i / k, z = w[1] + (w[3]-w[1]) * i / k, ux = (w[2]-w[0]) / (L || 1) * 0.2, uz = (w[3]-w[1]) / (L || 1) * 0.2;
+        const end = i === 0 || i === k, ph = H + (end ? 0.3 : 0.18);
+        wallBox(style === 'brick' ? cwBrick : cwp, x - ux, z - uz, x + ux, z + uz, ph, T + 0.16, cc, 1.45);
+        wallBox(cwCope, x - ux * 1.25, z - uz * 1.25, x + ux * 1.25, z + uz * 1.25, ph + 0.07, T + 0.24, cope, 1.45, ph);   // pier cap
       }
       segs.push(w);
     }
@@ -1457,6 +1512,10 @@
     const cwTex = CC0('plaster', 0.7, 0.7, tex(stainedConcrete(256, true)));
     const cwm = cw.mesh(new THREE.MeshLambertMaterial({ map: cwTex, vertexColors: true })); cwm.castShadow = cwm.receiveShadow = true; group.add(cwm);
     const cwpm = cwp.mesh(new THREE.MeshLambertMaterial({ map: cwTex, vertexColors: true })); cwpm.castShadow = true; group.add(cwpm);
+    for (const [B, tx] of [[cwBrick, CC0('brick', 0.8, 0.8, null)], [cwStone, CC0('granite', 0.6, 0.6, null)], [cwCope, CC0('concrete', 1.2, 1.2, null)]]) {
+      if (!B.pos.length) continue;
+      const mm = B.mesh(new THREE.MeshLambertMaterial(tx ? { map: tx, vertexColors: true } : { vertexColors: true })); mm.castShadow = mm.receiveShadow = true; group.add(mm);
+    }
 
 
     // ---------------- village near-detail pass: facade trim, parapets, verandas, greenery, street clutter
@@ -1866,6 +1925,8 @@
     D.trees = D.trees.filter(t => { const f = fieldAt(t[0], t[1]); return !(f && f.c === 6); });
     // dark open water reads as canopy to the tree detector: drop "trees" standing in the tanks
     D.trees = D.trees.filter(t => !D.lakes.some(lk => pointInPoly(t[0], t[1], lk)));
+    // trees never stand on a carriageway: shift onto the verge, drop if there is no room
+    D.trees = D.trees.filter(t => { const p = pushOffRoad(t[0], t[1], 1.2); if (!p) return false; t[0] = p[0]; t[1] = p[1]; return true; });
     // parcels the imagery shows full of tree crowns are wooded, not cropped: no crop rows there
     FI.forEach(f => f.trees = 0);
     for (const t of D.trees) { const f = fieldAt(t[0], t[1]); if (f) f.trees++; }
@@ -2181,7 +2242,8 @@
       const dx = c2[0] - a2[0], dz = c2[1] - a2[1], L2 = dx * dx + dz * dz || 1, tt = Math.max(0, Math.min(1, ((x - a2[0]) * dx + (z - a2[1]) * dz) / L2));
       return Math.hypot(x - a2[0] - tt * dx, z - a2[1] - tt * dz) < w2 / 2 + pad;
     });
-    for (let i = poles.length - 1; i >= 0; i--) if (onCarriageway(poles[i][0], poles[i][1], 0.5)) poles.splice(i, 1);
+    // move such poles to the nearest road edge instead (wires follow, they are strung pole to pole); drop only if squeezed
+    for (let i = poles.length - 1; i >= 0; i--) { const q2 = pushOffRoad(poles[i][0], poles[i][1], 0.7); if (!q2) { poles.splice(i, 1); continue; } poles[i][0] = q2[0]; poles[i][1] = q2[1]; }
     // tapered concrete H-poles; local x is the cross-arm, turned across the road
     const poleIM = new THREE.InstancedMesh(poleGeometry(), new THREE.MeshLambertMaterial({ vertexColors: true }), poles.length);
     poleIM.castShadow = true; poleIM.frustumCulled = false;
@@ -2869,24 +2931,80 @@
       for (const k in M) M[k].instanceMatrix.needsUpdate = true;
     }
 
-    // ---------------- night lighting: sodium street lamps, glowing windows
-    const lampMat = new THREE.MeshBasicMaterial({ color: 0x555555 });
-    const lampG = new THREE.BoxGeometry(0.45, 0.14, 0.25); lampG.translate(0.75, 6.6, 0);
-    const lampIM = new THREE.InstancedMesh(lampG, lampMat, poles.length);
-    poles.forEach((p, i) => lampIM.setMatrixAt(i, pm4.makeRotationY(p[3]).setPosition(p[0], 0, p[1])));
-    group.add(lampIM);
+    // ---------------- night lighting: street lamps on the poles switch on at dusk, off at dawn.
+    // Cheap by design: emissive bulbs + one additive halo sprite per lamp (Points) + one additive light-pool decal per lamp
+    // on the road (InstancedMesh) = 3 draw calls for all lamps; only a few real PointLights (by Quality tier) follow the car.
+    const LAMP_X = 0.95, LAMP_Y = 6.55;                                       // bulb position in pole space (local +x faces the road)
+    const lampMat = new THREE.MeshLambertMaterial({ color: 0x8a8d90 });
+    const lampG = new THREE.BoxGeometry(1.1, 0.06, 0.06); lampG.translate(0.5, 6.75, 0);                    // bracket arm
+    const headG = new THREE.BoxGeometry(0.5, 0.12, 0.24); headG.translate(LAMP_X, 6.66, 0);                 // housing
+    const lampIM = new THREE.InstancedMesh(lampG, lampMat, poles.length), headIM = new THREE.InstancedMesh(headG, lampMat, poles.length);
+    const bulbMat = new THREE.MeshBasicMaterial({ color: 0x3a3a38 });
+    const bulbG = new THREE.BoxGeometry(0.42, 0.04, 0.18); bulbG.translate(LAMP_X, 6.58, 0);
+    const bulbIM = new THREE.InstancedMesh(bulbG, bulbMat, poles.length);
+    const lampPos = [];                                                        // world bulb positions [x, z]
+    poles.forEach((p, i) => {
+      pm4.makeRotationY(p[3]).setPosition(p[0], 0, p[1]);
+      lampIM.setMatrixAt(i, pm4); headIM.setMatrixAt(i, pm4); bulbIM.setMatrixAt(i, pm4);
+      lampPos.push([p[0] + Math.cos(p[3]) * LAMP_X, p[1] - Math.sin(p[3]) * LAMP_X]);
+    });
+    for (const im of [lampIM, headIM, bulbIM]) { im.frustumCulled = false; group.add(im); }
+    lampIM.castShadow = headIM.castShadow = true;
+    const glowTex = (() => {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d');
+      const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.18, 'rgba(255,255,255,0.75)'); gr.addColorStop(0.5, 'rgba(255,255,255,0.22)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(cv);
+    })();
+    // halos around the bulbs
+    const haloGeo = new THREE.BufferGeometry();
+    haloGeo.setAttribute('position', new THREE.Float32BufferAttribute(lampPos.flatMap(q2 => [q2[0], LAMP_Y, q2[1]]), 3));
+    const haloMat = new THREE.PointsMaterial({ map: glowTex, color: 0xffc070, size: 2.6, sizeAttenuation: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+    const halos = new THREE.Points(haloGeo, haloMat); halos.visible = false; halos.frustumCulled = false; halos.renderOrder = 3; group.add(halos);
+    // light pools on the ground under each lamp (flat additive decals just above the road surface)
+    const poolGeo = new THREE.PlaneGeometry(1, 1); poolGeo.rotateX(-Math.PI / 2);
+    const poolMat = new THREE.MeshBasicMaterial({ map: glowTex, color: 0xd8904a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 });
+    const pools = new THREE.InstancedMesh(poolGeo, poolMat, Math.max(1, poles.length)); pools.count = poles.length;
+    poles.forEach((p, i) => {
+      const ox = Math.cos(p[3]) * 1.6, oz = -Math.sin(p[3]) * 1.6, R = 11 + hash(p[0], p[1]) * 2;
+      m4.compose(v.set(lampPos[i][0] + ox, 0.14, lampPos[i][1] + oz), q.setFromAxisAngle(yAxis, p[3]), s.set(R, 1, R * 0.85)); pools.setMatrixAt(i, m4);
+    });
+    pools.visible = false; pools.frustumCulled = false; pools.renderOrder = 2; group.add(pools);
+    // a handful of real lights re-assigned to the lamps nearest the car (0 / 2 / 4 by tier; count fixed at build time
+    // so materials never recompile - unused ones just sit at intensity 0)
+    const tierName = (typeof window !== 'undefined' && window.Quality && Quality.tier) || 'medium';
+    const NL = tierName === 'low' ? 0 : tierName === 'high' ? 4 : 2;
     const lampLights = [];
-    for (let i = 0; i < 8; i++) { const L = new THREE.PointLight(0xffb85c, 0, 26, 1.6); group.add(L); lampLights.push(L); }
-    let nightF = 0;
+    for (let i = 0; i < NL; i++) { const L = new THREE.PointLight(0xffb066, 0, 22, 1.8); group.add(L); lampLights.push(L); }
+    let nightF = 0, lampOn = 0, lampTimer = 0;
     function setNight(f) {
       nightF = f;
-      lampMat.color.setHex(f > 0.35 ? 0xffc46b : 0x555555);
+      lampOn = Math.max(0, Math.min(1, (f - 0.25) / 0.2));                   // dusk: on as the sun goes down; dawn: off
+      bulbMat.color.setRGB(0.23 + lampOn * 0.77, 0.23 + lampOn * 0.62, 0.22 + lampOn * 0.28);
+      haloMat.opacity = lampOn * 0.9; halos.visible = lampOn > 0.01;
+      poolMat.opacity = lampOn * 0.95; pools.visible = lampOn > 0.01;
       for (const m of facadeMats) m.emissiveIntensity = f * 0.9;
     }
-    function updateLamps(car) {
-      if (nightF < 0.35 || !car) { lampLights.forEach(L => L.intensity = 0); return; }
-      const near = poles.map(p => [Math.hypot(p[0] - car.x, p[1] - car.z), p]).sort((a, b) => a[0] - b[0]).slice(0, lampLights.length);
-      near.forEach(([d, p], i) => { lampLights[i].position.set(p[0] + Math.cos(p[3]) * 0.75, 6.3, p[1] - Math.sin(p[3]) * 0.75); lampLights[i].intensity = 1.6 * nightF; });
+    const lampIdx = [];
+    function updateLamps(car, dt) {
+      if (!NL) return;
+      if (lampOn <= 0.01 || !car) { lampLights.forEach(L => L.intensity = 0); return; }
+      lampTimer -= dt || 0;
+      if (lampTimer <= 0) {                                                  // re-pick the nearest lamps a few times a second
+        lampTimer = 0.4; lampIdx.length = 0;
+        const best = [];
+        for (let i = 0; i < lampPos.length; i++) {
+          const dx = lampPos[i][0] - car.x, dz = lampPos[i][1] - car.z; if (Math.abs(dx) > 70 || Math.abs(dz) > 70) continue;
+          const d = dx * dx + dz * dz;
+          if (best.length < NL || d < best[best.length - 1][0]) { best.push([d, i]); best.sort((a2, b2) => a2[0] - b2[0]); if (best.length > NL) best.pop(); }
+        }
+        best.forEach(b2 => lampIdx.push(b2[1]));
+      }
+      lampLights.forEach((L, k) => {
+        const i = lampIdx[k];
+        if (i === undefined) { L.intensity = 0; return; }
+        L.position.set(lampPos[i][0], LAMP_Y - 0.4, lampPos[i][1]); L.intensity = 1.4 * lampOn;
+      });
     }
 
     // hand-built geometry has mixed winding; render both faces
@@ -2895,7 +3013,7 @@
     // billboards face camera
     const billboards = []; group.traverse(o => { if (o.userData.billboard) billboards.push(o); });
     function update(camera, dt, car) {
-      if (dt) { updatePeople(dt, car, camera.position); updateLamps(car); }
+      if (dt) { updatePeople(dt, car, camera.position); updateLamps(car, dt); }
       updateTrees(camera.position);
       updateVillage(camera.position);
       updateFields(camera.position);
