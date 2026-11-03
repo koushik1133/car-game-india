@@ -14,6 +14,8 @@
   (window.NELLUTLA_QUIET = window.NELLUTLA_QUIET || []).push({ x: 42, z: -272, r: 16 });
   // the open earth plaza at the junction is drivable: world poles/trees/walls keep out of it (nellutla-world.js roadHit)
   (window.NELLUTLA_CLEAR = window.NELLUTLA_CLEAR || []).push({ x: 64, z: -268, r: 10.5 });
+  // keep the safe-house parking spots (Fortuner, MPV) free of roadside plants
+  window.NELLUTLA_CLEAR.push({ x: 48.2, z: -281.2, r: 3.2 }, { x: 58.0, z: -275.6, r: 3.2 });
 
   const LANE = [[20.3, -288.8], [53.3, -270.7], [79.4, -257.9], [110.2, -248.1]];   // = east_diag in nellutla-map/tools/traced.json
   const SEG = []; let TOT = 0;

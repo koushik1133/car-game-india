@@ -23,14 +23,16 @@
   // v1's front-west corner (38.8,-272.2) so the plot (a -19.5 .. -1.1) now covers map building #317, the real house,
   // with its east wall 0.5 m clear of lane se_ns and the front wall facing lane east_diag.
   const UX = 13.2 / 14.857, UZ = 6.8 / 14.857;
-  const O = { x: 38.8 + 14 * UX, z: -272.2 + 14 * UZ };
+  // the house sits 1.5 m further back than the first cut (more courtyard in front); the front wall stays on the lane
+  const SET = 1.5;
+  const O = { x: 38.8 + 14 * UX - SET * UZ, z: -272.2 + 14 * UZ + SET * UX };
   // the generic footprint #317 is also dropped by nellutla-map/tools/map_fixes.json; keep this for older map data
   (window.NELLUTLA_EXCLUDE = window.NELLUTLA_EXCLUDE || []).push({ x: 42.4, z: -263.0, r: 4 });
   const NX = -UZ, NZ = UX;
   const TH = Math.atan2(-UZ, UX);
   const W = (a, b) => ({ x: O.x + a * UX + b * NX, z: O.z + a * UZ + b * NZ });
   const L = (x, z) => { const dx = x - O.x, dz = z - O.z; return { a: dx * UX + dz * UZ, b: dx * NX + dz * NZ }; };
-  const YARD = { a0: -19.5, a1: -1.1, b0: -2.8, b1: 14 };
+  const YARD = { a0: -19.5, a1: -1.1, b0: -2.8 - SET, b1: 14 };
   const HALL = { a0: -14, a1: -6.8, b0: 3.0, b1: 12.8 };
 
   // ---------------------------------------------------------------- state
@@ -254,7 +256,9 @@
     // ================= porch: pointed-crown scalloped arch, pendant light, brown sunshade
     for (const a of [-9.4, -6.8]) { B.box(a - 0.17, a + 0.17, FLOOR, ROOF, -0.77, -0.43, C.cream); col(a - 0.17, a + 0.17, -0.77, -0.43); edgeBox(a - 0.17, a + 0.17, FLOOR, 1.9, -0.78, -0.42); }
     foilArch(-9.23, -6.97, -0.6, true, ROOF);
-    B.box(-6.97, -6.63, FLOOR, ROOF, -0.43, 2.9, C.cream); col(-6.97, -6.63, -0.43, 1.6);  // porch side wall toward the courtyard (half open)
+    // porch side toward the courtyard is open (walk in from the yard too): one end pillar + a beam under the roof
+    B.box(-6.97, -6.63, FLOOR, ROOF, 2.55, 2.9, C.cream); col(-6.97, -6.63, 2.55, 2.9);
+    B.box(-6.97, -6.63, ROOF - 0.35, ROOF, -0.43, 2.55, C.cream);
     B.box(-9.9, -6.3, ROOF + 0.15, ROOF + 0.25, -1.4, 0.4, C.wood);                         // brown sunshade slab over the porch
     edgeBox(-9.9, -6.3, ROOF + 0.15, ROOF + 0.25, -1.4, 0.4);
     // little crown above the porch arch

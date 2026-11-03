@@ -19,6 +19,8 @@ const Player = (function () {
     sport:       { name: 'SPORT BIKE',    top: 140, accel: 8.5, brake: 11,  rev: 2.5, turn: 2.9, steerRate: 9,  turnFade: 18, offroad: 0.3,  hw: 0.42, gears: 6, lean: true },
     cycle:       { name: 'BICYCLE',       top: 25,  accel: 1.6, brake: 6,   rev: 1.2, turn: 3.0, steerRate: 8,  turnFade: 8,  offroad: 0.5,  hw: 0.32, gears: 1, lean: true, pedal: true },
     mpv:         { name: 'MPV',           top: 165, accel: 4.0, brake: 9,   rev: 4,   turn: 2.0, steerRate: 5.5, turnFade: 18, offroad: 0.3, hw: 0.92, gears: 6 },
+    // Fortuner-style 4x4: 2.8 L diesel (500 Nm), ~2.2 t, top ~180, low-range grip off the tarmac; sounds as 'suv' (diesel)
+    fortuner:    { name: 'FORTUNER 4X4',  top: 180, accel: 4.6, brake: 8.5, rev: 4.5, turn: 1.85, steerRate: 5,  turnFade: 19, offroad: 0.8, hw: 0.95, gears: 6 },
     bullockCart: { name: 'BULLOCK CART',  top: 8,   accel: 0.8, brake: 3,   rev: 0.8, turn: 1.0, steerRate: 3,  turnFade: 4,  offroad: 0.9,  hw: 0.9,  gears: 1 },
   };
   const CRYSTA_HW = 0.95, CRYSTA_LEN = 4.7;
@@ -33,6 +35,7 @@ const Player = (function () {
     classic: { rollK: 0, pitchK: 0.0025, maxSteer: 0.4, w: 8 }, classic2: { rollK: 0, pitchK: 0.0025, maxSteer: 0.4, w: 8 },
     sport: { rollK: 0, pitchK: 0.004, maxSteer: 0.4, w: 12 }, cycle: { rollK: 0, pitchK: 0.002, maxSteer: 0.55, w: 12 },
     mpv: { rollK: 0.009, pitchK: 0.005, maxSteer: 0.55, w: 9 },
+    fortuner: { rollK: 0.0125, pitchK: 0.006, maxSteer: 0.55, w: 8 },   // tall body-on-frame: a bit more roll than the Crysta
   };
   // specific model of a vehicle (userData.type from traffic-models.js), when we tune it
   const typeOf = v => { const t = (v.userData && v.userData.type) || (v.g && v.g.userData && v.g.userData.type) || v.type; return t && PARAMS[t] ? t : v.model; };
