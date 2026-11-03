@@ -24,6 +24,18 @@ def now_ms():
     return time.time() * 1000.0
 
 
+pending_leave = {}    # name -> asyncio task announcing "left" after a grace period
+REJOIN_GRACE = 8.0
+
+
+async def _safe_send(ws, data):
+    # never let one slow / dead client stall the broadcast loop for everyone
+    try:
+        await asyncio.wait_for(ws.send(data), 2.0)
+    except Exception:
+        pass
+
+
 async def send_to(pid, msg):
     p = players.get(pid)
     if p:
@@ -35,13 +47,10 @@ async def send_to(pid, msg):
 
 async def send_all(msg, skip=None, squad=None):
     data = json.dumps(msg)
-    for pid, p in list(players.items()):
-        if pid == skip or (squad is not None and p["squad"] != squad):
-            continue
-        try:
-            await p["ws"].send(data)
-        except Exception:
-            pass
+    targets = [p["ws"] for pid, p in list(players.items())
+               if pid != skip and (squad is None or p["squad"] == squad)]
+    if targets:
+        await asyncio.gather(*(_safe_send(w, data) for w in targets))
 
 
 def system(text, kind="info"):
@@ -59,14 +68,16 @@ async def squad_update(code):
     await send_all({"t": "squad", "code": code, "members": members}, squad=code)
 
 
-async def leave_squad(pid):
+async def leave_squad(pid, quiet=False):
     p = players[pid]
     code = p["squad"]
     if not code:
         return
     p["squad"] = None
-    await send_to(pid, {"t": "squad", "code": None, "members": []})
-    await send_all(system(f'{p["name"]} left squad {code}', "squad"), squad=code)
+    if not quiet:
+        await send_to(pid, {"t": "squad", "code": None, "members": []})
+    if not quiet:
+        await send_all(system(f'{p["name"]} left squad {code}', "squad"), squad=code)
     await squad_update(code)
 
 
@@ -99,7 +110,13 @@ async def handler(ws):
                 p["name"] = str(m.get("name", "Player")).strip()[:20] or "Player"
                 p["named"] = True
                 if first:
-                    await send_all(system(f'{p["name"]} joined Nellutla', "join"))
+                    t = pending_leave.pop(p["name"], None)
+                    twin = any(o is not p and o.get("named") and o["name"] == p["name"] for o in players.values())
+                    if t or twin:   # same player came back within the grace period (or is already here): no join/leave spam
+                        if t:
+                            t.cancel()
+                    else:
+                        await send_all(system(f'{p["name"]} joined Nellutla', "join"))
             elif t == "state":
                 s = m.get("s") or {}
                 st = {}
@@ -141,6 +158,12 @@ async def handler(ws):
                     p["squad"] = code
                     await ws.send(json.dumps(system(f"Squad {code} created. Friends join with /squad join {code}", "squad")))
                     await squad_update(code)
+                elif op == "rejoin":                          # silent re-entry after a reconnect
+                    code = str(m.get("code", "")).upper().strip()[:8]
+                    if code and len(squad_members(code)) < 8:
+                        await leave_squad(pid, quiet=True)
+                        p["squad"] = code
+                        await squad_update(code)
                 elif op == "join":
                     code = str(m.get("code", "")).upper().strip()[:8]
                     if not squad_members(code):
@@ -182,7 +205,7 @@ async def handler(ws):
         p = players.get(pid)
         if p and p["squad"]:
             try:
-                await leave_squad(pid)
+                await leave_squad(pid, quiet=True)
             except Exception:
                 pass
         p = players.pop(pid, {})
@@ -191,7 +214,16 @@ async def handler(ws):
         if pg:
             await send_all({"t": "ping_clear", "owner": pid})
         if p.get("named"):
-            await send_all(system(f'{p.get("name", "Player")} left', "leave"))
+            name = p.get("name", "Player")
+            async def announce(n=name):
+                await asyncio.sleep(REJOIN_GRACE)
+                pending_leave.pop(n, None)
+                if not any(o.get("name") == n for o in players.values()):
+                    await send_all(system(f'{n} left', "leave"))
+            old = pending_leave.pop(name, None)
+            if old:
+                old.cancel()
+            pending_leave[name] = asyncio.create_task(announce())
 
 
 async def ticker():
@@ -208,7 +240,8 @@ async def ticker():
 
 
 async def main():
-    async with websockets.serve(handler, "0.0.0.0", PORT, max_size=2 ** 16):
+    async with websockets.serve(handler, "0.0.0.0", PORT, max_size=2 ** 16,
+                                ping_interval=20, ping_timeout=60):
         print(f"Nellutla multiplayer server on ws://0.0.0.0:{PORT}", flush=True)
         await ticker()
 

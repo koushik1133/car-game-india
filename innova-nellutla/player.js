@@ -21,6 +21,14 @@ const Player = (function () {
     mpv:         { name: 'MPV',           top: 165, accel: 4.0, brake: 9,   rev: 4,   turn: 2.0, steerRate: 5.5, turnFade: 18, offroad: 0.3, hw: 0.92, gears: 6 },
     // Fortuner-style 4x4: 2.8 L diesel (500 Nm), ~2.2 t, top ~180, low-range grip off the tarmac; sounds as 'suv' (diesel)
     fortuner:    { name: 'FORTUNER 4X4',  top: 180, accel: 4.6, brake: 8.5, rev: 4.5, turn: 1.85, steerRate: 5,  turnFade: 19, offroad: 0.8, hw: 0.95, gears: 6 },
+    // Indian car range (traffic-models.js): light petrol hatches, diesel utilities, mini truck, faired 155 cc sport bike
+    swift:       { name: 'SWIFT',         top: 160, accel: 4.6, brake: 9,   rev: 4,   turn: 2.2, steerRate: 6.5, turnFade: 18, offroad: 0.1, hw: 0.85, gears: 5 },
+    dzire:       { name: 'DZIRE',         top: 155, accel: 4.3, brake: 9,   rev: 4,   turn: 2.1, steerRate: 6,  turnFade: 18, offroad: 0.1,  hw: 0.87, gears: 5 },
+    alto:        { name: 'ALTO',          top: 140, accel: 3.9, brake: 8.5, rev: 4,   turn: 2.4, steerRate: 7,  turnFade: 16, offroad: 0.1,  hw: 0.75, gears: 5 },
+    bolero:      { name: 'BOLERO',        top: 140, accel: 3.4, brake: 8,   rev: 4,   turn: 1.8, steerRate: 4.5, turnFade: 17, offroad: 0.75, hw: 0.9, gears: 5 },
+    scorpio:     { name: 'SCORPIO',       top: 150, accel: 3.8, brake: 8.2, rev: 4,   turn: 1.8, steerRate: 4.8, turnFade: 18, offroad: 0.7, hw: 0.97, gears: 5 },
+    ace:         { name: 'MINI TRUCK',    top: 85,  accel: 2.4, brake: 7,   rev: 3,   turn: 2.0, steerRate: 5,  turnFade: 12, offroad: 0.4,  hw: 0.78, gears: 4 },
+    faired:      { name: 'SPORT 155',     top: 155, accel: 8.8, brake: 11.5, rev: 2.5, turn: 2.7, steerRate: 8.5, turnFade: 19, offroad: 0.25, hw: 0.4, gears: 6, lean: true },
     bullockCart: { name: 'BULLOCK CART',  top: 8,   accel: 0.8, brake: 3,   rev: 0.8, turn: 1.0, steerRate: 3,  turnFade: 4,  offroad: 0.9,  hw: 0.9,  gears: 1 },
   };
   const CRYSTA_HW = 0.95, CRYSTA_LEN = 4.7;
@@ -36,12 +44,16 @@ const Player = (function () {
     sport: { rollK: 0, pitchK: 0.004, maxSteer: 0.4, w: 12 }, cycle: { rollK: 0, pitchK: 0.002, maxSteer: 0.55, w: 12 },
     mpv: { rollK: 0.009, pitchK: 0.005, maxSteer: 0.55, w: 9 },
     fortuner: { rollK: 0.0125, pitchK: 0.006, maxSteer: 0.55, w: 8 },   // tall body-on-frame: a bit more roll than the Crysta
+    swift: { rollK: 0.008, pitchK: 0.005, maxSteer: 0.6, w: 10.5 }, dzire: { rollK: 0.008, pitchK: 0.005, maxSteer: 0.6, w: 10 },
+    alto: { rollK: 0.009, pitchK: 0.006, maxSteer: 0.62, w: 10 }, ace: { rollK: 0.015, pitchK: 0.007, maxSteer: 0.6, w: 8 },
+    bolero: { rollK: 0.017, pitchK: 0.007, maxSteer: 0.55, w: 7.5 }, scorpio: { rollK: 0.016, pitchK: 0.007, maxSteer: 0.55, w: 7.5 },   // soft ladder-frame utilities
+    faired: { rollK: 0, pitchK: 0.004, maxSteer: 0.38, w: 12 },
   };
   // specific model of a vehicle (userData.type from traffic-models.js), when we tune it
   const typeOf = v => { const t = (v.userData && v.userData.type) || (v.g && v.g.userData && v.g.userData.type) || v.type; return t && PARAMS[t] ? t : v.model; };
   const feelOf = v => FEEL[v._ty || v.model] || FEEL.hatch;
   // engine-audio.js voices for the player's two-wheeler (it reads Player.active._snd.type for model 'bike')
-  const SND = { splendor: 'bike', scooter: 'scooter', classic: 'bullet', classic2: 'bullet', sport: 'ktm' };
+  const SND = { splendor: 'bike', scooter: 'scooter', classic: 'bullet', classic2: 'jawa', sport: 'ktm', faired: 'sportbike' };
 
   // where the driver sits in each TrafficModels vehicle (local x, seat height, local z, HumanModel.sit pose);
   // the same numbers traffic-models.js uses for its AI drivers
@@ -75,11 +87,19 @@ const Player = (function () {
   // ---------------------------------------------------------------- helpers
   const fwdOf = r => ({ x: Math.sin(r), z: Math.cos(r) });
   // distance from point to a vehicle's long axis, and the closest axis point
+  const NO_C = { x: 0, z: 0 };
+  function fpCentre(v) {
+    if (v._fp) return { x: v._fp.cx || 0, z: v._fp.cz || 0 };
+    const uc = (v.userData && v.userData.center) || (v.g && v.g.userData && v.g.userData.center);
+    return uc ? { x: uc.x || 0, z: uc.z || 0 } : NO_C;
+  }
   function axisDist(x, z, v) {
     const len = v.len2 ? v.len2 * 2 : v.len;       // traffic items reuse .len for the route length
-    const f = fwdOf(v.g.rotation.y), half = Math.max(0, len / 2 - v.hw);
-    const t = THREE.MathUtils.clamp((x - v.g.position.x) * f.x + (z - v.g.position.z) * f.z, -half, half);
-    const cx = v.g.position.x + f.x * t, cz = v.g.position.z + f.z * t;
+    const r = v.g.rotation.y, f = fwdOf(r), half = Math.max(0, len / 2 - v.hw);
+    // footprint centre: models whose origin isn't their middle (tractor + trolley, cart) carry userData.center
+    const c = fpCentre(v), ox = v.g.position.x + f.x * c.z + Math.cos(r) * c.x, oz = v.g.position.z + f.z * c.z - Math.sin(r) * c.x;
+    const t = THREE.MathUtils.clamp((x - ox) * f.x + (z - oz) * f.z, -half, half);
+    const cx = ox + f.x * t, cz = oz + f.z * t;
     return { d: Math.hypot(x - cx, z - cz), cx, cz };
   }
   // push a point {x,z} of radius r out of every parked vehicle; returns the push normal or null
@@ -190,11 +210,17 @@ const Player = (function () {
       if (Math.abs(t) > 0.01 && Math.abs(l) > 0.01 && Math.abs(t) > len / 2) continue;
       if (spotFree(x, z, cx, cz, self)) return { x, z };
     }
+    // boxed in (a row of parked bikes, a narrow lane): the nearest free spot on rings further out
+    for (let r = Math.max(hw, len / 2) + WALK_R + 0.5; r < Math.max(hw, len / 2) + 4; r += 0.5)
+      for (let k = 0; k < 16; k++) {
+        const a = rot + Math.PI / 2 + k / 16 * Math.PI * 2, x = cx + Math.sin(a) * r, z = cz + Math.cos(a) * r;
+        if (spotFree(x, z, cx, cz, self)) return { x, z };
+      }
     return null;
   }
   function exitTo(rot, spot) {
     carPos.set(spot.x, 0, spot.z);
-    carRot = rot; ped.dir = rot; carSpeed = 0; ped.vy = 0; ped.air = false; ped.jumpHeld = true;
+    carRot = rot; ped.dir = rot; carSpeed = 0; ped.vy = 0; ped.air = false; ped.jumpHeld = true; ped.crouch = 0; ped.land = 0; ped.buffer = 0;
     ped.y = groundAt(spot.x, spot.z); lastSafe.x = spot.x; lastSafe.z = spot.z;
     unseatBody();
     mode = 'foot'; body.visible = true; isReversing = false; currentGear = '-'; engineRPM = 800;
@@ -222,10 +248,25 @@ const Player = (function () {
     setHud();
   }
   // parked.js instanced vehicles (not yet in any list): distance from a point to their body
+  // the real (visible) footprint of each parked.js kind, measured once from its instanced geometry: a tractor's
+  // trolley or a cart's shafts sit well off the item's origin, so an origin-centred box misses half the vehicle
+  const pkGeo = {};
+  function pkShape(it) {
+    let g = pkGeo[it.vk];
+    if (g === undefined) {
+      g = null;
+      scene.traverse(o => { if (g || !o.isInstancedMesh || o.name !== 'parked-' + it.vk) return;
+        o.geometry.computeBoundingBox(); const b = o.geometry.boundingBox;
+        g = { cz: (b.min.z + b.max.z) / 2, cx: (b.min.x + b.max.x) / 2, hl: (b.max.z - b.min.z) / 2, hw: (b.max.x - b.min.x) / 2 }; });
+      pkGeo[it.vk] = g;
+    }
+    return g ? { cz: g.cz, cx: g.cx, hl: Math.max(it.hl, g.hl), hw: Math.max(it.hw, g.hw) } : { cz: 0, cx: 0, hl: it.hl, hw: it.hw };
+  }
   function pkDist(x, z, it) {
-    const fx = Math.sin(it.rot), fz = Math.cos(it.rot), half = Math.max(0, it.hl - it.hw);
-    const t = THREE.MathUtils.clamp((x - it.x) * fx + (z - it.z) * fz, -half, half);
-    return Math.hypot(x - it.x - fx * t, z - it.z - fz * t) - it.hw;
+    const S = pkShape(it), fx = Math.sin(it.rot), fz = Math.cos(it.rot), half = Math.max(0, S.hl - S.hw);
+    const ox = it.x + fx * S.cz + Math.cos(it.rot) * S.cx, oz = it.z + fz * S.cz - Math.sin(it.rot) * S.cx;
+    const t = THREE.MathUtils.clamp((x - ox) * fx + (z - oz) * fz, -half, half);
+    return Math.hypot(x - ox - fx * t, z - oz - fz * t) - S.hw;
   }
   // ONE candidate search for both the on-screen hint and F: Player's parked list (Crysta, vehicles you left,
   // property garages), traffic (carjack) and parked.js's instanced vehicles. Anything within PICK_R of its
@@ -250,22 +291,62 @@ const Player = (function () {
     // parked.js claims its own nearest item by plain distance on F, so rank those by plain distance (+ a
     // constant): whichever of them wins here is exactly the one parked.js hands over
     const P = window.Parked && Parked.vehicles;
+    // nellutla-world.js street props: the red / black Splendors parked along village lanes (world.props.bike*)
+    const PB = propBikesNear(carPos.x, carPos.z);
+    for (const b of PB) {
+      const d = pkDist(carPos.x, carPos.z, b);
+      if (d < PICK_R) { const sc = score(d, b.x, b.z, 0); if (!best || sc < best.score) best = { v: null, prop: b, d, list: null, score: sc }; }
+    }
     if (P) {
       let pb = null;
-      for (const it of P) { if (it.claimed || Math.abs(it.x - carPos.x) > 12 || Math.abs(it.z - carPos.z) > 12) continue;
+      for (const it of P) { if (it.claimed || Math.abs(it.x - carPos.x) > 16 || Math.abs(it.z - carPos.z) > 16) continue;
         const d = pkDist(carPos.x, carPos.z, it); if (d < PICK_R && (!pb || d < pb.d)) pb = { it, d }; }
       if (pb) { const sc = Math.max(0, pb.d) + 0.3; if (!best || sc < best.score) best = { v: null, pk: pb.it, d: pb.d, list: null, score: sc }; }
     }
     return best;
+  }
+  // ---- world prop bikes: instanced decoration in nellutla-world.js, swapped for a real rideable bike on F
+  const propTaken = new Set(), _m0 = new THREE.Matrix4().makeScale(0, 0, 0), _pm = new THREE.Matrix4(), _pv = new THREE.Vector3();
+  function propBikesNear(x, z) {
+    const out = [], PR = world.props; if (!PR) return out;
+    for (const kind of ['bike', 'bike2']) {
+      const L = PR[kind]; if (!L) continue;
+      for (let i = 0; i < L.length; i++) {
+        const q = L[i]; if (Math.abs(q[0] - x) > 6 || Math.abs(q[1] - z) > 6 || propTaken.has(kind + i)) continue;
+        out.push({ kind, i, x: q[0], z: q[1], rot: q[2], vk: 'propbike', hw: 0.42, hl: 0.98 });
+      }
+    }
+    return out;
+  }
+  function takePropBike(b) {
+    const L = world.props[b.kind];
+    // hide that one instance (the world's InstancedMesh for this kind has exactly L.length instances)
+    world.group.children.forEach(o => {
+      if (!o.isInstancedMesh || o.count !== L.length) return;
+      o.getMatrixAt(b.i, _pm); _pv.setFromMatrixPosition(_pm);
+      if (Math.abs(_pv.x - b.x) < 0.01 && Math.abs(_pv.z - b.z) < 0.01) { o.setMatrixAt(b.i, _m0); o.instanceMatrix.needsUpdate = true; }
+    });
+    propTaken.add(b.kind + b.i);
+    if (typeof TrafficModels === 'undefined') return null;
+    const m = TrafficModels.splendor ? TrafficModels.splendor() : TrafficModels.bike('splendor');
+    if (b.kind === 'bike') m.g.traverse(o => { if (o.isMesh && o.material && o.material.isMeshPhongMaterial && o.material.shininess === 85) o.material = new THREE.MeshPhongMaterial({ color: 0xb71c1c, specular: 0x8a8a8a, shininess: 85 }); });
+    m.g.position.set(b.x, 0, b.z); m.g.rotation.y = b.rot; scene.add(m.g);
+    const t = { ...m, model: 'bike', type: 'splendor', parked: true, len2: (m.len || 2) / 2, r: null, speed: 0, cur: 0, s: 0, dir: 1, len: 0, hw: 0.42, wheelR: 0.33, wheels: m.wheels || [], tail: m.tail || [] };
+    // the prop's small world collider (a 1.2 m bar) stays; it sits inside the bike's own footprint
+    return t;
   }
   // parked.js's F hook turns the instanced vehicle into a traffic item; find it (or run the hooks ourselves when
   // F came from the gamepad / another path that skipped them)
   function claimedParked(it) {
     const find = () => traffic.find(t => t.parked && t.g && Math.abs(t.g.position.x - it.x) < 0.01 && Math.abs(t.g.position.z - it.z) < 0.01);
     let t = find();
+    // parked.js's own F hook claims whatever is nearest to the player by ITS metric (origin-centred box, < 3 m),
+    // which can be a different vehicle or nothing at all (long tractor / cart, F from the gamepad). Ask it for
+    // exactly this one: stand it "on" the item's origin. Anything it claimed by itself and we don't take is put
+    // back by its own microtask.
     if (!t && typeof GameHooks !== 'undefined') {
-      const e = { code: 'KeyF', key: 'f', repeat: false, shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, preventDefault() {}, stopPropagation() {} };
-      for (const f of GameHooks.key) { try { f(e, window.GAME); } catch (err) {} }
+      const hook = GameHooks.key.find(f => /claimNearest/.test(String(f)));
+      if (hook) { try { hook({ code: 'KeyF', key: 'f', repeat: false }, { playerMode: 'foot', carPos: { x: it.x, z: it.z }, traffic }); } catch (err) {} }
       t = find();
     }
     return t;
@@ -278,6 +359,9 @@ const Player = (function () {
     if (best && best.pk) {
       const t = claimedParked(best.pk);
       best = t ? { v: t, list: traffic } : null;
+    } else if (best && best.prop) {
+      const t = takePropBike(best.prop);
+      best = t ? { v: t, list: parked } : null;
     }
     if (!best || !best.v) { showComboPopup('NO VEHICLE NEARBY'); return; }
     hintPick = null;
@@ -388,11 +472,12 @@ const Player = (function () {
         carPos.x += p.x - px; carPos.z += p.z - pz;
         if (c.nx !== undefined) hitN = { nx: c.nx, nz: c.nz }; else { const d = Math.hypot(p.x - px, p.z - pz); if (d > 1e-5) hitN = { nx: (p.x - px) / d, nz: (p.z - pz) / d }; }
         const vn = vx * c.nx + vz * c.nz;
-        if (P.lean && -vn > 7) v._throw = true;               // hard crash on two wheels: rider goes over the bars
         if (vn < 0) {
-          // remove only the push into the wall; keep sliding along it, nose follows the wall on glancing hits
-          vx -= 1.2 * vn * c.nx; vz -= 1.2 * vn * c.nz;
-          const keep = 1 - Math.min(0.35, -vn * 0.025); vx *= keep; vz *= keep;
+          // remove only the push into the wall; keep sliding along it, nose follows the wall on glancing hits.
+          // Two-wheelers never throw the rider: a hard hit just bounces the bike back a little and kills its speed.
+          const hard = P.lean && -vn > 4;
+          vx -= (hard ? 1.25 : 1.2) * vn * c.nx; vz -= (hard ? 1.25 : 1.2) * vn * c.nz;
+          const keep = hard ? 0.35 : 1 - Math.min(0.35, -vn * 0.025); vx *= keep; vz *= keep;
           const sp = Math.hypot(vx, vz);
           if (sp > 3) {
             let want = Math.atan2(vx, vz); if (vx * f.x + vz * f.z < 0) want += Math.PI;
@@ -401,12 +486,11 @@ const Player = (function () {
           }
           const f2 = fwdOf(carRot), l2 = { x: Math.cos(carRot), z: -Math.sin(carRot) };
           v.vF = vx * f2.x + vz * f2.z; v.vL = vx * l2.x + vz * l2.z; v.yawRate *= 0.6;
-          if (-vn > 8) showComboPopup('BUMP!');
+          if (-vn > 8) showComboPopup(P.lean ? 'CRASH!' : 'BUMP!');
         }
       }
     }
     unstickVehicle(v, dt, hitN);
-    if (v._throw) { v._throw = false; throwOff(v); return; }
     carSpeed = v.vF * 3.6; v.lastSpeed = carSpeed;
 
     // visuals: wheels, brake lights, bike lean
@@ -600,18 +684,6 @@ const Player = (function () {
       break;
     }
   }
-  // crashing a ridden bike hard: the player is thrown clear and the bike falls
-  function throwOff(v) {
-    const f = fwdOf(carRot);
-    setTail(v, false); v.g.rotation.z = 0; v.vF = v.vL = 0; carSpeed = 0;
-    const spot = findExit(v.g.position.x, v.g.position.z, v.g.rotation.y, v.hw, v.len || 2, v) || { x: v.g.position.x - f.x * 1.5, z: v.g.position.z - f.z * 1.5 };
-    parked.push(v); active = null; lastLeft = v;
-    exitTo(v.g.rotation.y, spot);
-    knockBike(v, Math.cos(carRot), -Math.sin(carRot), true);
-    showComboPopup('THROWN OFF!');
-    setHud();
-  }
-
   // ---------------------------------------------------------------- walking
   // floors you can stand on: feature modules (safehouse.js interiors, steps, plinths) push meshes into
   // window.WALKABLES; the walker steps up to STEP_UP and falls down to anything lower. Ground is groundY().
@@ -625,6 +697,71 @@ const Player = (function () {
     return h ? h.point.y : -1e9;
   }
   function groundAt(x, z) { return typeof groundY === 'function' ? groundY(x, z) : 0; }
+  // Jumping onto low things. The world's colliders are 2-D (no height), so only geometry in WALKABLES (steps, plinths,
+  // the safe-house walls / furniture / low walls) has a height we can test. Every world collider (buildings, compound
+  // walls >= 1.25 m, gates, trees, poles) stays solid at any jump height: the jump peaks at ~1.08 m.
+  // The walker's centre may cross a collider only when (1) nothing walkable is at foot height in the way, and (2) it is
+  // above a walkable top that is higher than the ground (crossing / standing on / stepping off the low thing).
+  // Each walkable mesh gets a 10 cm grid (in its own frame) of the vertical extents [y0, y1] of the triangles over
+  // every cell (bbox-conservative), built once: "is anything solid between knee and head here" is then exact for
+  // thin rods, rails and wall tops, with no per-frame ray casts.
+  const HM = 0.1, _hv = new THREE.Vector3(), _hinv = new THREE.Matrix4();
+  function walkablesNear(x, z) {
+    const W = window.WALKABLES; if (!W || !W.length) return null;
+    const near = W.filter(m => m && m.parent && (!m.userData.bx || Math.abs(m.userData.bx - x) + Math.abs(m.userData.bz - z) < 60));
+    return near.length ? near : null;
+  }
+  function heightGrid(m) {
+    if (m.userData._hm) return m.userData._hm;
+    const cells = new Map(), K = (i, j) => (i + 32768) * 65536 + (j + 32768);
+    const add = (mesh) => {
+      const g = mesh.geometry; if (!g || !g.attributes || !g.attributes.position) return;
+      // into m's frame (child meshes of a group are folded in)
+      mesh.updateMatrixWorld(true); _hinv.copy(m.matrixWorld).invert().multiply(mesh.matrixWorld);
+      const P = g.attributes.position, I = g.index, n = I ? I.count : P.count, v = new THREE.Vector3();
+      for (let t = 0; t + 2 < n; t += 3) {
+        let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, z0 = 1e9, z1 = -1e9;
+        for (let k = 0; k < 3; k++) {
+          const j = I ? I.getX(t + k) : t + k; v.fromBufferAttribute(P, j).applyMatrix4(_hinv);
+          if (v.x < x0) x0 = v.x; if (v.x > x1) x1 = v.x; if (v.y < y0) y0 = v.y; if (v.y > y1) y1 = v.y; if (v.z < z0) z0 = v.z; if (v.z > z1) z1 = v.z;
+        }
+        const i0 = Math.floor(x0 / HM), i1 = Math.floor(x1 / HM), j0 = Math.floor(z0 / HM), j1 = Math.floor(z1 / HM);
+        if ((i1 - i0 + 1) * (j1 - j0 + 1) > 4000) continue;         // big floor / roof sheets: not obstacles
+        for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) { const k = K(i, j); let c = cells.get(k); if (!c) cells.set(k, c = []); c.push(y0, y1); }
+      }
+    };
+    m.traverse(o => { if (o.isMesh && !o.isInstancedMesh) add(o); });
+    return (m.userData._hm = { cells, K });
+  }
+  // anything solid in the walker's body (disc of radius r) between heights yLo..yHi at x, z?
+  function solidIn(near, x, z, yLo, yHi, r) {
+    for (const m of near) {
+      const H = heightGrid(m); m.updateMatrixWorld();
+      _hinv.copy(m.matrixWorld).invert(); _hv.set(x, 0, z).applyMatrix4(_hinv);
+      const lo = yLo + _hv.y, hi = yHi + _hv.y, R = Math.ceil(r / HM);
+      const ci = Math.floor(_hv.x / HM), cj = Math.floor(_hv.z / HM);
+      for (let i = -R; i <= R; i++) for (let j = -R; j <= R; j++) {
+        if ((i * i + j * j) * HM * HM > r * r) continue;
+        const c = H.cells.get(H.K(ci + i, cj + j)); if (!c) continue;
+        for (let k = 0; k < c.length; k += 2) if (c[k] < hi && c[k + 1] > lo) return true;
+      }
+    }
+    return false;
+  }
+  function topBelow(near, x, z) {
+    rayO.set(x, ped.y + 0.03, z); rayDown.set(rayO, DOWN); rayDown.far = ped.y + 3;
+    const h = rayDown.intersectObjects(near, true)[0];
+    return h ? h.point.y : -1e9;
+  }
+  function overObstacle(x0, z0, x, z) {
+    const g = groundAt(x, z);
+    if (ped.y < g + 0.12) return false;
+    const near = walkablesNear(x, z); if (!near) return false;
+    // the body at the new spot (feet + 3 cm .. head) must be clear of everything walkable (walls, rails, rods)
+    if (solidIn(near, x, z, ped.y + 0.03, ped.y + 1.7, WALK_R * 0.9)) return false;
+    // and it must be over a low walkable thing (crossing / standing on / stepping off it), never a bare world collider
+    return topBelow(near, x, z) > g + 0.1 || topBelow(near, x0, z0) > groundAt(x0, z0) + 0.1;
+  }
 
   // safety net: standing in a building footprint (bad exit, teleport, reload, glitch) -> out through the nearest
   // wall; otherwise remember the spot as the last good one
@@ -655,7 +792,8 @@ const Player = (function () {
   }
 
   // jump: edge-triggered (holding Space doesn't bunny-hop), a short jump buffer and coyote time like GTA
-  const JUMP_V = 4.6, GRAV = 11, COYOTE = 0.12, BUFFER = 0.12;
+  // ~1.08 m peak (enough for steps, plinths, beds, walls under ~1 m), 0.8 s in the air, 0.09 s crouch before take-off
+  const JUMP_V = 5.4, GRAV = 13.5, COYOTE = 0.1, BUFFER = 0.15, CROUCH = 0.09;
   // latch the key press itself, so a tap shorter than a frame still jumps (inputState only shows held keys)
   addEventListener('keydown', e => {
     if (e.code !== 'Space' || e.repeat || mode !== 'foot') return;
@@ -729,7 +867,13 @@ const Player = (function () {
     // move in slices no longer than half the walker radius: a thin compound wall can never be skipped
     const sx = f.x * ped.speed * dt, sz = f.z * ped.speed * dt, n = Math.max(1, Math.ceil(Math.hypot(sx, sz) / (WALK_R * 0.5)));
     const p = { x: carPos.x, z: carPos.z };
-    for (let i = 0; i < n; i++) { p.x += sx / n; p.z += sz / n; world.collide(p, WALK_R); pushOutParked(p, WALK_R); }
+    for (let i = 0; i < n; i++) {
+      const ox = p.x, oz = p.z; p.x += sx / n; p.z += sz / n; const tx = p.x, tz = p.z;
+      const c = world.collide(p, WALK_R);
+      // in the air above a low wall / step (or standing on it): the 2-D collider doesn't apply
+      if (c.hit && ped.y > 0.1 && overObstacle(ox, oz, tx, tz)) { p.x = tx; p.z = tz; }
+      pushOutParked(p, WALK_R);
+    }
     unstick(p);
     if (!world.insideBuilding || !world.insideBuilding(p.x, p.z, 0)) { lastSafe.x = p.x; lastSafe.z = p.z; }
     // against a wall: keep only the actual movement so the walk cycle and camera don't jitter
@@ -745,12 +889,21 @@ const Player = (function () {
     const jumpKey = !!inputState.drift;
     ped.buffer = jumpKey && !ped.jumpHeld ? BUFFER : (ped.buffer || 0) - dt;
     ped.jumpHeld = jumpKey;
-    if (ped.buffer > 0 && ped.coyote > 0 && !(ped.land > 0.1)) { ped.vy = JUMP_V; ped.air = true; ped.coyote = 0; ped.buffer = 0; }
+    // take-off: a short crouch (anticipation) on the ground, then the impulse; walking off an edge and pressing
+    // jump inside the coyote window jumps at once. No jumping again in the air, nor during a hard landing.
+    if (ped.crouch > 0) {
+      ped.crouch -= dt; ped.buffer = 0;
+      if (ped.crouch <= 0) { ped.crouch = 0; if (grounded || ped.coyote > 0) { ped.vy = JUMP_V; ped.air = true; ped.coyote = 0; } }
+    } else if (ped.buffer > 0 && ped.coyote > 0 && !(ped.land > 0.08)) {
+      ped.buffer = 0;
+      if (grounded) ped.crouch = CROUCH; else { ped.vy = JUMP_V; ped.air = true; ped.coyote = 0; }
+    }
     if (grounded && !ped.air) { ped.y = floor; ped.vy = 0; }
     else {
       ped.vy -= GRAV * dt; ped.y += ped.vy * dt; ped.air = true;
       if (ped.y <= floor && ped.vy <= 0) {                                   // land (on the ground, a step, a roof)
-        if (ped.vy < -2) ped.land = Math.min(0.3, 0.1 + -ped.vy * 0.03);
+        if (ped.vy < -2) ped.land = Math.min(0.55, 0.06 + -ped.vy * 0.035);
+        if (ped.vy < -9) { ped.speed *= 0.3; if (ped.vx !== undefined) { ped.vx *= 0.3; ped.vz *= 0.3; } }   // big drop: stumble
         ped.y = floor; ped.vy = 0; ped.air = false;
       } else if (ped.y < floor) ped.y = floor;                               // brushing a step edge on the way up
     }
@@ -769,6 +922,7 @@ const Player = (function () {
     }
     ped.lastRot = carRot;
     if (!ped.air && ped.land > 0) landPose(ped.land);
+    else if (!ped.air && ped.crouch > 0) landPose(0.15 * 0.85 * (1 - ped.crouch / CROUCH));
     // posture on top of the gait: roll into turns (centripetal), pitch with acceleration / speed, and the head then
     // torso turn toward the move direction before the hips get there
     {
@@ -1069,7 +1223,7 @@ const Player = (function () {
     const b = mode === 'foot' && (typeof isPlaying === 'undefined' || isPlaying) ? pickVehicle() : null;
     hintPick = b; hintAt = performance.now();
     if (!b) { hintEl.style.display = 'none'; return; }
-    const v = b.v, name = b.pk ? (PARAMS[b.pk.kind] || PARAMS.hatch).name : v.crysta ? 'INNOVA CRYSTA' : (PARAMS[v.model] || PARAMS.hatch).name;
+    const v = b.v, name = b.prop ? PARAMS.splendor.name : b.pk ? (PARAMS[b.pk.kind] || PARAMS.hatch).name : v.crysta ? 'INNOVA CRYSTA' : (PARAMS[v.model] || PARAMS.hatch).name;
     const jack = !!v && traffic.includes(v) && !v.parked && !v._propSlot && !!driverOf(v);
     hintEl.innerHTML = '<b style="color:#fbbf24">F</b> ' + (jack ? 'Take' : 'Get in') + ' · ' + name;
     hintEl.style.display = 'block';
@@ -1105,6 +1259,6 @@ const Player = (function () {
     if (!v.tail) v.tail = [];
     parked.push(v);
   }
-  return { addParked, toggle, crystaRig, update, updateCam, resetToCrysta, crystaCollide, setHud, tick, freeLook, cameraName, enterPassenger, leavePassenger, PARAMS, SEATS,
+  return { _pick: () => pickVehicle(), addParked, toggle, crystaRig, update, updateCam, resetToCrysta, crystaCollide, setHud, tick, freeLook, cameraName, enterPassenger, leavePassenger, PARAMS, SEATS,
     set onPassengerExit(f) { passengerExit = f; }, get freeLookOn() { return FL.on; }, get fleeing() { return fleeing; }, get body() { return human; }, get mode() { return mode; }, get active() { return active; } };
 })();

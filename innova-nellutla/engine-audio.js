@@ -1,116 +1,222 @@
-// Layered procedural engine + road audio (WebAudio, no samples).
-// Layers: firing-pulse harmonics at the real crank rpm, combustion rumble (noise amplitude-modulated at firing
-// frequency), intake roar (throttle-opened band-pass noise), exhaust body (low-passed, distorted),
-// turbo whistle, gear-shift dip, lift-off crackle, and tyre/road noise that changes with the surface.
-// Each vehicle type has its own engine character (cylinders, idle, redline, tone).
+// Procedural engine + exhaust audio (WebAudio, no samples).
+//
+// Model (after the usual physically-informed approach used in procedural engine synths, e.g. Baldan et al.
+// "Physically informed car engine sound synthesis", A. Farnell "Designing Sound" ch. on engines):
+//  1. Exhaust pulse train. One engine CYCLE (720 deg crank for a 4-stroke, 360 deg for a 2-stroke) is drawn in
+//     the time domain: each cylinder adds an asymmetric exhaust-valve pressure pulse (fast rise, exponential decay,
+//     small rarefaction undershoot) at its real firing angle, with a fixed per-cylinder amplitude imbalance. That
+//     cycle is DFT'd once into a PeriodicWave, so ONE OscillatorNode running at the cycle rate plays the exact pulse
+//     train: firing frequency = rpm/60 * cyl/2 (4-stroke) or rpm/60 * cyl (2-stroke). Uneven firing (singles, a
+//     3-cyl tractor, a 2-stroke twin) comes out naturally, as do the sub-harmonics of the cycle (the "lope").
+//     Two waves per engine: LOAD (sharp, unequal pulses) and OVERRUN (wider, weaker pulses), cross-faded by throttle.
+//  2. Exhaust pipe: a feedback comb filter (delay = 2 L / c for header + pipe length L, damped by a low-pass in the
+//     loop) gives the pipe resonances; a peaking filter stands in for the muffler/silencer body formant; a soft
+//     waveshaper adds the non-linear "bark" under load; a final load- and rpm-dependent low-pass sets brightness.
+//  3. Combustion/flow noise amplitude-modulated by the same pulse oscillator (so the hiss "puffs" with each
+//     firing), mechanical/diesel clatter (high-passed noise gated by the pulses, bypassing the exhaust), intake
+//     roar (throttle), turbo whistle (spools with rpm*load, lags), CVT belt whine (scooters), random cycle-to-cycle
+//     jitter (detune) for big singles and tractors, and overrun burble/pops when the throttle is shut at high rpm.
+//  4. Tyre/road noise by surface.
+// CPU: ~30 nodes for the player voice, waves are built once per profile and cached per AudioContext.
+// Traffic voices in sfx.js reuse EngineProfiles (same waves) with 1 oscillator + gated noise each.
+// NOTE: written without being able to listen; the maths (firing rates, angles, pipe delays) is right, the mix
+// levels are educated guesses.
+const EngineProfiles = (function () {
+  // stroke: 4 | 2; ang: firing angles as a fraction of one cycle; imb: per-cylinder pulse amplitude;
+  // idle/red: rpm; pulseMs: exhaust pulse length at idle; pipe: header+pipe length (m); fb: comb feedback;
+  // muff: silencer formant Hz; drive: shaper amount; bright: low-pass Hz at idle; rough: combustion noise;
+  // clatter: diesel/mechanical tick; turbo; whine (CVT); jitter: cycle-to-cycle cents; pops: overrun burble.
+  const P = {
+    innova:   { stroke: 4, ang: [0, .25, .5, .75], imb: [1, .93, 1.04, .96], idle: 780, red: 4200, pulseMs: 9, pipe: 3.4, fb: .45, muff: 110, drive: 2.5, bright: 700, rough: .35, clatter: .55, turbo: 1, vol: .55 },
+    fortuner: { stroke: 4, ang: [0, .25, .5, .75], imb: [1, .9, 1.05, .95], idle: 720, red: 3800, pulseMs: 11, pipe: 3.8, fb: .5, muff: 90, drive: 3, bright: 620, rough: .4, clatter: .5, turbo: 1.2, vol: .62 },
+    bolero:   { stroke: 4, ang: [0, 1 / 3, 2 / 3], imb: [1, .9, 1.06], idle: 750, red: 3800, pulseMs: 12, pipe: 3.2, fb: .45, muff: 95, drive: 3, bright: 600, rough: .5, clatter: .65, turbo: .5, vol: .58, jitter: 6 },   // 1.5 3-cyl mHawk75
+    scorpio:  { stroke: 4, ang: [0, .25, .5, .75], imb: [1, .92, 1.05, .97], idle: 760, red: 4000, pulseMs: 10, pipe: 3.5, fb: .5, muff: 100, drive: 3.2, bright: 680, rough: .4, clatter: .5, turbo: 1, vol: .6 },
+    swift:    { stroke: 4, ang: [0, .25, .5, .75], imb: [1, .98, 1.01, .99], idle: 850, red: 6200, pulseMs: 5, pipe: 3.0, fb: .4, muff: 140, drive: 1.5, bright: 1100, rough: .15, clatter: .08, turbo: 0, vol: .45 },
+    tractor:  { stroke: 4, ang: [0, 1 / 3, 2 / 3], imb: [1, .82, 1.1], idle: 650, red: 2200, pulseMs: 22, pipe: 1.1, fb: .35, muff: 70, drive: 4, bright: 420, rough: .7, clatter: .8, turbo: 0, vol: .7, jitter: 12 },   // vertical exhaust, short stack
+    lorry:    { stroke: 4, ang: [0, 1 / 6, 2 / 6, 3 / 6, 4 / 6, 5 / 6], imb: [1, .95, 1.03, .97, 1.02, .94], idle: 600, red: 2600, pulseMs: 14, pipe: 4.5, fb: .5, muff: 75, drive: 3.5, bright: 520, rough: .55, clatter: .6, turbo: .9, vol: .75 },
+    bus:      { stroke: 4, ang: [0, 1 / 6, 2 / 6, 3 / 6, 4 / 6, 5 / 6], imb: [1, .96, 1.02, .97, 1.03, .95], idle: 620, red: 2600, pulseMs: 13, pipe: 5.5, fb: .5, muff: 80, drive: 3, bright: 560, rough: .5, clatter: .5, turbo: .8, vol: .72 },
+    auto:     { stroke: 4, ang: [0], imb: [1], idle: 1150, red: 5200, pulseMs: 10, pipe: 0.9, fb: .35, muff: 160, drive: 4, bright: 1100, rough: .7, clatter: .55, turbo: 0, vol: .5, jitter: 10 },   // RE-style single, rattly
+    bullet:   { stroke: 4, ang: [0], imb: [1], idle: 600, red: 5000, pulseMs: 24, pipe: 1.6, fb: .55, muff: 85, drive: 3.5, bright: 420, rough: .45, clatter: .25, turbo: 0, vol: .65, jitter: 14, pops: .5 },   // 350 long-stroke "dug-dug"
+    bullet500:{ stroke: 4, ang: [0], imb: [1], idle: 560, red: 4800, pulseMs: 28, pipe: 1.6, fb: .58, muff: 75, drive: 4, bright: 380, rough: .5, clatter: .25, turbo: 0, vol: .7, jitter: 16, pops: .6 },
+    splendor: { stroke: 4, ang: [0], imb: [1], idle: 1400, red: 8000, pulseMs: 6, pipe: 1.3, fb: .4, muff: 190, drive: 2, bright: 1300, rough: .35, clatter: .2, turbo: 0, vol: .42, jitter: 5 },   // 100cc putter
+    scooter:  { stroke: 4, ang: [0], imb: [1], idle: 1700, red: 8000, pulseMs: 4, pipe: 0.8, fb: .3, muff: 260, drive: 1.2, bright: 1500, rough: .2, clatter: .1, turbo: 0, vol: .32, whine: 1, jitter: 3 },
+    ktm:      { stroke: 4, ang: [0], imb: [1], idle: 1500, red: 10500, pulseMs: 5, pipe: 1.1, fb: .5, muff: 200, drive: 5, bright: 2200, rough: .45, clatter: .25, turbo: 0, vol: .55, jitter: 6, pops: 1 },   // 390 single, raspy
+    sportbike:{ stroke: 4, ang: [0], imb: [1], idle: 1600, red: 11500, pulseMs: 4, pipe: 1.0, fb: .5, muff: 230, drive: 5, bright: 2600, rough: .4, clatter: .2, turbo: 0, vol: .55, jitter: 5, pops: 1 },
+    jawa:     { stroke: 2, ang: [0, .5], imb: [1, .9], idle: 1300, red: 6500, pulseMs: 4, pipe: 1.3, fb: .55, muff: 170, drive: 3, bright: 1500, rough: .5, clatter: .15, turbo: 0, vol: .5, jitter: 6, pops: .7 },   // 2-stroke parallel twin, twin pipes (2nd pipe: +12%)
+  };
+  const ALIAS = { crysta: 'innova', mpv: 'innova', innova: 'innova', fortuner: 'fortuner', suv: 'bolero', bolero: 'bolero', scorpio: 'scorpio',
+    hatch: 'swift', swift: 'swift', car: 'swift', tractor: 'tractor', lorry: 'lorry', truck: 'lorry', bus: 'bus', auto: 'auto',
+    bike: 'splendor', splendor: 'splendor', bullet: 'bullet', classic: 'bullet', classic2: 'bullet500', bullet500: 'bullet500',
+    scooter: 'scooter', ktm: 'ktm', sport: 'ktm', sportbike: 'sportbike', jawa: 'jawa', cycle: null, bullockCart: null, cart: null, none: null };
+  function resolve(k) {
+    if (k in ALIAS) return ALIAS[k];
+    if (k in P) return k;
+    const s = String(k || '').toLowerCase();
+    if (/cycle|cart|walk|foot/.test(s)) return null;
+    if (/bike|moto|scoot/.test(s)) return 'splendor';
+    if (/truck|lorry|tipper/.test(s)) return 'lorry';
+    return 'swift';
+  }
+  const cycleHz = (p, rpm) => rpm / 60 / (p.stroke === 4 ? 2 : 1);
+  const firingHz = (p, rpm) => cycleHz(p, rpm) * p.ang.length;
+  // one cycle -> PeriodicWave
+  function buildWave(ctx, p, coast) {
+    const N = 1024, x = new Float32Array(N), H = 256;
+    const w = Math.max(0.004, p.pulseMs / 1000 * cycleHz(p, p.idle)) * (coast ? 1.9 : 1);   // pulse width as a fraction of the cycle
+    for (let c = 0; c < p.ang.length; c++) {
+      const a = (coast ? 0.45 + 0.1 * p.imb[c] : p.imb[c]);
+      for (let i = 0; i < N; i++) {
+        let u = i / N - p.ang[c]; if (u < 0) u += 1;
+        const t = u / w;
+        // fast rise / exponential fall (gamma-like), then a broader rarefaction dip
+        x[i] += a * (t * t * Math.exp(2 - 2 * t) - 0.28 * Math.exp(-((t - 3.2) * (t - 3.2)) / 2.5));
+      }
+      if (p.stroke === 2 && p.ang.length === 2 && c === 1) {}   // second pipe handled by the comb's second tap
+    }
+    const re = new Float32Array(H + 1), im = new Float32Array(H + 1);
+    for (let k = 1; k <= H; k++) {
+      let sr = 0, si = 0; const wk = 2 * Math.PI * k / N;
+      for (let i = 0; i < N; i++) { sr += x[i] * Math.cos(wk * i); si += x[i] * Math.sin(wk * i); }
+      re[k] = sr / N; im[k] = si / N;
+    }
+    return ctx.createPeriodicWave(re, im);
+  }
+  const cache = new WeakMap();
+  function waves(ctx, name) {
+    let m = cache.get(ctx); if (!m) cache.set(ctx, m = {});
+    if (!m[name]) m[name] = { load: buildWave(ctx, P[name], false), coast: buildWave(ctx, P[name], true) };
+    return m[name];
+  }
+  // build the remaining waves in idle time so a vehicle switch never stalls a frame
+  function prewarm(ctx) {
+    const names = Object.keys(P), idle = window.requestIdleCallback || (f => setTimeout(f, 50));
+    const step = () => { const n = names.shift(); if (!n) return; waves(ctx, n); idle(step); };
+    idle(step);
+  }
+  return { P, ALIAS, resolve, waves, cycleHz, firingHz, prewarm };
+})();
+window.EngineProfiles = EngineProfiles;
+
 function EngineSound(ctx) {
   const out = ctx.createGain(); out.gain.value = 0; out.connect(ctx.destination);
-  const ENGINES = {
-    crysta:  { cyl: 4, idle: 800,  red: 4200, base: 1.0,  rough: 0.35, bright: 900,  turbo: 1,   vol: 0.55, thump: 0.25 },  // 2.4 diesel
-    hatch:   { cyl: 4, idle: 850,  red: 6200, base: 1.0,  rough: 0.15, bright: 1600, turbo: 0,   vol: 0.45 },  // petrol
-    suv:     { cyl: 4, idle: 750,  red: 4000, base: 0.95, rough: 0.45, bright: 800,  turbo: 0.6, vol: 0.55 },  // mHawk-style diesel
-    tractor: { cyl: 3, idle: 650,  red: 2300, base: 0.9,  rough: 0.7,  bright: 520,  turbo: 0,   vol: 0.65, thump: 0.8 },
-    lorry:   { cyl: 6, idle: 600,  red: 2800, base: 0.85, rough: 0.55, bright: 600,  turbo: 0.8, vol: 0.7, thump: 0.4 },
-    bus:     { cyl: 6, idle: 600,  red: 2800, base: 0.85, rough: 0.5,  bright: 650,  turbo: 0.7, vol: 0.7 },
-    auto:    { cyl: 2, idle: 1300, red: 5500, base: 1.0,  rough: 0.65, bright: 1300, turbo: 0,   vol: 0.45, thump: 0.35 },  // 2-stroke-ish putter (fires every rev)  // single-cylinder putter
-    bike:    { cyl: 1, idle: 1400, red: 8000, base: 1.0,  rough: 0.4,  bright: 1800, turbo: 0,   vol: 0.45, thump: 0.2 },  // 100-125cc commuter
-    bullet:  { cyl: 1, idle: 600,  red: 5000, base: 1.0,  rough: 0.55, bright: 420,  turbo: 0,   vol: 0.6,  thump: 0.9 },  // 350/500cc long-stroke dug-dug
-    scooter: { cyl: 1, idle: 1800, red: 8500, base: 1.0,  rough: 0.12, bright: 2600, turbo: 0,   vol: 0.35, thump: 0,   whine: 1 },  // CVT whine
-    ktm:     { cyl: 1, idle: 1500, red: 10500, base: 1.0, rough: 0.45, bright: 2800, turbo: 0,   vol: 0.55, thump: 0.3 },  // high-revving single, raspy
-    bullockCart: null,
-  };
+  const ENGINES = EngineProfiles.P;
+  try { EngineProfiles.prewarm(ctx); } catch (e) {}
   // --- shared noise
   const nb = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = nb.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-  const noise = () => { const s = ctx.createBufferSource(); s.buffer = nb; s.loop = true; s.start(); return s; };
-  const shaper = (k) => { const w = ctx.createWaveShaper(), n = 1024, c = new Float32Array(n); for (let i = 0; i < n; i++) { const x = i / n * 2 - 1; c[i] = (1 + k) * x / (1 + k * Math.abs(x)); } w.curve = c; return w; };
+  const noise = () => { const s = ctx.createBufferSource(); s.buffer = nb; s.loop = true; s.start(0, Math.random() * 1.9); return s; };
+  const shaperCurve = (k) => { const n = 1024, c = new Float32Array(n); for (let i = 0; i < n; i++) { const x = i / n * 2 - 1; c[i] = (1 + k) * x / (1 + k * Math.abs(x)); } return c; };
+  const shaper = ctx.createWaveShaper(); shaper.oversample = 'none';
+  const bq = (type, f, q) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; if (q != null) b.Q.value = q; return b; };
+  const gain = (v) => { const g = ctx.createGain(); g.gain.value = v; return g; };
 
-  // --- engine harmonics (firing frequency and multiples), shaped and low-passed
-  const engBus = ctx.createGain(), engLP = ctx.createBiquadFilter(), engDist = shaper(4);
-  engLP.type = 'lowpass'; engLP.Q.value = 2.5;
-  engBus.connect(engDist); engDist.connect(engLP);
-  const engOut = ctx.createGain(); engLP.connect(engOut); engOut.connect(out);
-  const harm = [[1, 0.55, 'sawtooth'], [0.5, 0.35, 'triangle'], [2, 0.25, 'sawtooth'], [3, 0.1, 'square'], [1.5, 0.12, 'sine']].map(([mul, g, type]) => {
-    const o = ctx.createOscillator(); o.type = type; const gn = ctx.createGain(); gn.gain.value = g; o.connect(gn); gn.connect(engBus); o.start(); return { o, mul };
-  });
-  // --- combustion rumble: noise gated at the firing frequency
-  const rumbleSrc = noise(), rumbleBP = ctx.createBiquadFilter(), rumbleAM = ctx.createGain(), rumbleOut = ctx.createGain();
-  rumbleBP.type = 'bandpass'; rumbleBP.Q.value = 0.8; rumbleAM.gain.value = 0.5;
-  const firing = ctx.createOscillator(); firing.type = 'square'; const firingDepth = ctx.createGain(); firingDepth.gain.value = 0.5; firing.connect(firingDepth); firingDepth.connect(rumbleAM.gain); firing.start();
-  rumbleSrc.connect(rumbleBP); rumbleBP.connect(rumbleAM); rumbleAM.connect(rumbleOut); rumbleOut.connect(out);
-  // --- low-frequency combustion thump (single-cylinder bikes, tractors): the firing square low-passed hard
-  const thumpLP = ctx.createBiquadFilter(), thumpOut = ctx.createGain(); thumpLP.type = 'lowpass'; thumpLP.frequency.value = 140; thumpLP.Q.value = 3; thumpOut.gain.value = 0;
-  firing.connect(thumpLP); thumpLP.connect(thumpOut); thumpOut.connect(out);
-  // --- CVT / belt whine (scooters)
-  const whine = ctx.createOscillator(), whineOut = ctx.createGain(); whine.type = 'triangle'; whineOut.gain.value = 0; whine.connect(whineOut); whineOut.connect(out); whine.start();
+  // --- pulse oscillators (load / overrun) -> pre-gain -> shaper -> exhaust comb -> muffler -> brightness LP
+  const oscL = ctx.createOscillator(), oscC = ctx.createOscillator(), gL = gain(0), gC = gain(0), pre = gain(1);
+  oscL.connect(gL); oscC.connect(gC); gL.connect(pre); gC.connect(pre); pre.connect(shaper);
+  const combIn = gain(1), dly = ctx.createDelay(0.1), dly2 = ctx.createDelay(0.1), fbLP = bq('lowpass', 1800, 0.5), fbG = gain(0.4), tap2 = gain(0);
+  shaper.connect(combIn); combIn.connect(dly); dly.connect(fbLP); fbLP.connect(fbG); fbG.connect(dly);
+  combIn.connect(dly2); dly2.connect(tap2);                              // second exhaust pipe (twin pipes): slightly longer
+  const muff = bq('peaking', 100, 1.2), engLP = bq('lowpass', 800, 0.9), engOut = gain(0);
+  muff.gain.value = 9;
+  combIn.connect(muff); fbLP.connect(muff); tap2.connect(muff); muff.connect(engLP); engLP.connect(engOut); engOut.connect(out);
+  // --- combustion / gas-flow noise puffing with each pulse, through the same pipe
+  const nSrc = noise(), nBP = bq('bandpass', 400, 0.7), nAM = gain(0), nDepth = gain(0);
+  nSrc.connect(nBP); nBP.connect(nAM); oscL.connect(nDepth); nDepth.connect(nAM.gain); nAM.connect(combIn);
+  // --- mechanical / diesel clatter: high-passed noise gated by the pulses (engine bay, not exhaust)
+  const cSrc = noise(), cHP = bq('bandpass', 2600, 1.4), cAM = gain(0), cDepth = gain(0), cOut = gain(0);
+  cSrc.connect(cHP); cHP.connect(cAM); oscL.connect(cDepth); cDepth.connect(cAM.gain); cAM.connect(cOut); cOut.connect(out);
   // --- intake roar
-  const intakeSrc = noise(), intakeBP = ctx.createBiquadFilter(), intakeOut = ctx.createGain();
-  intakeBP.type = 'bandpass'; intakeBP.Q.value = 1.2; intakeSrc.connect(intakeBP); intakeBP.connect(intakeOut); intakeOut.connect(out);
-  // --- turbo whistle
-  const turbo = ctx.createOscillator(), turboOut = ctx.createGain(); turbo.type = 'sine'; turboOut.gain.value = 0; turbo.connect(turboOut); turboOut.connect(out); turbo.start();
+  const iSrc = noise(), iBP = bq('bandpass', 600, 1.1), iOut = gain(0); iSrc.connect(iBP); iBP.connect(iOut); iOut.connect(out);
+  // --- turbo whistle + CVT whine (one oscillator each)
+  const turbo = ctx.createOscillator(), turboOut = gain(0); turbo.type = 'sine'; turbo.connect(turboOut); turboOut.connect(out);
+  const whine = ctx.createOscillator(), whineOut = gain(0); whine.type = 'triangle'; whine.connect(whineOut); whineOut.connect(out);
   // --- tyre / road noise
-  const roadSrc = noise(), roadF = ctx.createBiquadFilter(), roadOut = ctx.createGain();
-  roadF.type = 'bandpass'; roadSrc.connect(roadF); roadF.connect(roadOut); roadOut.connect(out);
-  const gravelSrc = noise(), gravelHP = ctx.createBiquadFilter(), gravelAM = ctx.createGain(), gravelOut = ctx.createGain();
-  gravelHP.type = 'highpass'; gravelHP.frequency.value = 1800; gravelAM.gain.value = 0;
-  const gravelLFO = ctx.createOscillator(); gravelLFO.type = 'square'; gravelLFO.frequency.value = 23; const gDepth = ctx.createGain(); gDepth.gain.value = 0.6; gravelLFO.connect(gDepth); gDepth.connect(gravelAM.gain); gravelLFO.start();
+  const roadSrc = noise(), roadF = bq('bandpass', 300, 0.7), roadOut = gain(0); roadSrc.connect(roadF); roadF.connect(roadOut); roadOut.connect(out);
+  const gravelSrc = noise(), gravelHP = bq('highpass', 1800), gravelAM = gain(0), gravelOut = gain(0);
+  const gravelLFO = ctx.createOscillator(); gravelLFO.type = 'square'; gravelLFO.frequency.value = 23; const gDepth = gain(0.6); gravelLFO.connect(gDepth); gDepth.connect(gravelAM.gain);
   gravelSrc.connect(gravelHP); gravelHP.connect(gravelAM); gravelAM.connect(gravelOut); gravelOut.connect(out);
+  [oscL, oscC, turbo, whine, gravelLFO].forEach(o => o.start());
 
-  let kind = 'crysta', lastRpm = 0, lastThrottle = 0, crackleT = 0, shiftDip = 0, smoothedRpm = 800;
-  function crackle() {   // lift-off pops from the exhaust
-    const t0 = ctx.currentTime, n = 2 + (Math.random() * 4 | 0);
+  let kind = null, prof = null, lastThrottle = 0, crackleT = 0, shiftDip = 0, smoothedRpm = 800, spool = 0, wasShifting = false, jitT = 0;
+  function applyProfile(name) {
+    prof = name ? ENGINES[name] : null; kind = name;
+    if (!prof) return;
+    const W = EngineProfiles.waves(ctx, name);
+    oscL.setPeriodicWave(W.load); oscC.setPeriodicWave(W.coast);
+    shaper.curve = shaperCurve(prof.drive);
+    dly.delayTime.value = 2 * prof.pipe / 343; dly2.delayTime.value = 2 * prof.pipe * 1.12 / 343;
+    tap2.gain.value = name === 'jawa' ? 0.8 : 0;
+    fbG.gain.value = prof.fb; fbLP.frequency.value = 900 + prof.bright;
+    muff.frequency.value = prof.muff;
+    nBP.frequency.value = prof.muff * 3;
+    smoothedRpm = prof.idle;
+  }
+  function pop(strength) {   // overrun burble / lift-off crackle out of the exhaust
+    const t0 = ctx.currentTime, n = 1 + (Math.random() * 3 * strength | 0);
     for (let i = 0; i < n; i++) {
-      const t = t0 + i * (0.04 + Math.random() * 0.07), s = ctx.createBufferSource(); s.buffer = nb;
-      const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 300 + Math.random() * 500; f.Q.value = 3;
-      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+      const t = t0 + i * (0.03 + Math.random() * 0.08), s = ctx.createBufferSource(); s.buffer = nb;
+      const f = bq('bandpass', 250 + Math.random() * 600, 2.5), g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35 * strength, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
       s.connect(f); f.connect(g); g.connect(out); s.start(t, Math.random()); s.stop(t + 0.07);
     }
   }
   const set = (p, v, tc) => p.setTargetAtTime(v, ctx.currentTime, tc || 0.04);
+  const silence = () => [engOut, cOut, iOut, turboOut, whineOut, gL, gC, nAM].forEach(g => set(g.gain, 0, 0.1));
 
   return {
+    profiles: EngineProfiles,
     setKind(k) {
       // the player's bike keeps the sound identity sfx.js rolled for it in traffic (Bullet / scooter / KTM / commuter)
       try { if (k === 'bike' && typeof Player !== 'undefined' && Player.active && Player.active._snd) k = Player.active._snd.type; } catch (e) {}
-      try { if (Player.active && Player.active.p && Player.active.p.pedal) k = 'bullockCart'; } catch (e) {}   // pedal cycle: no engine
-      kind = k in ENGINES ? k : 'hatch';
+      try { if (Player.active && Player.active.p && Player.active.p.pedal) k = 'cycle'; } catch (e) {}   // pedal cycle: no engine
+      const name = EngineProfiles.resolve(k);
+      if (name !== kind || (name && !prof)) applyProfile(name);
     },
     // rpm: crank rpm; throttle 0..1; speedKmh; surface: world surface name; shifting: true during a gear change
     update({ rpm, throttle, speedKmh, surface, shifting, on }) {
-      const E = ENGINES[kind];
-      const sp = Math.abs(speedKmh || 0);
-      // road noise always (even with no engine, e.g. bullock cart / walking off)
+      const E = prof, sp = Math.abs(speedKmh || 0); throttle = Math.max(0, Math.min(1, throttle || 0));
       const rough = surface === 'dirt' || surface === 'field' || surface === 'river';
       set(roadOut.gain, on ? Math.min(0.18, sp / 600) * (rough ? 0.6 : 1) : 0, 0.1);
-      roadF.frequency.value = 300 + sp * 6; roadF.Q.value = 0.7;
+      roadF.frequency.value = 300 + sp * 6;
       set(gravelOut.gain, on && rough ? Math.min(0.22, sp / 300) : 0, 0.1);
       gravelLFO.frequency.value = 12 + sp * 0.6;
-      if (!E || !on) { set(out.gain, on ? 1 : 0, 0.15); [engOut, rumbleOut, intakeOut, turboOut, thumpOut, whineOut].forEach(g => set(g.gain, 0, 0.1)); return; }
+      if (!E || !on) { set(out.gain, on ? 1 : 0, 0.15); silence(); return; }
       set(out.gain, 1, 0.15);
-      // engine speed with a little inertia, plus the dip when the box changes gear
-      if (shifting && !this._wasShifting) shiftDip = 1;
-      this._wasShifting = shifting;
-      shiftDip *= 0.9;
-      const r = Math.max(E.idle, Math.min(E.red, rpm || E.idle)) * (1 - shiftDip * 0.08);
-      smoothedRpm += (r - smoothedRpm) * 0.35;
-      const fire = smoothedRpm / 60 * (E.cyl / 2) * E.base;       // firing pulses per second (4-stroke)
-      const load = Math.min(1, throttle * 0.8 + 0.2), rr = (smoothedRpm - E.idle) / (E.red - E.idle);
-      harm.forEach(h => set(h.o.frequency, Math.max(8, fire * h.mul), 0.03));
-      firing.frequency.value = Math.max(4, fire);
-      set(engLP.frequency, E.bright * (0.6 + throttle * 1.2 + rr * 1.5), 0.05);
-      set(engOut.gain, E.vol * (0.18 + load * 0.35) * (1 - shiftDip * 0.5), 0.04);
-      rumbleBP.frequency.value = 80 + rr * 220;
-      set(rumbleOut.gain, E.vol * E.rough * (0.25 + load * 0.45), 0.05);
-      intakeBP.frequency.value = 500 + rr * 2200;
-      set(intakeOut.gain, E.vol * throttle * (0.05 + rr * 0.18), 0.06);
-      set(turbo.frequency, 2500 + rr * 6000, 0.15);
-      set(turboOut.gain, E.turbo * throttle * rr * 0.03, 0.2);
-      set(thumpOut.gain, E.vol * (E.thump || 0) * (0.4 + load * 0.5) * (1 - rr * 0.5), 0.05);
-      set(whine.frequency, 300 + sp * 22, 0.1); set(whineOut.gain, (E.whine || 0) * Math.min(0.05, sp / 900) * (0.4 + throttle), 0.1);
-      // lift-off crackle at high revs
+      if (shifting && !wasShifting) shiftDip = 1;
+      wasShifting = shifting; shiftDip *= 0.9;
+      // map the caller's rpm range onto this engine (callers fake 800..3500/7500 for non-Crysta vehicles)
+      let r = rpm || E.idle; if (r > E.red) r = E.red; if (r < E.idle) r = E.idle;
+      r *= 1 - shiftDip * 0.08;
+      smoothedRpm += (r - smoothedRpm) * 0.3;
+      const rr = (smoothedRpm - E.idle) / (E.red - E.idle);
+      const load = Math.min(1, throttle * 0.85 + 0.15 + (rr < 0.05 ? 0.1 : 0));
+      const cyc = EngineProfiles.cycleHz(E, smoothedRpm), fire = cyc * E.ang.length;
+      // cycle-to-cycle variation: random detune, bigger at idle
+      jitT -= 1 / 60;
+      if (jitT <= 0 && E.jitter) { jitT = 0.05 + Math.random() * 0.15; const c = (Math.random() * 2 - 1) * E.jitter * (1 - rr * 0.7); oscL.detune.setTargetAtTime(c, ctx.currentTime, 0.03); oscC.detune.setTargetAtTime(c, ctx.currentTime, 0.03); }
+      set(oscL.frequency, cyc, 0.025); set(oscC.frequency, cyc, 0.025);
+      const lw = 0.25 + 0.75 * load;
+      set(gL.gain, lw, 0.06); set(gC.gain, (1 - lw) * 0.9, 0.06);
+      set(pre.gain, 0.6 + load * 0.9, 0.05);                          // harder into the shaper under load: bark
+      set(engLP.frequency, E.bright * (0.7 + load * 0.9 + rr * 2.2), 0.05);
+      set(engOut.gain, E.vol * 0.55 * (0.45 + load * 0.55) * (1 - shiftDip * 0.5), 0.04);
+      nBP.frequency.value = E.muff * 3 + rr * 900;
+      set(nAM.gain, E.rough * 0.25 * (0.3 + load), 0.05); set(nDepth.gain, E.rough * 0.25 * (0.3 + load), 0.05);
+      set(cAM.gain, 0.15, 0.1); set(cDepth.gain, 0.6, 0.1);
+      set(cOut.gain, E.vol * E.clatter * 0.12 * (1 - rr * 0.4) * (0.6 + load * 0.4), 0.06);
+      iBP.frequency.value = 400 + rr * 2000 + fire * 2;
+      set(iOut.gain, E.vol * throttle * (0.03 + rr * 0.12), 0.06);
+      spool += ((E.turbo ? rr * throttle : 0) - spool) * (throttle > spool ? 0.02 : 0.06);
+      set(turbo.frequency, 1800 + spool * 7000, 0.1);
+      set(turboOut.gain, (E.turbo || 0) * spool * 0.035, 0.1);
+      set(whine.frequency, 250 + sp * 20, 0.1); set(whineOut.gain, (E.whine || 0) * Math.min(0.05, sp / 900) * (0.4 + throttle), 0.1);
+      // overrun: pops on a sharp lift at high rpm, light burble while coasting down from revs
       crackleT -= 1 / 60;
-      if (lastThrottle > 0.6 && throttle < 0.2 && rr > 0.55 && crackleT <= 0) { crackle(); crackleT = 0.8; }
-      lastThrottle = throttle; lastRpm = r;
+      if (crackleT <= 0 && throttle < 0.15) {
+        if (lastThrottle > 0.6 && rr > 0.5) { pop(0.8 + (E.pops || 0) * 0.4); crackleT = 0.6; }
+        else if (E.pops && rr > 0.35 && Math.random() < 0.06 * E.pops) { pop(0.4 * E.pops); crackleT = 0.15; }
+      }
+      lastThrottle = throttle;
     },
   };
 }

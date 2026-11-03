@@ -173,24 +173,27 @@
   function sndOf(tc) {      // per-vehicle sound identity, rolled once
     if (!tc._snd) {
       let type = tc.model;
-      if (type === 'bike') { const r = Math.random(); type = r < 0.3 ? 'bullet' : r < 0.55 ? 'scooter' : r < 0.67 ? 'ktm' : 'bike'; }
+      const ut = tc.g && tc.g.userData && tc.g.userData.type, UT = { splendor: 'bike', scooter: 'scooter', classic: 'bullet', classic2: 'jawa', sport: 'ktm', cycle: 'cycle', mpv: 'innova', fortuner: 'fortuner' };
+      if (ut && UT[ut]) type = UT[ut];
+      else if (type === 'bike') { const r = Math.random(); type = r < 0.25 ? 'bullet' : r < 0.32 ? 'bullet500' : r < 0.55 ? 'scooter' : r < 0.64 ? 'ktm' : r < 0.68 ? 'jawa' : 'bike'; }
       tc._snd = { type, pitch: rnd(0.92, 1.08), lastV: 0, stopT: 0 };
     }
     return tc._snd;
   }
   const voices = [];
+  // one voice = the engine's exhaust pulse-train oscillator (EngineProfiles PeriodicWave at the cycle rate, so the
+  // firing frequency is rpm/60*cyl/2) + noise gated by the same pulses, low-passed, through a panner
   function makeVoice() {
-    const o = ctx.createOscillator(), sub = ctx.createOscillator(), og = ctx.createGain(), sg = ctx.createGain();
-    const n = noise(true), nAM = ctx.createGain(), fire = ctx.createOscillator(), fd = ctx.createGain();
+    const o = ctx.createOscillator(), og = ctx.createGain();
+    const n = noise(true), nBP = ctx.createBiquadFilter(), nAM = ctx.createGain(), fd = ctx.createGain();
     const lp = ctx.createBiquadFilter(), g = ctx.createGain(), p = ctx.createPanner();
-    sub.type = 'sine'; fire.type = 'square'; fd.gain.value = 0.5; nAM.gain.value = 0;
-    lp.type = 'lowpass'; lp.Q.value = 1.5; g.gain.value = 0;
+    nBP.type = 'bandpass'; nBP.Q.value = 0.8; nAM.gain.value = 0; fd.gain.value = 0;
+    lp.type = 'lowpass'; lp.Q.value = 1.2; g.gain.value = 0;
     p.panningModel = 'equalpower'; p.distanceModel = 'inverse'; p.refDistance = 5; p.maxDistance = 200; p.rolloffFactor = 1.3;
-    o.connect(og); sub.connect(sg); og.connect(lp); sg.connect(lp);
-    fire.connect(fd); fd.connect(nAM.gain); n.connect(nAM); nAM.connect(lp);
+    o.connect(og); og.connect(lp); o.connect(fd); fd.connect(nAM.gain); n.connect(nBP); nBP.connect(nAM); nAM.connect(lp);
     lp.connect(g); g.connect(p); p.connect(master);
-    o.start(); sub.start(); fire.start(); n.start();
-    return { o, sub, og, sg, nAM, fd, fire, lp, g, p, tc: null, type: null };
+    o.start(); n.start(0, Math.random() * 1.9);
+    return { o, og, nBP, nAM, fd, lp, g, p, tc: null, type: null };
   }
   function setPos(p, x, z) { if (p.positionX) { p.positionX.setTargetAtTime(x, ctx.currentTime, 0.03); p.positionY.value = 0.8; p.positionZ.setTargetAtTime(z, ctx.currentTime, 0.03); } else p.setPosition(x, 0.8, z); }
   function voiceCount() { const t = (window.Quality && Quality.tier) || 'high'; return t === 'low' ? 2 : t === 'medium' ? 4 : 6; }
@@ -200,7 +203,7 @@
     // nearest vehicles with an engine
     const near = [];
     for (const tc of T) {
-      if (!tc.g || tc.model === 'bullockCart' || tc.g.visible === false) continue;
+      if (!tc.g || tc.model === 'bullockCart' || tc.model === 'cart' || tc.g.visible === false) continue;
       const d = Math.hypot(tc.g.position.x - cp.x, tc.g.position.z - cp.z);
       if (d < 90) near.push([d, tc]);
       // air brakes: lorry / bus coming to a stop
@@ -218,16 +221,21 @@
     const now = ctx.currentTime;
     for (const v of voices) {
       if (!v.tc) { v.g.gain.setTargetAtTime(0, now, 0.15); continue; }
-      const S = sndOf(v.tc), E = TV[S.type] || TV.hatch, sp = Math.abs(v.tc.cur != null ? v.tc.cur : v.tc.speed || 0);
-      const r = Math.min(1, sp / E.vs), fire = (E.fire0 + (E.fire1 - E.fire0) * r) * S.pitch;
-      if (v.type !== S.type) { v.o.type = E.w; v.type = S.type; }
-      if (v.fresh) { setPos(v.p, v.tc.g.position.x, v.tc.g.position.z); v.fresh = false; }
-      else setPos(v.p, v.tc.g.position.x, v.tc.g.position.z);
-      v.o.frequency.setTargetAtTime(fire, now, 0.08); v.sub.frequency.setTargetAtTime(fire * 0.5, now, 0.08); v.fire.frequency.setTargetAtTime(fire, now, 0.08);
-      v.og.gain.value = 0.35 * (1 - E.rough * 0.5); v.sg.gain.value = S.type === 'bullet' || S.type === 'tractor' ? 0.6 : 0.25;
-      v.nAM.gain.value = 0.5 * E.rough; v.fd.gain.value = 0.5 * E.rough;   // noise gated 0..rough at the firing rate
-      v.lp.frequency.setTargetAtTime(E.bright * (0.7 + r * 0.8), now, 0.1);
-      v.g.gain.setTargetAtTime(E.vol * (0.5 + r * 0.5), now, 0.15);
+      const S = sndOf(v.tc), EP = window.EngineProfiles, name = EP ? EP.resolve(S.type) : null, E = name && EP.P[name], sp = Math.abs(v.tc.cur != null ? v.tc.cur : v.tc.speed || 0);
+      if (!E) { v.g.gain.setTargetAtTime(0, now, 0.15); continue; }
+      const T = TV[S.type] || TV.hatch, r = Math.min(1, sp / T.vs);
+      // a pretend gearbox: rpm sweeps up through 4 gears (two-wheelers 5), CVT scooters hold rpm
+      const ng = name === 'scooter' ? 1 : 4, gi = Math.min(ng - 1, Math.floor(r * ng)), gf = r * ng - gi;
+      const rpm = (E.idle + (E.red * 0.62 - E.idle) * (name === 'scooter' ? Math.min(1, r * 1.6) : (r < 0.02 ? 0 : 0.3 + 0.7 * gf))) * S.pitch;
+      const acc = sp - (v.lastSp || 0); v.lastSp = sp; const load = Math.max(0.2, Math.min(1, 0.5 + acc * 20));
+      if (v.type !== name) { const W = EP.waves(ctx, name); v.o.setPeriodicWave(W.load); v.nBP.frequency.value = E.muff * 3; v.type = name; }
+      setPos(v.p, v.tc.g.position.x, v.tc.g.position.z); v.fresh = false;
+      v.o.frequency.setTargetAtTime(EP.cycleHz(E, rpm), now, 0.08);
+      if (E.jitter && Math.random() < 0.15) v.o.detune.setTargetAtTime((Math.random() * 2 - 1) * E.jitter, now, 0.03);
+      v.og.gain.value = 0.5;
+      v.nAM.gain.value = 0.25 * E.rough; v.fd.gain.value = 0.25 * E.rough;
+      v.lp.frequency.setTargetAtTime(E.bright * (0.8 + load * 0.6 + r * 1.5), now, 0.1);
+      v.g.gain.setTargetAtTime(E.vol * 1.1 * (0.6 + 0.4 * load), now, 0.15);
     }
   }
 

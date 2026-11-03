@@ -8,6 +8,7 @@ const MP = (function () {
   const RATE = 1 / 12, INTERP_DELAY = 100, MAX_EXTRAP = 250, CELL = 200, TAG_FAR = 250;
   const LAT0 = 17.70160, LON0 = 79.19630, M_PER_DEG_LAT = 110574, M_PER_DEG_LON = 111320 * Math.cos(17.7016 * Math.PI / 180);
   let ws = null, myId = null, myColor = '#38bdf8', sendT = 0, status = 'offline', retry = 0;
+  let lastSquad = null, retryTimer = 0, wantOnline = false, everOnline = false, lastMsgAt = 0;
   let squad = { code: null, members: [] }, channel = 'all', rtt = 0, lastSent = null, idleSends = 0;
   const remotes = {};               // id -> { g, body, wheels, head, tail, kind, name, color, squad, buf: [{t,x,z,rot,spd}], ... }
   const pings = {};                 // owner -> { x, z, name, color, t, ttl, mesh }
@@ -88,7 +89,8 @@ const MP = (function () {
     const q = rtt < 80 ? '#4ade80' : rtt < 160 ? '#fbbf24' : '#f87171';
     $s.innerHTML = status === 'online'
       ? `🟢 Online · ${n + 1} in Nellutla · <span style="color:${q}">ping ${Math.round(rtt)} ms</span>${squad.code ? ` · <span style="color:#4ade80">squad ${squad.code}</span>` : ''}<br><span style="color:#94a3b8">Enter chat · Q quick-chat · Z ping · Tab scores</span>`
-      : status === 'connecting' ? '🟡 Connecting to multiplayer…' : '⚪ Single player (start multiplayer/server.py to play together)';
+      : status === 'connecting' ? '🟡 Connecting to multiplayer…'
+      : `⚪ Offline · multiplayer server not reachable${everOnline ? ' · reconnecting…' : ' (run multiplayer/server.py)'}`;
   }
 
   // ================================================================ coordinates
@@ -208,17 +210,35 @@ const MP = (function () {
   // ================================================================ network
   function serverNow() { return performance.now() + (clock.offset || 0); }
   function connect() {
+    wantOnline = true;
+    // one socket at a time: ignore repeated calls while a socket is connecting/open
+    if (ws && (ws.readyState === 0 || ws.readyState === 1)) return;
+    clearTimeout(retryTimer); retryTimer = 0;
     const host = location.hostname || '127.0.0.1';
-    status = 'connecting'; setStatus();
-    try { ws = new WebSocket(`ws://${host}:8094`); } catch (e) { return schedule(); }
-    ws.onopen = () => {
-      retry = 0; status = 'online'; setStatus();
-      ws.send(JSON.stringify({ t: 'hello', name: myName() }));
+    status = retry > 2 ? 'offline' : 'connecting'; setStatus();
+    let sock;
+    try { sock = new WebSocket(`ws://${host}:8094`); } catch (e) { return schedule(); }
+    ws = sock;
+    sock.onopen = () => {
+      if (ws !== sock) return;
+      retry = 0; status = 'online'; everOnline = true; lastMsgAt = performance.now(); setStatus();
+      sock.send(JSON.stringify({ t: 'hello', name: myName() }));
       for (let i = 0; i < 4; i++) setTimeout(sendPing, i * 150);
     };
-    ws.onmessage = ev => {
+    sock.onclose = () => {
+      if (ws !== sock) return;              // stale socket: a newer one already replaced it
+      ws = null; status = 'offline'; lastSquad = squad.code || lastSquad; Object.keys(remotes).forEach(drop); Object.keys(pings).forEach(removePing);
+      squad = { code: null, members: [] }; setStatus(); schedule();
+    };
+    sock.onerror = () => {};
+    sock.onmessage = ev => {
+      if (ws !== sock) return;
+      lastMsgAt = performance.now();
       let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
-      if (m.t === 'welcome') { myId = m.id; myColor = m.color; if (clock.offset == null) clock.offset = m.st - performance.now(); }
+      if (m.t === 'welcome') {
+        myId = m.id; myColor = m.color; if (clock.offset == null) clock.offset = m.st - performance.now();
+        if (lastSquad) send({ t: 'squad', op: 'rejoin', code: lastSquad });   // keep the squad across a reconnect
+      }
       else if (m.t === 'pong') {
         const now = performance.now(), r = now - m.c;
         clock.samples.push({ r, off: m.st - (m.c + r / 2) }); if (clock.samples.length > 10) clock.samples.shift();
@@ -244,6 +264,7 @@ const MP = (function () {
       else if (m.t === 'sys') sys(m.text, m.kind);
       else if (m.t === 'squad') {
         const was = squad.code; squad = { code: m.code, members: m.members || [] };
+        if (m.code) lastSquad = m.code;            // a null update can be the server tearing down our old socket
         if (!m.code && was) sys('You left the squad', 'info');
         if (!squad.code && channel === 'squad') setChannel('all');
         for (const id of Object.keys(pings)) if (pings[id].squad && pings[id].squad !== squad.code) removePing(id);
@@ -256,18 +277,32 @@ const MP = (function () {
         if (r && Math.hypot(r.g.position.x - carPos.x, r.g.position.z - carPos.z) < 120) { try { triggerHorn(); } catch (e) {} }
       }
     };
-    ws.onclose = () => { status = 'offline'; Object.keys(remotes).forEach(drop); Object.keys(pings).forEach(removePing); squad = { code: null, members: [] }; setStatus(); schedule(); };
-    ws.onerror = () => {};
   }
   function sendPing() { send({ t: 'ping', c: performance.now(), rtt: Math.round(rtt) }); }
-  setInterval(sendPing, 2000);
-  function schedule() { retry = Math.min(retry + 1, 6); setTimeout(connect, 1500 * retry); }
-  function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
-  function myName() {
-    let n = ''; try { n = localStorage.getItem('nellutla.name') || ''; } catch (e) {}
-    return n || 'Player ' + Math.floor(100 + Math.random() * 900);
+  setInterval(() => {
+    sendPing();
+    // dead-connection watchdog: snapshots/pongs arrive many times a second; 15 s of silence means the link is gone
+    if (ws && ws.readyState === 1 && !document.hidden && performance.now() - lastMsgAt > 15000) { try { ws.close(); } catch (e) {} }
+  }, 2000);
+  // exponential backoff with jitter: 1, 2, 4, 8, 16, 30 s ...
+  function schedule() {
+    if (!wantOnline || retryTimer) return;
+    retry++; const d = Math.min(30000, 1000 * Math.pow(2, retry - 1)) * (0.8 + Math.random() * 0.4);
+    retryTimer = setTimeout(() => { retryTimer = 0; connect(); }, d);
   }
-  function setName(n) { try { localStorage.setItem('nellutla.name', n); } catch (e) {} if (ws && ws.readyState === 1) send({ t: 'hello', name: n }); }
+  window.addEventListener('online', () => { if (wantOnline && !ws) { retry = 0; connect(); } });
+  function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
+  let curName = null;   // fixed for this tab once chosen: other tabs writing localStorage must not rename us
+  function myName() {
+    if (curName) return curName;
+    let n = ''; try { n = localStorage.getItem('nellutla.name') || ''; } catch (e) {}
+    if (!n) {   // keep one generated name per browser so reconnects don't look like new players
+      n = 'Player ' + Math.floor(100 + Math.random() * 900);
+      try { localStorage.setItem('nellutla.name', n); } catch (e) {}
+    }
+    return (curName = n);
+  }
+  function setName(n) { curName = n; try { localStorage.setItem('nellutla.name', n); } catch (e) {} if (ws && ws.readyState === 1) send({ t: 'hello', name: n }); }
   function myKind() {
     if (typeof Player === 'undefined' || Player.mode === 'crysta') return 'crysta';
     if (Player.mode === 'foot') return 'foot';
@@ -427,11 +462,13 @@ const MP = (function () {
   const view = { zoom: 1, cx: null, cz: null, drag: null };
   let mapProj = null;
   function bigMap(canvas) {
-    canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight;
+    // only reallocate the backing store when the size really changed (resizing every frame is costly)
+    if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) { canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; }
     const g = canvas.getContext('2d'), [x0, z0, x1, z1] = world.bounds;
     if (view.cx == null) { view.cx = (x0 + x1) / 2; view.cz = (z0 + z1) / 2; }
     const s0 = Math.min(canvas.width / (x1 - x0), canvas.height / (z1 - z0)), s = s0 * view.zoom;
     const W = canvas.width, H = canvas.height;
+    g.clearRect(0, 0, W, H);
     world.drawMap(g, view.cx, view.cz, s, W, H, 0);
     const P = (x, z) => [W / 2 + (x - view.cx) * s, H / 2 + (z - view.cz) * s];
     mapProj = { s, W, H };
@@ -446,7 +483,7 @@ const MP = (function () {
     drawPlayersOnMap(g, P);
     const [px, py] = P(carPos.x, carPos.z); g.fillStyle = '#38bdf8'; g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.arc(px, py, 7, 0, 7); g.fill(); g.stroke();
     g.fillStyle = 'rgba(10,15,25,.8)'; g.fillRect(10, H - 30, 470, 22); g.fillStyle = '#cbd5e1'; g.font = '12px sans-serif';
-    g.fillText(`Wheel zoom (${view.zoom.toFixed(1)}×) · drag pan · click ping · double-click recentre · M close`, 18, H - 14);
+    g.fillText(`Wheel zoom (${view.zoom.toFixed(1)}×) · drag pan · click ping · double-click recentre · M / Esc / click outside closes`, 18, H - 14);
   }
   function mapToWorld(canvas, ex, ey) {
     const rc = canvas.getBoundingClientRect(), mx = (ex - rc.left) * canvas.width / rc.width, my = (ey - rc.top) * canvas.height / rc.height;
@@ -482,7 +519,7 @@ const MP = (function () {
     if (cmd === '/name' && a) { const n = t.slice(6).trim(); setName(n); sys('Name changed to ' + n); }
     else if (cmd === '/squad' && a === 'create') send({ t: 'squad', op: 'create' });
     else if (cmd === '/squad' && a === 'join' && b) send({ t: 'squad', op: 'join', code: b });
-    else if (cmd === '/squad' && a === 'leave') send({ t: 'squad', op: 'leave' });
+    else if (cmd === '/squad' && a === 'leave') { lastSquad = null; send({ t: 'squad', op: 'leave' }); }
     else if (cmd === '/clearping') send({ t: 'ping_clear' });
     else sys('Commands: /squad create · /squad join CODE · /squad leave · /name NAME · /clearping. Emoji: :) :D <3 :fire: :car: :temple: :thumbsup: :tea: :cow:', 'info');
   }

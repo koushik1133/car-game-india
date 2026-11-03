@@ -7,12 +7,14 @@ const Parked = (function () {
   const api = { lots: [], vehicles: [], count: 0 };
   // Variant kinds (it.vk) pick the TrafficModels builder; the kind handed to player.js (it.kind / t.model) is what its
   // PARAMS / SEATS know: every two-wheeler drives as 'bike', the Innova-style MPV and Fortuner-style 4x4 as 'suv'.
-  const KINDS = ['bike', 'scooter', 'classic', 'classic2', 'sport', 'cycle', 'hatch', 'suv', 'mpv', 'fortuner', 'auto', 'tractor', 'lorry', 'bus', 'bullockCart'];
-  const VARIANTS = { bike: 3, scooter: 3, classic: 2, classic2: 2, sport: 2, cycle: 2, hatch: 5, suv: 4, mpv: 1, fortuner: 1, auto: 3, tractor: 2, lorry: 2, bus: 1, bullockCart: 1 };
-  const HW = { bike: 0.45, scooter: 0.42, classic: 0.45, classic2: 0.45, sport: 0.45, cycle: 0.38, auto: 0.75, hatch: 0.85, suv: 0.95, mpv: 0.95, fortuner: 0.98, tractor: 1.0, lorry: 1.2, bus: 1.3, bullockCart: 0.9 };
-  const PLAYER_KIND = { scooter: 'bike', classic: 'bike', classic2: 'bike', sport: 'bike', cycle: 'bike', mpv: 'suv', fortuner: 'suv' };
+  const KINDS = ['bike', 'scooter', 'classic', 'classic2', 'sport', 'faired', 'cycle', 'hatch', 'suv', 'swift', 'dzire', 'alto', 'bolero', 'scorpio', 'ace', 'mpv', 'fortuner', 'fortunerBlack', 'auto', 'tractor', 'lorry', 'bus', 'bullockCart'];
+  const VARIANTS = { bike: 3, scooter: 3, classic: 2, classic2: 2, sport: 2, faired: 2, cycle: 2, hatch: 1, suv: 1, swift: 3, dzire: 2, alto: 3, bolero: 2, scorpio: 2, ace: 1, mpv: 1, fortuner: 1, fortunerBlack: 1, auto: 3, tractor: 2, lorry: 2, bus: 1, bullockCart: 1 };
+  const HW = { bike: 0.45, scooter: 0.42, classic: 0.45, classic2: 0.45, sport: 0.45, faired: 0.42, cycle: 0.38, auto: 0.75, hatch: 0.85, suv: 0.95, swift: 0.86, dzire: 0.88, alto: 0.76, bolero: 0.92, scorpio: 0.98, ace: 0.8, mpv: 0.95, fortuner: 0.98, fortunerBlack: 0.98, tractor: 1.0, lorry: 1.2, bus: 1.3, bullockCart: 0.9 };
+  const PLAYER_KIND = { scooter: 'bike', classic: 'bike', classic2: 'bike', sport: 'bike', faired: 'bike', cycle: 'bike', mpv: 'suv', fortuner: 'suv', fortunerBlack: 'suv',
+    swift: 'hatch', dzire: 'hatch', alto: 'hatch', bolero: 'suv', scorpio: 'suv', ace: 'suv' };
   const pk = vk => PLAYER_KIND[vk] || vk;
-  const HOME_BIKES = ['bike', 'bike', 'bike', 'scooter', 'scooter', 'scooter', 'classic', 'classic2', 'sport', 'cycle', 'cycle'];
+  const HOME_BIKES = ['bike', 'bike', 'bike', 'scooter', 'scooter', 'scooter', 'classic', 'classic2', 'sport', 'faired', 'cycle', 'cycle'];
+  const HOME_CARS = ['swift', 'swift', 'alto', 'alto', 'alto', 'dzire', 'bolero', 'bolero', 'scorpio', 'ace', 'mpv'];
   const NEAR = 130, FAR = 520;         // full detail inside NEAR, box proxy inside FAR, nothing beyond
 
   // seeded random so the village looks the same every load
@@ -129,7 +131,7 @@ const Parked = (function () {
       const wantCar = area > 120 && cars < maxCars && rnd() < 0.55;
       if (!wantCar && bikes >= maxBikes) continue;
       if (!wantCar && rnd() < 0.35) continue;              // not every house has a bike out front
-      const kind = wantCar ? (rnd() < 0.45 ? 'suv' : 'hatch') : pick(HOME_BIKES);
+      const kind = wantCar ? pick(HOME_CARS) : pick(HOME_BIKES);
       const along = nr.ang, side = (rnd() - 0.5) * 3;
       let done = false;
       for (const gap of wantCar ? [1.6, 2.2, 2.8] : [0.9, 1.3, 1.8]) {
@@ -172,17 +174,18 @@ const Parked = (function () {
     return false;
   }
 
-  // ---------------------------------------------------------------- safe house: an Innova-style MPV, a Fortuner-style 4x4 and one of each bike
+  // ---------------------------------------------------------------- safe house: an Innova-style MPV, a BLACK Fortuner-style 4x4, a Swift 2010,
+  // the faired sports bike and one of each other bike
   // Just outside the safe-house gate, on free ground (never on the road, inside walls/buildings, or within 3.5 m of
   // the gate so the gate stays clear). Candidates must be farther from the house than the gate is (outside the
   // compound) and are tried on rings of growing radius around the gate; orientation follows the nearest road.
   const SAFE = { hx: 38.9, hz: -264.8, gx: 51.49, gz: -275.56 };
   function safeHouseParking() {
     const gateR = Math.hypot(SAFE.gx - SAFE.hx, SAFE.gz - SAFE.hz);
-    const want = ['mpv', 'fortuner', 'scooter', 'classic', 'classic2', 'sport', 'cycle', 'bike'];
+    const want = ['mpv', 'fortunerBlack', 'swift', 'faired', 'scooter', 'classic', 'classic2', 'sport', 'cycle', 'bike'];
     const placed = [];
     for (const kind of want) {
-      const car = kind === 'mpv' || kind === 'fortuner';
+      const car = kind === 'mpv' || kind === 'fortunerBlack' || kind === 'swift';
       let ok = null;
       for (let r = car ? 5 : 4; r < 26 && !ok; r += 0.75) for (let a = 0; a < 24 && !ok; a++) {
         const an = a / 24 * Math.PI * 2, x = SAFE.gx + Math.sin(an) * r, z = SAFE.gz + Math.cos(an) * r;
@@ -371,7 +374,8 @@ const Parked = (function () {
     proxyIM.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, items.length) * 3), 3);
     proxyIM.count = 0; proxyIM.frustumCulled = false; proxyIM.name = 'parked-far'; scene.add(proxyIM);
   }
-  const PROXY_H = { bike: 1.1, scooter: 1.1, classic: 1.15, classic2: 1.1, sport: 1.15, cycle: 1.05, mpv: 1.8, fortuner: 1.84, auto: 1.75, hatch: 1.45, suv: 1.75, tractor: 2.2, lorry: 3.2, bus: 3.1, bullockCart: 1.8 };
+  const PROXY_H = { bike: 1.1, scooter: 1.1, classic: 1.15, classic2: 1.1, sport: 1.15, faired: 1.15, cycle: 1.05, mpv: 1.8, fortuner: 1.84, fortunerBlack: 1.84,
+    swift: 1.52, dzire: 1.52, alto: 1.45, bolero: 1.9, scorpio: 2.0, ace: 1.86, auto: 1.75, hatch: 1.45, suv: 1.75, tractor: 2.2, lorry: 3.2, bus: 3.1, bullockCart: 1.8 };
   function refreshInstances() {
     const cam = game.camera.position;
     for (const k of KINDS) for (const vr of variants[k]) vr.im.count = 0;

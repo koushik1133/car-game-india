@@ -427,6 +427,13 @@
     { id: 'bike2', a: -5.4, b: 12.9, w: 1.1, l: 2.2, alongA: true },
   ];
   const slotRot = s => s.alongA ? TH + Math.PI / 2 : TH;
+  // where the player's Innova Crysta starts (index.html respawnCar): parked in the car bay, nose to the main gate;
+  // if a stored vehicle holds the bay, in the front courtyard right behind the gate instead
+  window.SafeHouse2Home = function () {
+    const s = SLOTS[0], busy = S.stored.some(q => q.slot === s.id);
+    const p = busy ? W(-4.25, 0.6) : W(s.a, s.b + 0.3);
+    return { x: p.x, z: p.z, rot: TH + Math.PI, slot: busy ? null : s.id };
+  };
   const parts = {}, blockers = {};
   let MGc, PGc, DOORc;
   const anim = { gate: 0, ped: 0, door: 0 }, want = { gate: false, ped: false, door: false }, manual = { gate: false, door: false };
@@ -455,6 +462,7 @@
     let spd = 0; try { spd = Math.abs(carSpeed); } catch (e) {}
     if (spd > 6) return G.showPopup('STOP TO STORE THE VEHICLE');
     if (live[s.id] && live[s.id] !== v) return G.showPopup('SLOT TAKEN');
+    try { const p0 = W(s.a, s.b); if (Math.hypot(playerCarGroup.position.x - p0.x, playerCarGroup.position.z - p0.z) < 3) return G.showPopup('SLOT TAKEN · THE CRYSTA IS PARKED HERE'); } catch (e) {}
     if (!s.car && v.model !== 'bike') return G.showPopup('BIKE BAY · PARK CARS IN THE CAR BAY');
     const p = W(s.a, s.b); carPos.x = p.x; carPos.z = p.z; carRot = slotRot(s);
     v.g.position.set(p.x, v.g.position.y, p.z); v.g.rotation.y = carRot; v.vF = 0; v.vL = 0;
@@ -519,9 +527,28 @@
     ui();
     const c = W(-10.5, 6.5);
     if (world.addMapIcon) world.addMapIcon(c.x, c.z, '⌂', 'Safe House 2');
+    MGw = W(MGc.a, MGc.b);
     window.SafeHouse2 = { W, L, slots: SLOTS, live, state: S, anim, want, manual, center: c, gate: W(MGc.a, MGc.b - 6), door: W(DOORc.a, DOORc.b) };
     setTimeout(spawnStored, 0);
   });
+
+  // ---------------------------------------------------------------- NPCs near the gates (traffic, carts, herds, walkers)
+  let npcT = 0, npcGate = false, npcPed = false, holdGate = 0, holdPed = 0;
+  function scanNpcs() {
+    npcGate = npcPed = false;
+    const pos = o => o && (o.g && o.g.position ? o.g.position : o.group && o.group.position ? o.group.position : (typeof o.x === 'number' ? o : null));
+    const gateD = q => { const l = L(q.x, q.z); return Math.hypot(l.a - MGc.a, l.b - MGc.b); };
+    const pedD = q => { const l = L(q.x, q.z); return Math.hypot(l.a - PGc.a, l.b - PGc.b); };
+    const veh = (o, r) => { const q = pos(o); if (q && Math.abs(q.x - MGw.x) + Math.abs(q.z - MGw.z) < 30 && gateD(q) < r) npcGate = true; };
+    const foot = o => { const q = pos(o); if (!q || Math.abs(q.x - MGw.x) + Math.abs(q.z - MGw.z) > 30) return; if (pedD(q) < 2.6) npcPed = true; if (gateD(q) < 3.5) npcGate = true; };
+    const P = PL();
+    try { for (const t of traffic) if (!P || t !== P.active) veh(t, 9); } catch (e) {}
+    try { if (window.VillageProcessions) for (const it of VillageProcessions.items) it.kind === 'walker' ? foot(it) : veh(it, 8); } catch (e) {}
+    try { if (window.RoadAnimals) for (const a of RoadAnimals) veh(a, 5); } catch (e) {}
+    try { if (world.people) for (const h of world.people) foot(h); } catch (e) {}
+    try { if (window.AutoRides && AutoRides.npcs) for (const n of AutoRides.npcs) foot(n.h || n); } catch (e) {}
+  }
+  let MGw = { x: 0, z: 0 };
 
   let cur = null;
   GameHooks.update.push((dt, game) => {
@@ -530,8 +557,16 @@
     const dG = Math.hypot(l.a - MGc.a, l.b - MGc.b);
     const driving = mode === 'vehicle' || mode === 'crysta';
     if (dG > 14) manual.gate = false;
-    want.gate = (driving && (dG < 10 || inYard(l))) || manual.gate;   // stays open while a vehicle is in the yard
-    want.ped = mode === 'foot' && Math.hypot(l.a - PGc.a, l.b - PGc.b) < 2.2;
+    // automatic gates: the main gate opens for the player (driving, riding or walking up to it) and for any NPC
+    // vehicle / cart / herd / walker near it; the pedestrian gate for anyone on foot. Both stay open while somebody
+    // is still in the gateway and close a moment after the last one has gone.
+    if ((npcT -= dt) <= 0) { npcT = 0.25; scanNpcs(); }
+    const pGate = (driving && (dG < 10 || inYard(l) && dG < 16)) || (mode === 'foot' && dG < 4.5) || (mode === 'passenger' && dG < 10);
+    const pPed = mode === 'foot' && Math.hypot(l.a - PGc.a, l.b - PGc.b) < 3.0;
+    holdGate = pGate || npcGate ? 1.2 : Math.max(0, holdGate - dt);
+    holdPed = pPed || npcPed ? 1.0 : Math.max(0, holdPed - dt);
+    want.gate = holdGate > 0 || manual.gate;
+    want.ped = holdPed > 0;
     if (Math.hypot(l.a - DOORc.a, l.b - DOORc.b) > 3.2) manual.door = false;
     want.door = manual.door;
     for (const k of ['gate', 'ped', 'door']) {

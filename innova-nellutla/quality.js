@@ -5,9 +5,12 @@
 (function () {
   const KEY = 'nellutla.quality';
   const TIERS = {
-    low:    { name: 'Low',    pixelRatio: 1,   shadows: false, shadowSize: 512,  fogNear: 120, fogFar: 520,  camFar: 650,  peopleFrac: 0.35, antialias: false, fps: 30 },
-    medium: { name: 'Medium', pixelRatio: 1,   shadows: true,  shadowSize: 1024, fogNear: 200, fogFar: 1000, camFar: 1600, peopleFrac: 0.6,  antialias: true,  fps: 60 },
-    high:   { name: 'High',   pixelRatio: 1.5, shadows: true,  shadowSize: 2048, fogNear: 250, fogFar: 1500, camFar: 3000, peopleFrac: 1,    antialias: true,  fps: 60 },
+    // camFar sits just past fogFar: everything beyond the fog end is already fully fogged, so it is invisible anyway.
+    // shadowEvery: the sun's shadow map is re-rendered every Nth frame (the shadow pass re-draws ~4M triangles of
+    // map-wide instanced trees/houses); world-space shadows stay put, only moving objects' shadows lag by a frame or two.
+    low:    { name: 'Low',    pixelRatio: 1,   shadows: false, shadowSize: 512,  fogNear: 120, fogFar: 520,  camFar: 600,  peopleFrac: 0.35, antialias: false, fps: 30, shadowEvery: 4 },
+    medium: { name: 'Medium', pixelRatio: 1,   shadows: true,  shadowSize: 1024, fogNear: 200, fogFar: 1000, camFar: 1100, peopleFrac: 0.6,  antialias: true,  fps: 60, shadowEvery: 3 },
+    high:   { name: 'High',   pixelRatio: 1.5, shadows: true,  shadowSize: 2048, fogNear: 250, fogFar: 1500, camFar: 1600, peopleFrac: 1,    antialias: true,  fps: 60, shadowEvery: 2 },
   };
   const ORDER = ['low', 'medium', 'high'];
   const isTouch = window.Device ? Device.isMobile : ((matchMedia && matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0);
@@ -30,6 +33,9 @@
     applied: {}, ctx: null, frameMs: 0, onChange: [],
     // frame-rate cap: tier default, or 30 when Battery saver is on (saved separately)
     get fpsCap() { let b = false; try { b = localStorage.getItem('nellutla.battery') === '1'; } catch (e) {} return b ? 30 : (TIERS[tier].fps || 60); },
+    idleFps: 30,                                   // cap while parked / standing still / on the start screen
+    get shadowEvery() { return TIERS[tier].shadowEvery || 1; },
+    onBattery: false,
     setBattery(on) { try { localStorage.setItem('nellutla.battery', on ? '1' : '0'); } catch (e) {} },
     get battery() { try { return localStorage.getItem('nellutla.battery') === '1'; } catch (e) { return false; } },
   };
@@ -61,7 +67,21 @@
       antialias: aaAtStart, antialiasWanted: T.antialias, why };
     Q.onChange.forEach(f => { try { f(name, why); } catch (e) {} });
   }
-  Q.attach = function (ctx) { Q.ctx = ctx; apply(tier, 'start'); startMonitor(); };
+  Q.attach = function (ctx) { Q.ctx = ctx; apply(tier, 'start'); startMonitor(); watchBattery(); };
+  // laptops running on battery: in auto mode use Medium instead of High (and go back up when plugged in)
+  function watchBattery() {
+    if (!navigator.getBattery) return;
+    navigator.getBattery().then(b => {
+      const check = () => {
+        Q.onBattery = !b.charging;
+        if (Q.mode !== 'auto') return;
+        const want = detect() === 'high' && Q.onBattery ? 'medium' : null;
+        if (want && tier === 'high') { apply('medium', 'battery'); notice('On battery: graphics set to Medium'); }
+        else if (!Q.onBattery && tier === 'medium' && Q.applied.why === 'battery') apply('high', 'plugged in');
+      };
+      check(); b.addEventListener('chargingchange', check);
+    }).catch(() => {});
+  }
   // player choice from the Settings menu: 'auto' | 'low' | 'medium' | 'high'
   Q.set = function (choice) {
     try { if (choice === 'auto') localStorage.removeItem(KEY); else localStorage.setItem(KEY, choice); } catch (e) {}

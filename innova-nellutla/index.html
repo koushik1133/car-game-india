@@ -78,6 +78,8 @@
   #mapClose { position: fixed; right: calc(3vw + 10px + var(--sr)); top: calc(3vh + 10px + var(--st)); z-index: 32; display: none; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255,255,255,.4); background: rgba(10,15,25,.9); color: #fff; font: 700 20px system-ui; cursor: pointer; }
   html.touch #mapClose { width: 56px; height: 56px; font-size: 24px; }
   #mapClose:hover { background: #b91c1c; }
+  #radar { cursor: pointer; }
+  #radar:hover { border-color: #fbbf24; }
   body.map-open #mpPanel, body.map-open #mpSquad, body.map-open #mpCompass, body.map-open #mpHdg, body.map-open #mpCoords, body.map-open #mission, body.map-open #hudBar, body.map-open #tc, body.map-open #dash, body.map-open #propHud, body.map-open #rotateHint { visibility: hidden; }
   #popup { position: fixed; top: 30%; left: 50%; transform: translateX(-50%); font-size: clamp(18px, 4vmin, 26px); font-weight: 900; color: #fbbf24; text-shadow: 0 3px 10px #000; opacity: 0; transition: opacity .3s; text-align: center; max-width: 90vw; pointer-events: none; z-index: 20; }
   #cockpitWheel { display: none; }
@@ -215,7 +217,6 @@
 <div id="mission" class="panel" style="display:none"><div class="t" id="mTitle"></div><div class="d" id="mTask"></div><span id="where"></span></div>
 <div id="hudBar">
   <button class="hud-btn" id="btnHelp" title="Controls (I)" aria-label="Controls" aria-controls="info"><span>?</span><span class="lbl-txt">Controls</span> <kbd class="desk-only">I</kbd></button>
-  <button class="hud-btn" id="btnMap" title="Map (M)" aria-label="Map"><span>🗺</span><span class="lbl-txt">Map</span> <kbd class="desk-only">M</kbd></button>
   <button class="hud-btn" id="btnSettings" title="Settings" aria-label="Settings" aria-controls="settings"><span>⚙</span><span class="lbl-txt">Settings</span></button>
 </div>
 <div id="settings" class="panel" role="dialog" aria-label="Settings">
@@ -287,31 +288,31 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>window.NELLUTLA_EXCLUDE = window.NELLUTLA_EXCLUDE || [];   // [{x, z, r}]: buildings whose centre is inside are skipped (custom-modelled by a feature module)</script>
 <script src="../nellutla-map/map-data.js?v=1793665390"></script>
-<script src="../nellutla-map/nellutla-world.js?v=1793665802"></script>
+<script src="../nellutla-map/nellutla-world.js?v=1793665811"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script src="crysta-body.js?v=1793665390"></script>
 <script src="crysta-detail.js?v=1793665390"></script>
 <script src="crysta.js?v=1793665390"></script>
 <script src="device.js?v=1793665390"></script>
-<script src="quality.js?v=1793665390"></script>
+<script src="quality.js?v=1793669000"></script>
 <script src="ambient.js?v=1793670001"></script>
-<script src="engine-audio.js?v=1793700100"></script>
-<script src="traffic-models.js?v=1793710004"></script>
+<script src="engine-audio.js?v=1793800002"></script>
+<script src="traffic-models.js?v=1793669535"></script>
 <script src="glb-car.js?v=1793665390"></script>
-<script src="multiplayer/mp.js?v=1793665390"></script>
+<script src="multiplayer/mp.js?v=1793669700"></script>
 <script src="people-models.js?v=1793666001"></script>
 <script src="assets.js?v=1793665390"></script>
-<script src="player.js?v=1793710001"></script>
+<script src="player.js?v=1793730100"></script>
 <!-- Feature modules. Each registers itself on GameHooks (init/update/key) and owns its own file. -->
 <script>window.GameHooks = { init: [], update: [], key: [] };</script>
-<script src="parked.js?v=1793710001"></script>
+<script src="parked.js?v=1793720001"></script>
 <script src="character-creator.js?v=1793665390"></script>
 <script src="properties.js?v=1793665390"></script>
 <script src="safehouse.js?v=1793665390"></script>
-<script src="safehouse2.js?v=1793700200"></script>
+<script src="safehouse2.js?v=1793730001"></script>
 <script src="streetscape.js?v=1793700300"></script>
-<script src="animals.js?v=1793670001"></script>
-<script src="sfx.js?v=1793670001"></script>
+<script src="animals.js?v=1793800002"></script>
+<script src="sfx.js?v=1793800001"></script>
 <script src="touch-controls.js?v=1793665390"></script>
 <script src="auto-rides.js?v=1793665390"></script>
 <script>
@@ -322,6 +323,7 @@ renderer.setPixelRatio(Quality.initial.pixelRatio);
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;     // re-rendered every Quality.shadowEvery frames by the main loop
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.85;
 scene = new THREE.Scene();
@@ -416,10 +418,15 @@ function nearestRoadDir(x, z, types) {
 }
 const spawnInfo = nearestRoadDir(world.spawn.x, world.spawn.z, ['highway']);
 function respawnCar() {
-  // keep left (India drives on the left)
-  const lx = Math.cos(spawnInfo.rot) * 2, lz = -Math.sin(spawnInfo.rot) * 2;
-  carPos.set(spawnInfo.x + lx, 0.44, spawnInfo.z + lz);
-  carRot = spawnInfo.rot; carSpeed = 0; isReversing = false; currentGear = 1;
+  // home: parked inside the safe-house yard (safehouse2.js), facing the gate; fallback the NH-365B (keep left)
+  const home = window.SafeHouse2Home ? window.SafeHouse2Home() : null;
+  if (home) { carPos.set(home.x, 0.44, home.z); carRot = home.rot; }
+  else {
+    const lx = Math.cos(spawnInfo.rot) * 2, lz = -Math.sin(spawnInfo.rot) * 2;
+    carPos.set(spawnInfo.x + lx, 0.44, spawnInfo.z + lz);
+    carRot = spawnInfo.rot;
+  }
+  carSpeed = 0; isReversing = false; currentGear = 1;
   if (typeof vel !== 'undefined') { vel.x = vel.z = 0; yawRate = 0; lastSpeed = 0; gearIdx = 0; }
   snapCameraToCar();
 }
@@ -1016,7 +1023,14 @@ function setMap(on) {
 // plus a click from the same tap can't open and instantly close it again
 function toggleMap() { const now = performance.now(); if (now - (toggleMap.t || 0) < 250) return; toggleMap.t = now; setMap(!showMap); }
 document.getElementById('mapClose').addEventListener('click', e => { e.stopPropagation(); setMap(false); });
-document.getElementById('btnMap').addEventListener('click', e => { e.stopPropagation(); toggleMap(); e.currentTarget.blur(); });
+// the minimap is the map button: click/tap it to open the full map (M / Esc / ✕ / clicking outside closes it)
+document.getElementById('radar').addEventListener('click', e => { e.stopPropagation(); toggleMap(); });
+// a click on the dimmed area around the big map closes it (clicks inside the map place pings)
+addEventListener('pointerdown', e => {
+  if (!showMap) return;
+  const id = e.target && e.target.id;
+  if (id !== 'bigmap' && id !== 'mapClose' && !(e.target.closest && e.target.closest('#mpPanel,#mpChatIn,input,textarea'))) setMap(false);
+}, true);
 function cycleCamera() {
   cameraIndex = (cameraIndex + 1) % CAMERA_MODES.length;
   showComboPopup('CAMERA · ' + (Player.mode === 'crysta' ? ['CHASE', 'CLOSE CHASE', 'COCKPIT', 'HOOD', 'TOP-DOWN'][cameraIndex] : Player.cameraName()));
@@ -1179,7 +1193,9 @@ function updateHUD(dt) {
   document.getElementById('surf').textContent = surface.toUpperCase();
   document.getElementById('nos').textContent = Math.round(nosTank) + '%';
   document.getElementById('cash').textContent = '₹' + cash.toLocaleString('en-IN');
-  drawRadar(); if (showMap) (MP.bigMap ? MP.bigMap(big) : drawBigMap());
+  const tNow = performance.now();
+  if (tNow - (updateHUD.rT || 0) > 50) { updateHUD.rT = tNow; drawRadar(); }
+  if (showMap && tNow - (updateHUD.bT || 0) > 33) { updateHUD.bT = tNow; (MP.bigMap ? MP.bigMap(big) : drawBigMap()); }
   if ((hudT += dt) > 0.4) {
     hudT = 0; let b = null;
     for (const l of world.landmarks) { const d = Math.hypot(l.x - carPos.x, l.z - carPos.z); if (!b || d < b.d) b = { d, l }; }
@@ -1210,13 +1226,25 @@ const GAME = { scene, world, camera, renderer, traffic, get carPos() { return ca
   get cash() { return cash; }, set cash(v) { if (typeof v === 'number' && isFinite(v)) cash = Math.round(v); }, get playerMode() { return Player.mode; } };
 window.GAME = GAME;
 GameHooks.init.forEach(f => { try { f(GAME); } catch (e) { console.error('feature init failed', e); } });
-let lastFrameAt = 0;
+let lastFrameAt = 0, frameNo = 0, lastInputAt = 0, lastShadowPos = new THREE.Vector3(1e9, 0, 0);
+['keydown', 'pointerdown', 'pointermove', 'wheel', 'touchstart'].forEach(ev => addEventListener(ev, () => { lastInputAt = performance.now(); }, { passive: true, capture: true }));
+// other vehicles have no gearbox model: fake a 4-speed rpm sweep from road speed (hoisted: no per-frame closures)
+const FAKE_TOP = { bike: 90, auto: 60, hatch: 150, suv: 140, tractor: 30, lorry: 80, bus: 80 };
+function fakeRpm(spd, top, idle, red) { const g = Math.min(3, Math.floor(spd / (top / 4))); const f = (spd - g * top / 4) / (top / 4); return idle + (red - idle) * (0.25 + 0.7 * f); }
+const engineFrame = { on: true, rpm: 0, throttle: 0, speedKmh: 0, surface: '', shifting: false };
+// no rendering at all while the tab is hidden (rAF already stops; this also drops the catch-up frame on return)
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { clock.getDelta(); lastFrameAt = 0; } });
 (function loop(now) {
   requestAnimationFrame(loop);
-  // frame-rate cap (60, or 30 on Low / Battery saver): 120 Hz screens and laptops don't render twice as much for nothing
-  const cap = (window.Quality && Quality.fpsCap) || 60;
+  if (document.hidden) return;
+  // frame-rate cap (60, or 30 on Low / Battery saver): 120 Hz screens and laptops don't render twice as much for nothing.
+  // Idle (start screen, parked with no input, standing on foot) drops to Quality.idleFps; walking caps at 45.
+  let cap = (window.Quality && Quality.fpsCap) || 60;
+  const t = now || performance.now();
+  const idle = !isPlaying || (Math.abs(carSpeed) < 0.3 && t - lastInputAt > 2500 && !Object.values(keyState).some(Boolean));
+  if (idle) cap = Math.min(cap, Quality.idleFps || 30); else if (isPlaying && Player.mode === 'foot') cap = Math.min(cap, 45);
   if (now && now - lastFrameAt < 1000 / cap - 2) return;
-  lastFrameAt = now || performance.now();
+  lastFrameAt = t; frameNo++;
   const dt = Math.min(0.05, clock.getDelta());
   if (isPlaying) {
     if (Player.mode === 'crysta') { updatePhysics(dt); Player.crystaCollide(); } else { pollGamepad(); Player.update(dt); }
@@ -1230,16 +1258,12 @@ let lastFrameAt = 0;
         const kind = crysta ? 'crysta' : foot ? 'crysta' : ((Player.active && Player.active.model) || 'hatch');
         engineSound.setKind(kind);
         const spd = Math.abs(carSpeed);
-        // other vehicles have no gearbox model: fake a 4-speed rpm sweep from road speed
-        const fakeRpm = (top, idle, red) => { const g = Math.min(3, Math.floor(spd / (top / 4))); const f = (spd - g * top / 4) / (top / 4); return idle + (red - idle) * (0.25 + 0.7 * f); };
-        const TOP = { bike: 90, auto: 60, hatch: 150, suv: 140, tractor: 30, lorry: 80, bus: 80 };
-        engineSound.update({
-          on: !foot,
-          rpm: crysta ? engineRPM : fakeRpm(TOP[kind] || 100, 800, kind === 'bike' ? 7500 : kind === 'auto' ? 5000 : 3500),
-          throttle: crysta ? throttleIn : (inputState.gas ? 1 : 0),
-          speedKmh: spd, surface: world.surfaceAt(carPos.x, carPos.z),
-          shifting: crysta && shiftTimer > 0,
-        });
+        const ef = engineFrame;
+        ef.on = !foot;
+        ef.rpm = crysta ? engineRPM : fakeRpm(spd, FAKE_TOP[kind] || 100, 800, kind === 'bike' ? 7500 : kind === 'auto' ? 5000 : 3500);
+        ef.throttle = crysta ? throttleIn : (inputState.gas ? 1 : 0);
+        ef.speedKmh = spd; ef.surface = world.surfaceAt(carPos.x, carPos.z); ef.shifting = crysta && shiftTimer > 0;
+        engineSound.update(ef);
       }
       if (Player.mode !== 'crysta' && squealGain && audioCtx) squealGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
     } catch (e) { console.warn(e); }
@@ -1257,6 +1281,11 @@ let lastFrameAt = 0;
   beacon.rotation.y += dt;
   sky.position.copy(camera.position); stars.position.copy(camera.position);
   world.update(camera, dt, carPos);
+  // shadow map: refresh every Nth rendered frame, or at once after a big jump (respawn / teleport)
+  if (sunLight.castShadow) {
+    const jumped = lastShadowPos.distanceToSquared(sunLight.target.position) > 400;
+    if (jumped || frameNo % Quality.shadowEvery === 0) { renderer.shadowMap.needsUpdate = true; lastShadowPos.copy(sunLight.target.position); }
+  }
   renderer.render(scene, camera);
 })();
 </script>

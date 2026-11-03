@@ -629,6 +629,7 @@
     for (let i = 0; i < counts.goatHerds; i++) makeHerd('goats', p, 20, 150);
     placeCrows(p, counts.crow);
     hideStaticCattle();
+    try { procBuild(); } catch (e) { console.warn('village processions', e); }
     built = true; centre = { x: p.x, z: p.z };
     const tris = Object.values(SP).reduce((s, sp) => s + Object.values(sp.m).reduce((q, m) => q + m.geometry.attributes.position.count / 3 * (m === sp.m.upper || m === sp.m.lower ? sp.rig.hips.length : 1), 0) * sp.cap, 0);
     console.log('animals.js:', all.length, 'animals,', herds.length, 'herds,', crows.length, 'crows; max ~' + Math.round(tris / 1000) + 'k tris when all are in range');
@@ -662,11 +663,12 @@
     const cam = { x: cp.x, z: cp.z, foot: game.playerMode === 'foot', px: pp.x, pz: pp.z };
     // herds: the leader point walks the road (paused outside herding hours, cattle graze the verge)
     for (const H of herds) {
-      H.moving = herdTime() && H.pause <= 0;
+      H.moving = (H.trip || herdTime()) && H.pause <= 0;
       if (H.pause > 0) H.pause -= dt;
       const hp = H.hp;
       if (H.moving) {
         H.s += H.dir * 0.95 * dt;
+        if (H.trip && (H.dir > 0 ? H.s > H.trip.end : H.s < H.trip.end)) { H.done = true; continue; }
         if (H.s < 2 || H.s > H.path.L - 2) { H.dir *= -1; H.pause = rnd(4, 10); H.s = Math.max(2, Math.min(H.path.L - 2, H.s)); }
         if (veh && Math.abs(veh.v) > 3 && Math.hypot(veh.x - hp.x, veh.z - hp.z) < 10) H.pause = 1.5;   // the herder waits for the car
       }
@@ -731,21 +733,137 @@
     }
     for (let i = ri; i < 36; i++) rp[i] = 0;
     ropeGeo.attributes.position.needsUpdate = true; ropeGeo.setDrawRange(0, ri / 3);
+    procUpdate(dt, game, veh, cam);
     for (const k in SP) SP[k].draw(cp);
     drawCrows(t);
     // recycle: animals and herds far behind come back in a ring just past the draw distance
     recycleT -= dt;
     if (recycleT < 0) {
       recycleT = 1.0;
-      for (const a of all) if (!a.herd && (a.dead || Math.hypot(a.x - pp.x, a.z - pp.z) > RECYCLE_R)) a.dead = !respawnFree(a, pp, LOD_R + 5, LOD_R + 60);
+      for (const a of all) if (!a.herd && !a.gone && (a.dead || Math.hypot(a.x - pp.x, a.z - pp.z) > RECYCLE_R)) a.dead = !respawnFree(a, pp, LOD_R + 5, LOD_R + 60);
       for (const H of herds) {
-        if (Math.hypot(H.hp.x - pp.x, H.hp.z - pp.z) < RECYCLE_R) continue;
+        if (H.trip || Math.hypot(H.hp.x - pp.x, H.hp.z - pp.z) < RECYCLE_R) continue;
         const at = pathNear(pp, LOD_R + 5, LOD_R + 70, H.type === 'goats' ? ['dirt', 'lane'] : ['dirt', 'lane', 'cc']);
         if (at) { H.path = at.path; H.s = at.s; H.hp.init = false; placeHerd(H, true); }
       }
       if (!crowCenter || Math.hypot(crowCenter.x - pp.x, crowCenter.z - pp.z) > 120) placeCrows(pp, counts.crow);
     }
   }
+
+  // ------------------------------------------------------------------ village life past the safe house
+  // Every 1-2 minutes (more often mornings/evenings, rarely at night) something passes along the lane in front of
+  // the safe-house gate at walking pace: a bullock cart, a tractor with trolley, a cattle herd or goats with their
+  // herder, or a few villagers on foot. They stop for the player, register in window.RoadAnimals (traffic avoids
+  // them) and are hidden/not animated beyond LOD_R.
+  const GATE = { x: 51.49, z: -275.56 }, PROC = { path: null, s0: 0, timer: 20, items: [], next: 0 };
+  function procBuild() {
+    const S = segsNear(GATE.x, GATE.z, 40, ['lane', 'dirt', 'cc', 'tar']);
+    let best = null, bd = 1e9;
+    for (const sg of S) {
+      const ax = sg.b[0] - sg.a[0], az = sg.b[1] - sg.a[1], L2 = ax * ax + az * az;
+      const t = Math.max(0, Math.min(1, ((GATE.x - sg.a[0]) * ax + (GATE.z - sg.a[1]) * az) / L2));
+      const d = Math.hypot(sg.a[0] + ax * t - GATE.x, sg.a[1] + az * t - GATE.z) + (Math.abs(ax) / Math.sqrt(L2) < 0.7 ? 40 : 0);   // the lane in front runs ENE-WSW: prefer east-west segments
+      if (d < bd) { bd = d; best = sg; }
+    }
+    if (!best) { console.warn('processions: no lane near the safe house'); return; }
+    const pts = best.r.p; let L = 0; const cum = [0];
+    for (let i = 1; i < pts.length; i++) { L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); cum.push(L); }
+    const path = { pts, cum, L, w: best.r.w || 4 };
+    // arc length of the gate on that road
+    let s0 = 0, md = 1e9; for (let s = 0; s < L; s += 0.5) { const q = pathAt(path, s, 0), d = Math.hypot(q.x - GATE.x, q.z - GATE.z); if (d < md) { md = d; s0 = s; } }
+    PROC.path = path; PROC.s0 = s0;
+    console.log('processions: lane', best.t, 'len', Math.round(L), 'm, gate at s =', Math.round(s0), '(' + bd.toFixed(1) + ' m off the road)');
+  }
+  function procTrip(dir) {   // from ~110 m before the gate to ~110 m past it, clamped to the road
+    const P = PROC.path, a = Math.max(3, PROC.s0 - 110), b = Math.min(P.L - 3, PROC.s0 + 110);
+    return dir > 0 ? { s: a, end: b } : { s: b, end: a };
+  }
+  function reuseAnimal(kind, at) {
+    const sp = SP[kind]; let a = sp.list.find(q => q.gone);
+    if (a) { a.gone = false; a.dead = false; a.x = a.tx = at.x; a.z = a.tz = at.z; a.y = ground(at.x, at.z); a.scared = 0; a.state = 'herd'; return a; }
+    if (sp.list.length >= sp.cap) return null;
+    return spawnAnimal(kind, sp, at, 'herd');
+  }
+  function procHerd(type) {
+    const dir = Math.random() < 0.5 ? 1 : -1, tr = procTrip(dir), q0 = pathAt(PROC.path, tr.s, 0);
+    const H = { type: type === 'goats' ? 'goats' : 'herd', path: PROC.path, s: tr.s, dir, animals: [], herder: makeHerder(true), hp: { x: q0.x, z: q0.z, yaw: 0, phase: 0, speed: 0 }, pause: 0, trip: tr };
+    const n = type === 'goats' ? 6 + (Math.random() * 6 | 0) : 3 + (Math.random() * 4 | 0);
+    for (let i = 0; i < n; i++) {
+      const kind = type === 'goats' ? 'goat' : pick(['cow', 'cow', 'bull', 'buffalo', 'buffalo']);
+      const a = reuseAnimal(kind, q0); if (!a) break;
+      a.slot = { back: 1.5 + (i >> 1) * (type === 'goats' ? 1.1 : 2.4), lat: (i % 2 ? 1 : -1) * rnd(0.3, 0.9) };
+      a.herd = H; H.animals.push(a);
+    }
+    if (!H.animals.length) { if (H.herder) scene.remove(H.herder.group); return; }
+    H.s -= 0; placeHerd(H, true); herds.push(H);
+  }
+  function procVehicle(kind) {
+    if (typeof TrafficModels === 'undefined' || !TrafficModels[kind]) return;
+    const v = TrafficModels[kind](); scene.add(v.g);
+    const dir = Math.random() < 0.5 ? 1 : -1, tr = procTrip(dir);
+    PROC.items.push({ kind, v, g: v.g, s: tr.s, end: tr.end, dir, speed: kind === 'tractor' ? 3.2 : 1.15, cur: 0, lat: PROC.path.w * 0.22, r: kind === 'tractor' ? 2.2 : 1.6, half: kind === 'tractor' ? 4 : 2.5 });
+  }
+  function procWalkers() {
+    if (typeof HumanModel === 'undefined') return;
+    const dir = Math.random() < 0.5 ? 1 : -1, tr = procTrip(dir), n = 1 + (Math.random() * 3 | 0);
+    for (let i = 0; i < n; i++) {
+      let ap; try { ap = HumanModel.randomAppearance(Math.random() < 0.5 ? 'm' : 'f'); } catch (e) { ap = {}; }
+      ap.lod = 'low'; const h = HumanModel.create(ap); scene.add(h.group);
+      PROC.items.push({ kind: 'walker', h, g: h.group, s: tr.s - dir * i * 1.4, end: tr.end, dir, speed: rnd(1.0, 1.35), cur: 0, lat: PROC.path.w * 0.3 + (i % 2) * 0.6, r: 0.4, half: 0.5, phase: Math.random() * 6 });
+    }
+  }
+  function procSpawn() {
+    const r = Math.random();
+    if (r < 0.22) procVehicle('bullockCart');
+    else if (r < 0.38) procVehicle('tractor');
+    else if (r < 0.58) procHerd('cattle');
+    else if (r < 0.74) procHerd('goats');
+    else procWalkers();
+  }
+  function procUpdate(dt, game, veh, cam) {
+    if (!PROC.path) return;
+    const h = typeof timeOfDay === 'number' ? timeOfDay : 9, night = h < 5.5 || h > 21;
+    const near = Math.hypot(GATE.x - game.carPos.x, GATE.z - game.carPos.z) < 260;
+    PROC.timer -= dt;
+    if (PROC.timer <= 0) {
+      PROC.timer = rnd(60, 120) * (herdTime() ? 0.6 : 1) * (night ? 3 : 1);
+      if (near && PROC.items.length < 8 && !(night && Math.random() < 0.7)) procSpawn();
+    }
+    // finished herds: release their animals and herder
+    for (let i = herds.length - 1; i >= 0; i--) {
+      const H = herds[i]; if (!H.done) continue;
+      for (const a of H.animals) { a.herd = null; a.gone = true; a.dead = true; a.vis = false; }
+      if (H.herder) scene.remove(H.herder.group);
+      herds.splice(i, 1);
+    }
+    const P = PROC.path;
+    for (let i = PROC.items.length - 1; i >= 0; i--) {
+      const it = PROC.items[i];
+      const q = pathAt(P, it.s, it.dir * it.lat);
+      // stop for the player: anything within a few metres ahead of us (or the player's car just in front)
+      const fx = q.ux * it.dir, fz = q.uz * it.dir, dx = cam.px - q.x, dz = cam.pz - q.z, ahead = dx * fx + dz * fz, side = Math.abs(dx * fz - dz * fx);
+      const blockedAhead = ahead > 0 && ahead < it.half + 5 && side < (veh ? 2.6 : 1.4);
+      const want = blockedAhead ? 0 : it.speed;
+      it.cur += (want - it.cur) * Math.min(1, dt * (want < it.cur ? 4 : 1.2));
+      const ds = it.cur * dt; it.s += it.dir * ds;
+      if (it.dir > 0 ? it.s > it.end : it.s < it.end) { scene.remove(it.g); PROC.items.splice(i, 1); continue; }
+      const d = Math.hypot(q.x - cam.x, q.z - cam.z), vis = d < LOD_R;
+      it.g.visible = vis;
+      if (d < 200) { const o = raPool[RA.length] || (raPool[RA.length] = { x: 0, z: 0, r: 0, kind: '' }); o.x = q.x; o.z = q.z; o.r = it.r; o.kind = it.kind; RA.push(o); }
+      if (!vis) continue;
+      const yaw = Math.atan2(fx, fz);
+      it.g.position.set(q.x, ground(q.x, q.z), q.z);
+      it.g.rotation.y += wrap(yaw - it.g.rotation.y) * Math.min(1, dt * 3);
+      if (it.v) {
+        const W = (it.v.userData && it.v.userData.wheels) || [];
+        for (const w of W) w.mesh.rotation.x += ds / (w.radius || 0.4);
+      } else if (it.h) {
+        it.phase += ds * 3.2;
+        if (it.cur > 0.15) HumanModel.animateWalk(it.h.parts, it.phase, it.cur); else HumanModel.animateIdle(it.h.parts, tAcc + i);
+      }
+    }
+  }
+  window.VillageProcessions = { spawn: (k) => { if (!k) return procSpawn(); if (k === 'cattle' || k === 'goats') procHerd(k); else if (k === 'walkers') procWalkers(); else procVehicle(k); }, get items() { return PROC.items; }, get state() { return PROC; } };
   GameHooks.init.push(game => { try { build(game); } catch (e) { console.error('animals build failed', e); } });
   GameHooks.update.push((dt, game) => update(dt, game));
   window.VillageAnimals = { get all() { return all; }, get herds() { return herds; }, get crows() { return crows; }, species: () => SP };

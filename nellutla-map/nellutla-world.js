@@ -947,6 +947,8 @@
     const [xmin, zmin, xmax, zmax] = D.bounds;
     const W = xmax - xmin, H = zmax - zmin, cx = (xmin + xmax) / 2, cz = (zmin + zmax) / 2;
     const group = new THREE.Group(); group.name = 'Nellutla'; scene.add(group);
+    const CH = 160, chunkList = [];                         // spatial chunk size (m) + chunk LOD registry (see splitIM)
+    let chunkX = 1e9, chunkZ = 1e9; const mirrors = [];
     const col = new THREE.Color();
 
     // ---------------- ground: land-cover classes painted to a canvas
@@ -2016,6 +2018,7 @@
           segs.push([t[0] - 0.25, t[1], t[0] + 0.25, t[1]]);
         });
         otr.castShadow = ocr.castShadow = true; fieldGroup.add(otr); fieldGroup.add(ocr);
+        lodChunks(splitIM(otr, { cell: 240 }), 'keep'); lodChunks(splitIM(ocr, { cell: 240 }), 'keep');
       }
     }
 
@@ -2140,6 +2143,85 @@
       const L2 = { low: [0, 0, 300], medium: [55, 25, 450], high: [85, 45, 600] }[level] || [85, 45, 600];
       [cropR, tuftR, bundLod] = L2; cropX = 1e9;
       vLevel = V_R[level] ? level : 'high';
+      chunkX = 1e9;
+    }
+
+    // ---------------- spatial chunking: map-wide instanced / merged meshes are split into CH x CH m cells, each with a
+    // true bounding sphere, so camera and shadow-camera frustum culling work (r128 culls an InstancedMesh by its base
+    // geometry's sphere, which is why these were all frustumCulled = false and drew every instance every frame).
+    // Each chunk also gets a per-tier distance rule (hide / low-poly swap) applied in updateChunks().
+    // per-tier distances (m, from the chunk's sphere surface): [low, medium, high]
+    const CH_DIST = { shrub: [110, 180, 240], prop: [120, 200, 260], crownLo: [140, 200, 280], trunk: [220, 360, 480], palm: [280, 450, 600] };
+    const chDist = (k) => { const t = CH_DIST[k]; return vLevel === 'low' ? t[0] : vLevel === 'medium' ? t[1] : t[2]; };
+    function shallowGeo(base, sphere) {          // shares GPU buffers with base; only the bounding sphere differs
+      const g = new THREE.BufferGeometry(); g.index = base.index;
+      for (const n in base.attributes) g.attributes[n] = base.attributes[n];
+      g.groups = base.groups; g.boundingSphere = sphere; return g;
+    }
+    // split an InstancedMesh into per-cell InstancedMeshes; returns { chunks: [{im, x, z, r, idx: [orig i]}], at: [chunk, local] per orig i }
+    function splitIM(im, opt) {
+      opt = opt || {};
+      const base = im.geometry; if (!base.boundingSphere) base.computeBoundingSphere();
+      const bs = base.boundingSphere, M = new THREE.Matrix4(), P = new THREE.Vector3(), cells = new Map(), n = im.count;
+      const info = new Float32Array(n * 4);
+      for (let i = 0; i < n; i++) {
+        im.getMatrixAt(i, M); P.copy(bs.center).applyMatrix4(M);
+        const sc = M.getMaxScaleOnAxis(); info.set([P.x, P.y, P.z, bs.radius * sc + (opt.pad || 0)], i * 4);
+      }
+      for (let i = 0; i < n; i++) {
+        const cs = opt.cell || CH, k = opt.key ? opt.key(i) : Math.floor(info[i * 4] / cs) + ',' + Math.floor(info[i * 4 + 2] / cs);
+        (cells.get(k) || cells.set(k, []).get(k)).push(i);
+      }
+      const at = new Array(n), chunks = [];
+      for (const idx of cells.values()) {
+        let x0 = 1e9, y0 = 1e9, z0 = 1e9, x1 = -1e9, y1 = -1e9, z1 = -1e9;
+        for (const i of idx) { if (!info[i * 4 + 3]) continue; const x = info[i * 4], y = info[i * 4 + 1], z = info[i * 4 + 2], r = info[i * 4 + 3]; x0 = Math.min(x0, x - r); x1 = Math.max(x1, x + r); y0 = Math.min(y0, y - r); y1 = Math.max(y1, y + r); z0 = Math.min(z0, z - r); z1 = Math.max(z1, z + r); }
+        const c = new THREE.Vector3((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); let R = 0;
+        for (const i of idx) if (info[i * 4 + 3]) R = Math.max(R, Math.hypot(info[i * 4] - c.x, info[i * 4 + 1] - c.y, info[i * 4 + 2] - c.z) + info[i * 4 + 3]);
+        const sph = new THREE.Sphere(c, R);
+        const ci = new THREE.InstancedMesh(shallowGeo(base, sph), im.material, idx.length);
+        idx.forEach((i, j) => { im.getMatrixAt(i, M); ci.setMatrixAt(j, M); at[i] = [chunks.length, j]; });
+        if (im.instanceColor) { const C = new THREE.Color(); idx.forEach((i, j) => { im.getColorAt(i, C); ci.setColorAt(j, C); }); }
+        if (im.instanceMatrix.usage === THREE.DynamicDrawUsage) ci.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        ci.castShadow = im.castShadow; ci.receiveShadow = im.receiveShadow; ci.renderOrder = im.renderOrder; ci.name = im.name; ci.visible = im.visible;
+        ci.frustumCulled = true;
+        chunks.push({ im: ci, x: c.x, z: c.z, r: R, idx, sph });
+      }
+      const parent = im.parent;
+      if (opt.mirror) {
+        // the original stays in the scene graph (other scripts find it by instance count, edit its matrices or hide it)
+        // but is taken off every render layer; the chunks follow its matrices and .visible (see syncMirrors)
+        im.layers.disableAll(); if (parent) chunks.forEach(ch => parent.add(ch.im));
+        mirrors.push({ src: im, chunks, at, ver: im.instanceMatrix.version, vis: true });
+      } else if (parent) { parent.remove(im); chunks.forEach(ch => parent.add(ch.im)); }
+      return { chunks, at };
+    }
+    // register chunks for distance rules: kind = 'shrub' | 'prop' | 'trunk' (hidden beyond chDist), or 'keep' (culling only)
+    function lodChunks(res, kind, src) { for (const ch of res.chunks) chunkList.push({ ims: [ch.im], x: ch.x, z: ch.z, r: ch.r, kind, src }); return res; }
+    const _mm = new THREE.Matrix4();
+    function syncMirrors() {
+      for (const m of mirrors) {
+        if (m.src.instanceMatrix.version !== m.ver) {
+          m.ver = m.src.instanceMatrix.version;
+          for (let i = 0; i < m.at.length; i++) { const [c, j] = m.at[i]; m.src.getMatrixAt(i, _mm); m.chunks[c].im.setMatrixAt(j, _mm); }
+          m.chunks.forEach(ch => ch.im.instanceMatrix.needsUpdate = true);
+        }
+        if (m.vis !== m.src.visible) { m.vis = m.src.visible; chunkX = 1e9; }
+      }
+    }
+    function updateChunks(cam) {
+      syncMirrors();
+      if (Math.abs(cam.x - chunkX) + Math.abs(cam.z - chunkZ) < 5) return;
+      chunkX = cam.x; chunkZ = cam.z;
+      const dS = chDist('shrub'), dP = chDist('prop'), dT = chDist('trunk'), dL = chDist('crownLo'), dPa = chDist('palm');
+      for (const c of chunkList) {
+        const d = Math.hypot(cam.x - c.x, cam.z - c.z) - c.r;
+        if (c.kind === 'shrub') c.ims[0].visible = d < dS;
+        else if (c.kind === 'prop') c.ims[0].visible = d < dP && (!c.src || c.src.visible);
+        else if (c.kind === 'trunk') c.ims[0].visible = d < dT;
+        else if (c.kind === 'palm') c.ims[0].visible = d < dPa;
+        else if (c.kind === 'crown') { const lo = d > dL; c.ims[0].visible = !lo; c.ims[1].visible = lo; }
+      }
     }
 
     // ---------------- trees: neem / tamarind canopies, coconut palms near houses
@@ -2157,15 +2239,12 @@
     const nearG = [nearTreeGeometry(0), nearTreeGeometry(1)];
     const woodMat = new THREE.MeshLambertMaterial({ map: barkTex, vertexColors: true });
     const cardMat = new THREE.MeshLambertMaterial({ map: leafCardTexture(), vertexColors: true, alphaTest: 0.45, side: THREE.DoubleSide });
-    const nearWood = nearG.map(g => new THREE.InstancedMesh(g.wood, woodMat, NEAR_CAP));
-    const nearLeaf = nearG.map(g => new THREE.InstancedMesh(g.leaves, cardMat, NEAR_CAP));
-    nearLeaf.forEach(m => { m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(NEAR_CAP * 3).fill(1), 3); });
-    [...nearWood, ...nearLeaf].forEach(m => { m.count = 0; m.frustumCulled = false; m.castShadow = true; group.add(m); });
     const farT = new Float32Array(broad.length * 16), farC = new Float32Array(broad.length * 16), nearM = new Float32Array(broad.length * 16);
     const nearCol = new Float32Array(broad.length * 3), species = new Uint8Array(broad.length), isNear = new Uint8Array(broad.length);
     const nearTint = [0xd8ecc0, 0xe8f2d0, 0xc8e0b0, 0xf0f0d8, 0xd0e4c4, 0xe0ecc0];
+    let maxTree = 1;
     broad.forEach((t, i) => {
-      const sz = t[2], th = sz * 0.5, hr = hash(t[0], t[1]);
+      const sz = t[2], th = sz * 0.5, hr = hash(t[0], t[1]); maxTree = Math.max(maxTree, sz);
       m4.compose(v.set(t[0], 0, t[1]), q.identity(), s.set(1 + sz*0.06, th, 1 + sz*0.06)); trunks.setMatrixAt(i, m4); m4.toArray(farT, i * 16);
       q.setFromAxisAngle(v.set(0, 1, 0), hr * 6.28);
       m4.compose(v.set(t[0], th + sz * 0.25, t[1]), q, s.set(sz * (0.55 + hr*0.2), sz * 0.4, sz * (0.55 + hr*0.2))); crowns.setMatrixAt(i, m4); m4.toArray(farC, i * 16);
@@ -2178,34 +2257,70 @@
     });
     // far crowns don't cast shadows: the detailed near-tree LOD does (8.5k instances in the shadow pass was the biggest cost)
     crowns.castShadow = false; group.add(trunks); group.add(crowns);
+    // chunked by tree position: per cell a far trunk / far crown (+ a low-poly crown sharing its instance buffers, swapped
+    // in beyond CH_DIST.crownLo) and per-species near-tree meshes sized to the trees in that cell
+    const TCH = 240, treeKey = (i) => Math.floor(broad[i][0] / TCH) + ',' + Math.floor(broad[i][1] / TCH);
+    const trunkSplit = splitIM(trunks, { key: treeKey }), crownSplit = splitIM(crowns, { key: treeKey });
+    const crownLoG = (() => {                  // 20-tri stand-in for the far clump, fitted to its bounds
+      crownG.computeBoundingBox(); const bb = crownG.boundingBox, g = new THREE.IcosahedronGeometry(1, 0);
+      const ctr = new THREE.Vector3(), sz3 = new THREE.Vector3(); bb.getCenter(ctr); bb.getSize(sz3);
+      g.scale(sz3.x * 0.47, sz3.y * 0.47, sz3.z * 0.47); g.translate(ctr.x, ctr.y, ctr.z);
+      const nr = g.attributes.normal; for (let i = 0; i < nr.count; i++) { const x = nr.getX(i), y = nr.getY(i) + 0.35, z = nr.getZ(i), l = Math.hypot(x, y, z); nr.setXYZ(i, x / l, y / l, z / l); }
+      return g;
+    })();
+    const treeChunks = [];
+    trunkSplit.chunks.forEach((tc, ci) => {
+      const cc = crownSplit.chunks[ci];        // same keys, same insertion order
+      const lo = new THREE.InstancedMesh(shallowGeo(crownLoG, cc.sph), cc.im.material, cc.idx.length);
+      lo.instanceMatrix = cc.im.instanceMatrix; lo.instanceColor = cc.im.instanceColor; lo.visible = false; lo.frustumCulled = true; lo.castShadow = false; lo.receiveShadow = cc.im.receiveShadow;
+      group.add(lo);
+      chunkList.push({ ims: [tc.im], x: tc.x, z: tc.z, r: tc.r, kind: 'trunk' }, { ims: [cc.im, lo], x: cc.x, z: cc.z, r: cc.r, kind: 'crown' });
+      const nsph = new THREE.Sphere(cc.sph.center.clone(), cc.sph.radius + maxTree * 0.8);
+      const ns = [0, 0]; for (const i of tc.idx) ns[species[i]]++;
+      const nw = [], nl = [];
+      for (let sp = 0; sp < 2; sp++) {
+        const cap = Math.max(1, ns[sp]);
+        const w = new THREE.InstancedMesh(shallowGeo(nearG[sp].wood, nsph), woodMat, cap);
+        const l = new THREE.InstancedMesh(shallowGeo(nearG[sp].leaves, nsph), cardMat, cap);
+        l.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3).fill(1), 3);
+        for (const m of [w, l]) { m.count = 0; m.visible = false; m.frustumCulled = true; m.castShadow = true; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(m); }
+        nw.push(w); nl.push(l);
+      }
+      treeChunks.push({ x: tc.x, z: tc.z, r: tc.r + maxTree, idx: tc.idx, trunk: tc.im, crown: cc.im, nw, nl, any: false });
+    });
     const zeroM = new Float32Array(16);
     let lodX = 1e9, lodZ = 1e9;
     function updateTrees(cam) {
       if (Math.abs(cam.x - lodX) + Math.abs(cam.z - lodZ) < 6) return;
       lodX = cam.x; lodZ = cam.z;
-      const cnt = [0, 0], R2 = NEAR_R * NEAR_R; let dirty = false;
-      for (let i = 0; i < broad.length; i++) {
-        const t = broad[i], dx = t[0] - cam.x, dz = t[1] - cam.z;
-        let near = dx * dx + dz * dz < R2 ? 1 : 0;
-        const sp = species[i];
-        if (near && cnt[sp] >= NEAR_CAP) near = 0;
-        if (near !== isNear[i]) {
-          isNear[i] = near; dirty = true;
-          trunks.instanceMatrix.array.set(near ? zeroM : farT.subarray(i * 16, i * 16 + 16), i * 16);
-          crowns.instanceMatrix.array.set(near ? zeroM : farC.subarray(i * 16, i * 16 + 16), i * 16);
+      const R2 = NEAR_R * NEAR_R;
+      for (const ch of treeChunks) {
+        const inRange = Math.hypot(cam.x - ch.x, cam.z - ch.z) - ch.r < NEAR_R;
+        if (!inRange && !ch.any) continue;
+        const cnt = [0, 0]; let dirty = false;
+        const tA = ch.trunk.instanceMatrix.array, cA = ch.crown.instanceMatrix.array;
+        ch.idx.forEach((i, j) => {
+          const t = broad[i], dx = t[0] - cam.x, dz = t[1] - cam.z;
+          const near = inRange && dx * dx + dz * dz < R2 ? 1 : 0;
+          if (near !== isNear[i]) {
+            isNear[i] = near; dirty = true;
+            tA.set(near ? zeroM : farT.subarray(i * 16, i * 16 + 16), j * 16);
+            cA.set(near ? zeroM : farC.subarray(i * 16, i * 16 + 16), j * 16);
+          }
+          if (near) {
+            const sp = species[i], k = cnt[sp]++;
+            ch.nw[sp].instanceMatrix.array.set(nearM.subarray(i * 16, i * 16 + 16), k * 16);
+            ch.nl[sp].instanceMatrix.array.set(nearM.subarray(i * 16, i * 16 + 16), k * 16);
+            ch.nl[sp].instanceColor.array.set(nearCol.subarray(i * 3, i * 3 + 3), k * 3);
+          }
+        });
+        for (let k = 0; k < 2; k++) {
+          ch.nw[k].count = ch.nl[k].count = cnt[k]; ch.nw[k].visible = ch.nl[k].visible = cnt[k] > 0;
+          if (cnt[k]) ch.nw[k].instanceMatrix.needsUpdate = ch.nl[k].instanceMatrix.needsUpdate = ch.nl[k].instanceColor.needsUpdate = true;
         }
-        if (near) {
-          const j = cnt[sp]++;
-          nearWood[sp].instanceMatrix.array.set(nearM.subarray(i * 16, i * 16 + 16), j * 16);
-          nearLeaf[sp].instanceMatrix.array.set(nearM.subarray(i * 16, i * 16 + 16), j * 16);
-          nearLeaf[sp].instanceColor.array.set(nearCol.subarray(i * 3, i * 3 + 3), j * 3);
-        }
+        ch.any = cnt[0] + cnt[1] > 0;
+        if (dirty) ch.trunk.instanceMatrix.needsUpdate = ch.crown.instanceMatrix.needsUpdate = true;
       }
-      for (let k = 0; k < 2; k++) {
-        nearWood[k].count = nearLeaf[k].count = cnt[k];
-        nearWood[k].instanceMatrix.needsUpdate = nearLeaf[k].instanceMatrix.needsUpdate = nearLeaf[k].instanceColor.needsUpdate = true;
-      }
-      if (dirty) trunks.instanceMatrix.needsUpdate = crowns.instanceMatrix.needsUpdate = true;
     }
     if (palms.length) {
       const pt = new THREE.CylinderGeometry(0.15, 0.22, 1, 9, 8); pt.translate(0, 0.5, 0);
@@ -2223,6 +2338,7 @@
         segs.push([t[0]-0.25, t[1], t[0]+0.25, t[1]]);
       });
       pCr.castShadow = true; group.add(pTr); group.add(pCr);
+      lodChunks(splitIM(pTr, { cell: 240 }), 'palm'); lodChunks(splitIM(pCr, { cell: 240 }), 'palm');
     }
 
     // ---------------- electric poles + wires along village/tar roads
@@ -2265,7 +2381,7 @@
         for (const o of [-0.65, -0.22, 0.22, 0.65]) span(poleAx(p, o), poleAx(nx, o), 7.13, 7.13);
       }
     });
-    group.add(poleIM);
+    group.add(poleIM); lodChunks(splitIM(poleIM, { cell: 320 }), 'keep');
     // distribution transformers on some poles (tank + fins + bushings + fuse arm) and service drops to nearby houses
     {
       const K = new Kit(), gr = 0x7d8580;
@@ -2289,7 +2405,7 @@
           wire.push(p[0] + a.x, a.y, p[1] + a.z, p[0] + b2.x, b2.y, p[1] + b2.z);
         }
       });
-      group.add(tIM);
+      group.add(tIM); if (list.length) lodChunks(splitIM(tIM, { cell: 320 }), 'keep');
       // service drops: LT arm -> roof edge of houses within reach (a sagging cable each)
       for (const H of houses) {
         if (H.b.r === 'sheet' || hash(H.cx * 1.1, H.cz * 2.3) > 0.55) continue;
@@ -2555,6 +2671,10 @@
         }
       });
       ims.forEach(im => { im.castShadow = k !== 'shrub'; im.frustumCulled = false; group.add(im); });
+      // bikes / cattle stay whole: player.js and animals.js find those InstancedMeshes by instance count
+      // (those are mirrored: the original stays findable, the chunks copy its matrices / visibility)
+      const mir = /^(bike|bike2|cow|buffalo)$/.test(k);
+      ims.forEach(im => lodChunks(splitIM(im, { cell: k === 'shrub' ? 240 : 320, mirror: mir }), k === 'shrub' ? 'shrub' : 'prop', mir ? im : null));
     }
 
     // ---------------- surface raster (2 m) for grip / audio
@@ -2877,6 +2997,10 @@
       people.meshes = PART;
       people.count = made;
       Object.values(PART).forEach(m => { if (m.instanceColor) m.instanceColor.needsUpdate = true; });
+      // distance LOD: each frame only villagers near the camera are packed into the first slots (count = packed);
+      // per-slot colours are kept here so they can follow a person to whatever slot it lands in
+      people.srcCol = {}; people.qLim = {}; people.lastN = {};
+      for (const k in PART) { const m = PART[k]; m.userData.qFull = m.count; people.srcCol[k] = m.instanceColor.array.slice(); people.qLim[k] = people.lastN[k] = m.count; }
     })();
     function pathPoint(r, s2) {
       for (let i = 0; i < r.p.length - 1; i++) {
@@ -2892,10 +3016,20 @@
       if (!people.count) return;
       peopleT += dt;
       const M = people.meshes, QUIET = window.NELLUTLA_QUIET || [];
+      // quality.js lowers mesh.count to drop the tail of the crowd: pick that up as a slot limit
+      const QL = people.qLim, NX = {}, PR2 = Math.pow(vLevel === 'low' ? 160 : vLevel === 'medium' ? 230 : 300, 2);
+      for (const k in M) { if (M[k].count !== people.lastN[k]) QL[k] = M[k].count; NX[k] = 0; }
+      const meshOf = (k) => k === 'armL' || k === 'armR' ? 'arm' : k === 'legL' || k === 'legR' ? 'leg' : k;
+      const D = {};
       people.forEach((p) => {
-        // only animate people near the camera; far ones keep their last pose
-        const far = camPos && Math.abs(p.x - camPos.x) + Math.abs(p.z - camPos.z) > 350;
-        if (far && p.x !== 0) return;
+        // only animate + draw people near the camera; far ones keep their last pose and are not drawn
+        const P0 = p.parts;
+        for (const k in P0) if (P0[k] >= QL[meshOf(k)]) return;
+        if (camPos && p.x !== 0) { const dx = p.x - camPos.x, dz = p.z - camPos.z; if (dx * dx + dz * dz > PR2) return; }
+        for (const k in P0) {             // pack this person's parts into the next free slots, colours follow
+          const mk = meshOf(k), j = NX[mk]++, src = people.srcCol[mk]; D[k] = j;
+          M[mk].instanceColor.array[j * 3] = src[P0[k] * 3]; M[mk].instanceColor.array[j * 3 + 1] = src[P0[k] * 3 + 1]; M[mk].instanceColor.array[j * 3 + 2] = src[P0[k] * 3 + 2];
+        }
         let walking = !p.idle;
         let target = p.r.w / 2 + 0.7;
         if (car) {
@@ -2915,8 +3049,8 @@
         const bob = walking ? Math.abs(Math.cos(ph)) * 0.025 * sc : 0;
         pq.setFromAxisAngle(yAxis, rot); pqa.setFromAxisAngle(xAxis, p.stoop); pq.multiply(pqa); ps.set(sc, sc, sc);
         bodyM.compose(pv.set(p.x, bob, p.z), pq, ps);
-        const P = p.parts;
-        for (const k in P) if (k !== 'armL' && k !== 'armR' && k !== 'legL' && k !== 'legR' && k !== 'stick') M[k].setMatrixAt(P[k], bodyM);
+        const P = D;
+        for (const k in P0) if (k !== 'armL' && k !== 'armR' && k !== 'legL' && k !== 'legR' && k !== 'stick') M[k].setMatrixAt(P[k], bodyM);
         const limb = (mesh, idx, lx, ly, lz, ang) => {
           jointM.makeTranslation(lx, ly, lz); rotM.makeRotationX(ang);
           limbM.multiplyMatrices(bodyM, jointM).multiply(rotM); mesh.setMatrixAt(idx, limbM);
@@ -2928,7 +3062,7 @@
         limb(M.arm, P.armR, sh, 1.4, 0, armR);
         if (p.stick) limb(M.stick, P.stick, sh, 1.4, 0, armR);
       });
-      for (const k in M) M[k].instanceMatrix.needsUpdate = true;
+      for (const k in M) { M[k].count = people.lastN[k] = NX[k]; M[k].instanceMatrix.needsUpdate = true; M[k].instanceColor.needsUpdate = true; }
     }
 
     // ---------------- night lighting: street lamps on the poles switch on at dusk, off at dawn.
@@ -2950,6 +3084,7 @@
     });
     for (const im of [lampIM, headIM, bulbIM]) { im.frustumCulled = false; group.add(im); }
     lampIM.castShadow = headIM.castShadow = true;
+    for (const im of [lampIM, headIM, bulbIM]) if (poles.length) lodChunks(splitIM(im, { cell: 320 }), 'prop');
     const glowTex = (() => {
       const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d');
       const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
@@ -3017,6 +3152,7 @@
       updateTrees(camera.position);
       updateVillage(camera.position);
       updateFields(camera.position);
+      updateChunks(camera.position);
       for (const b of billboards) {
         const p = b.parent.position; b.rotation.y = Math.atan2(camera.position.x - p.x, camera.position.z - p.z);
       }
@@ -3026,6 +3162,7 @@
     const hw = D.roads.filter(r => r.t === 'highway' && r.w >= 9).flatMap(r => r.p)
       .reduce((best, p) => { const d = Math.hypot(p[0]-junction.x, p[1]-junction.z); return d < best.d ? { d, p } : best; }, { d: 1e9, p: [0, 0] }).p;
 
+    console.log('[chunks]', chunkList.length, 'instanced chunks,', treeChunks.length, 'tree cells');
     return { group, bounds: D.bounds, collide, surfaceAt, drawMap, update, landmarks: D.landmarks, roads: D.roads,
       spawn: { x: hw[0], z: hw[1] }, mapCanvas, addCollider, removeCollider, insideBuilding, nearestRoad, addMapIcon, buildings: D.buildings, mapScale: MS, setNight, people, props: placed, poles, setDetail, fields: FI, fieldAt, fieldGroup, bundAt };
   }
