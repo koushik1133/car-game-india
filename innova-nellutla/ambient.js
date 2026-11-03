@@ -115,10 +115,96 @@ function VillageAmbience(ctx, world) {
     o.start(t0); am.start(t0); o.stop(t0 + 0.3); am.stop(t0 + 0.3);
   }
 
+  // ---------------- farm animals (positional, tied to the animals in animals.js: window.VillageAnimals.all)
+  function rooster(x, y, z, vol) {   // "ko-ko-ro-koooo": 4 syllables, strained harmonic voice, last one long and falling
+    const out = at(x, y, z, vol || 0.45), t0 = ctx.currentTime, syl = [[0, 0.12, 620, 700], [0.16, 0.12, 700, 780], [0.32, 0.14, 760, 900], [0.5, 0.75, 900, 640]];
+    for (const [o0, d, f1, f2] of syl) {
+      const o = ctx.createOscillator(), o2 = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain(), t = t0 + o0;
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(f1, t); o.frequency.linearRampToValueAtTime(f2 * 1.04, t + d * 0.3); o.frequency.linearRampToValueAtTime(f2, t + d);
+      o2.type = 'square'; o2.frequency.setValueAtTime(f1 * 1.5, t); o2.frequency.linearRampToValueAtTime(f2 * 1.5, t + d);
+      f.type = 'bandpass'; f.frequency.value = 1800; f.Q.value = 1.4;
+      env(g, t, 0.02, 0.6, d); o.connect(f); o2.connect(f); f.connect(g); g.connect(out);
+      [o, o2].forEach(n => { n.start(t); n.stop(t + d + 0.05); });
+    }
+  }
+  function cluck(x, y, z) {          // hen: 2-5 short nasal "buk" pops, sometimes a rising "bukaaak"
+    const out = at(x, y, z, 0.3), k = 2 + Math.floor(Math.random() * 4), long = Math.random() < 0.25;
+    for (let i = 0; i < k; i++) {
+      const t = ctx.currentTime + i * (0.14 + Math.random() * 0.1), last = long && i === k - 1, d = last ? 0.35 : 0.05;
+      const o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(last ? 500 : 420 + Math.random() * 80, t); o.frequency.linearRampToValueAtTime(last ? 820 : 360, t + d);
+      f.type = 'bandpass'; f.frequency.value = 1400; f.Q.value = 3;
+      env(g, t, 0.006, 0.6, d); o.connect(f); f.connect(g); g.connect(out); o.start(t); o.stop(t + d + 0.05);
+    }
+  }
+  function cattleMoo(x, y, z, buffalo) {   // buffalo: lower, shorter, rougher grunt-moo
+    const t0 = ctx.currentTime, out = at(x, y, z, buffalo ? 0.55 : 0.5), o = ctx.createOscillator(), o2 = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    const b = buffalo ? 78 : 125 + Math.random() * 25, d = buffalo ? 0.9 : 1.4 + Math.random() * 0.6;
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(b * 0.9, t0); o.frequency.linearRampToValueAtTime(b * 1.25, t0 + d * 0.3); o.frequency.linearRampToValueAtTime(b * 0.85, t0 + d);
+    o2.type = 'sawtooth'; o2.frequency.setValueAtTime(b * 0.905, t0); o2.frequency.linearRampToValueAtTime(b * 1.26, t0 + d * 0.3); o2.frequency.linearRampToValueAtTime(b * 0.86, t0 + d);
+    f.type = 'lowpass'; f.Q.value = 3; f.frequency.setValueAtTime(300, t0); f.frequency.linearRampToValueAtTime(buffalo ? 600 : 950, t0 + d * 0.35); f.frequency.linearRampToValueAtTime(300, t0 + d);
+    env(g, t0, 0.15, 0.7, d); o.connect(f); o2.connect(f); f.connect(g); g.connect(out);
+    [o, o2].forEach(n => { n.start(t0); n.stop(t0 + d + 0.3); });
+  }
+  function cowBell(x, y, z) {        // small brass neck bell: 2-4 dull clonks (inharmonic partials, short)
+    const out = at(x, y, z, 0.18), k = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < k; i++) {
+      const t = ctx.currentTime + i * (0.25 + Math.random() * 0.2);
+      for (const [m, a] of [[1, 1], [2.3, 0.5], [3.9, 0.3]]) {
+        const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = 880 * m;
+        env(g, t, 0.003, a * 0.35, 0.25 / m); o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.3);
+      }
+    }
+  }
+  function bleat(x, y, z) {          // goat "mehhh": nasal with fast vibrato
+    const t0 = ctx.currentTime, out = at(x, y, z, 0.35), o = ctx.createOscillator(), vib = ctx.createOscillator(), vg = ctx.createGain(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    const b = 300 + Math.random() * 150, d = 0.5 + Math.random() * 0.4;
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(b, t0); o.frequency.linearRampToValueAtTime(b * 0.9, t0 + d);
+    vib.frequency.value = 9 + Math.random() * 4; vg.gain.value = b * 0.06; vib.connect(vg); vg.connect(o.frequency);
+    f.type = 'bandpass'; f.frequency.value = 1100; f.Q.value = 2;
+    env(g, t0, 0.04, 0.6, d); o.connect(f); f.connect(g); g.connect(out);
+    [o, vib].forEach(n => { n.start(t0); n.stop(t0 + d + 0.1); });
+  }
+  function loudspeaker(x, y, z) {    // distant temple loudspeaker at dawn: a faint, band-limited devotional melody line
+    const out = at(x, y, z, 0.12), notes = [0, 2, 4, 5, 4, 2, 0, -1, 0], base = 330, bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 1200; bp.Q.value = 0.9; bp.connect(out);
+    let t = ctx.currentTime;
+    for (const n of notes) {
+      const d = 0.35 + Math.random() * 0.35, o = ctx.createOscillator(), vib = ctx.createOscillator(), vg = ctx.createGain(), g = ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.value = base * Math.pow(2, n / 12); vib.frequency.value = 5.5; vg.gain.value = 4; vib.connect(vg); vg.connect(o.frequency);
+      env(g, t, 0.06, 0.4, d); o.connect(g); g.connect(bp); [o, vib].forEach(q => { q.start(t); q.stop(t + d + 0.1); }); t += d * 0.9;
+    }
+  }
+  const nearestOf = (p, test, maxD) => {
+    const A = window.VillageAnimals && VillageAnimals.all; if (!A) return [];
+    const r = [];
+    for (const a of A) if (a && test(a) && Math.hypot(a.x - p.x, a.z - p.z) < maxD) r.push(a);
+    return r;
+  };
+  const pickOne = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const rooster0 = { x: 0, z: 0 };
+  function villageAnimals(p, hour, night, dawn, due) {
+    const crowHour = hour >= 5 && hour < 7;
+    // roosters: lots at 5-7 am, the odd one later in the day; from a real rooster when one is near, else a distant one
+    if ((crowHour && due('rooster', 6, 16)) || (!night && !crowHour && due('roosterDay', 60, 180))) {
+      const R = nearestOf(p, a => a.kind === 'hen' && a.rooster, 150);
+      if (R.length) { const a = pickOne(R); rooster(a.x, 1, a.z); }
+      else if (crowHour) { const q = around(p, 220); rooster(q[0], 3, q[2], 0.3); }
+    }
+    if (!night && due('cluck', 2, 6)) { const H = nearestOf(p, a => a.kind === 'hen' && !a.rooster, 35); if (H.length) { const a = pickOne(H); cluck(a.x, 0.3, a.z); } }
+    if (!night && due('moo', 10, 28)) { const C = nearestOf(p, a => a.kind === 'cow' || a.kind === 'bull' || a.kind === 'buffalo', 90); if (C.length) { const a = pickOne(C); cattleMoo(a.x, 1.4, a.z, a.kind === 'buffalo'); } }
+    if (due('cowbell', 3, 9)) { const C = nearestOf(p, a => (a.kind === 'cow' || a.kind === 'bull') && a.state !== 'lie', 30); if (C.length) { const a = pickOne(C); cowBell(a.x, 1, a.z); } }
+    if (!night && due('bleat', 6, 18)) { const G = nearestOf(p, a => a.kind === 'goat', 60); if (G.length) { const a = pickOne(G); bleat(a.x, 0.7, a.z); } }
+    if (hour > 5 && hour < 6.6 && due('speaker', 40, 90)) {
+      const tp = temples.map(tl => [Math.hypot(tl.x - p.x, tl.z - p.z), tl]).sort((a, b) => a[0] - b[0])[0];
+      if (tp && tp[0] < 900) loudspeaker(tp[1].x, 8, tp[1].z);
+    }
+  }
+
   // ---------------- scheduler
   const temples = world.landmarks.filter(l => l.k === 'temple');
   const lakes = (window.NELLUTLA_MAP.lakes || []).map(lk => [lk.reduce((s, p) => s + p[0], 0) / lk.length, lk.reduce((s, p) => s + p[1], 0) / lk.length]);
-  const next = { koel: 6, bird: 1, crow: 4, moo: 12, bark: 8, bell: 5, horn: 6, frog: 3 };
+  const next = { koel: 6, bird: 1, crow: 4, moo: 12, bark: 8, bell: 5, horn: 6, frog: 3, rooster: 2, roosterDay: 90, cluck: 3, cowbell: 4, bleat: 8, speaker: 10 };
   const around = (c, r) => [c.x + (Math.random() - 0.5) * 2 * r, 2 + Math.random() * 8, c.z + (Math.random() - 0.5) * 2 * r];
 
   function update(dt, camera, hour, traffic, carSpeed) {
@@ -131,7 +217,7 @@ function VillageAmbience(ctx, world) {
 
     const night = hour < 5.5 || hour > 19, dawn = hour > 5 && hour < 8.5, dusk = hour > 17.5 && hour < 19.5;
     const surf = world.surfaceAt(p.x, p.z), inVillage = ['cc', 'lane'].includes(surf);
-    cricketG.gain.setTargetAtTime(night ? 0.02 : 0, ctx.currentTime, 2);
+    cricketG.gain.setTargetAtTime(night ? 0.025 : dusk ? 0.01 : 0, ctx.currentTime, 2);
     windG.gain.setTargetAtTime(0.03 + Math.min(0.12, Math.abs(carSpeed) / 900), ctx.currentTime, 0.5);
     windF.frequency.setTargetAtTime(380 + Math.abs(carSpeed) * 6, ctx.currentTime, 0.5);
 
@@ -141,18 +227,16 @@ function VillageAmbience(ctx, world) {
     cicadaG.gain.setTargetAtTime(hour > 10.5 && hour < 16.5 && !inVillage ? 0.006 : 0, ctx.currentTime, 3);
     if ((dawn || (hour > 8 && hour < 11)) && due('koel', 8, 20)) koel(...around(p, 80));
     if (!night && due('bird', dawn ? 0.4 : 1.2, dawn ? 1.5 : 4)) bird(...around(p, 60));
-    if (!night && due('crow', 4, 12)) crow(...around(p, 90));
-    if (!night && due('moo', 15, 40)) { const q = around(p, 70); if (window.SFX) SFX.moo(q[0], q[2]); else moo(q[0], 1, q[2]); }
-    if (due('bark', night ? 5 : 18, night ? 16 : 45)) bark(...around(p, inVillage ? 50 : 120).map((v, i) => i === 1 ? 0.5 : v));
+    if (!night && due('crow', hour < 10 ? 3 : 7, hour < 10 ? 9 : 18)) crow(...around(p, 90));
+    if (due('bark', night ? 5 : 18, night ? 16 : 45)) { const D = nearestOf(p, a => a.kind === 'dog', 120); if (D.length) { const a = pickOne(D); bark(a.x, 0.5, a.z); } else bark(...around(p, inVillage ? 60 : 160).map((v, i) => i === 1 ? 0.5 : v)); }
     // temple bells at prayer times, louder when close
     if ((dawn || dusk || Math.random() < 0.2) && due('bell', dawn || dusk ? 3 : 10, dawn || dusk ? 7 : 25)) {
       const tp = temples.map(tl => [Math.hypot(tl.x - p.x, tl.z - p.z), tl]).sort((a, b) => a[0] - b[0])[0];
       if (tp && tp[0] < 300) bell(tp[1].x, 4, tp[1].z);
     }
-    if (!night && traffic && traffic.length && due('horn', 5, 14)) {
-      const near = traffic.filter(tc => tc.model !== 'bullockCart' && Math.hypot(tc.g.position.x - p.x, tc.g.position.z - p.z) < 150);
-      if (near.length) { const tc = near[Math.floor(Math.random() * near.length)]; if (window.SFX) SFX.horn(tc._snd ? tc._snd.type : tc.model, tc.g.position.x, tc.g.position.z); else autoHorn(tc.g.position.x, 1, tc.g.position.z); }
-    }
+    // ambient horns ONLY from a real, visible traffic vehicle within 120 m (sfx.js picks and spatialises it); none otherwise
+    if (!night && due('horn', 6, 16) && window.SFX && SFX.ambientHorn) SFX.ambientHorn(p.x, p.z, 120);
+    villageAnimals(p, hour, night, dawn, due);
     if (night && lakes.length && due('frog', 0.6, 2.5)) {
       const lk = lakes.find(c => Math.hypot(c[0] - p.x, c[1] - p.z) < 400);
       if (lk) frog(lk[0] + (Math.random() - 0.5) * 60, 0.5, lk[1] + (Math.random() - 0.5) * 60);

@@ -6,7 +6,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0a0f19">
-<title>Innova Crysta in Nellutla</title>
+<title>Spark Gaming</title>
 <style>
   /* ------------------------------------------------------------ layout tokens
      --g gutter (respects notches), --rad radar size, --cs compass scale, --u touch button unit */
@@ -208,9 +208,9 @@
 <body>
 <canvas id="gl"></canvas>
 <div id="start">
-  <h1>NELLUTLA · JANGAON</h1>
+  <h1>SPARK GAMING</h1>
   <div class="plate">TS 08 HN 1111</div>
-  <p>Toyota Innova Crysta 2.4 V on a real-geometry map of Nellutla village: NH-365B, the Lingala Ghanpur road, concrete village streets, dirt lanes, the river bed and 1,600 real house footprints.</p>
+  <p>Open-world Indian village driving: cars, bikes, autos and tractors on a real-geometry map with highway, village streets, dirt lanes, the river bed and 1,600 real house footprints.</p>
   <input id="pname" maxlength="20" placeholder="Your name (for multiplayer)" autocomplete="nickname" enterkeyhint="go">
   <button id="go">START DRIVING</button>
 </div>
@@ -294,25 +294,27 @@
 <script src="crysta-detail.js?v=1793665390"></script>
 <script src="crysta.js?v=1793900002"></script>
 <script src="device.js?v=1793665390"></script>
-<script src="quality.js?v=1793669000"></script>
-<script src="ambient.js?v=1793670001"></script>
-<script src="engine-audio.js?v=1793800002"></script>
-<script src="traffic-models.js?v=1793900001"></script>
+<script src="quality.js?v=1793740001"></script>
+<script src="ambient.js?v=1794000101"></script>
+<script src="engine-audio.js?v=1794000101"></script>
+<script src="traffic-models.js?v=1793910001"></script>
 <script src="glb-car.js?v=1793665390"></script>
-<script src="multiplayer/mp.js?v=1793669700"></script>
-<script src="people-models.js?v=1793900001"></script>
+<script src="multiplayer/mp.js?v=1793750001"></script>
+<script src="people-models.js?v=1793671314"></script>
 <script src="assets.js?v=1793665390"></script>
-<script src="player.js?v=1793730100"></script>
+<script src="player.js?v=1793910001"></script>
 <!-- Feature modules. Each registers itself on GameHooks (init/update/key) and owns its own file. -->
 <script>window.GameHooks = { init: [], update: [], key: [] };</script>
-<script src="parked.js?v=1793900001"></script>
+<script src="parked.js?v=1793910001"></script>
 <script src="character-creator.js?v=1793665390"></script>
 <script src="properties.js?v=1793900001"></script>
 <script src="safehouse.js?v=1793665390"></script>
-<script src="safehouse2.js?v=1793730001"></script>
+<script src="safehouse2.js?v=1793740003"></script>
+<script src="visitors.js?v=1793671654"></script>
 <script src="streetscape.js?v=1793700300"></script>
 <script src="animals.js?v=1793800002"></script>
-<script src="sfx.js?v=1793800001"></script>
+<script src="sfx.js?v=1794000101"></script>
+<script src="mud.js?v=1794000103"></script>
 <script src="touch-controls.js?v=1793665390"></script>
 <script src="auto-rides.js?v=1793665390"></script>
 <script src="lod.js?v=1793900002"></script>
@@ -472,6 +474,10 @@ const TRAFFIC_KIND = {
   bus: { acc: 0.8, brk: 4, hw: 1.9, gap: 3.0 }, bullockCart: { acc: 0.4, brk: 2, hw: 1.5, gap: 1.5 },
 };
 const TRAFFIC_ROUTES = {};
+const TRAFFIC_POOL = {
+  hatch: ['hatch', 'swift', 'swift', 'dzire', 'dzire', 'alto', 'alto'],
+  suv: ['suv', 'mpv', 'mpv', 'fortuner', 'fortunerBlack', 'bolero', 'bolero', 'scorpio', 'scorpio', 'ace'],
+};
 const trafficRouteLen = r => r.p.reduce((sum, p, i) => i ? sum + Math.hypot(p[0] - r.p[i-1][0], p[1] - r.p[i-1][1]) : 0, 0);
 (function spawnTraffic() {
   const all = world.roads.filter(r => r.p.length >= 2).map(r => ({ r, len: trafficRouteLen(r) })).filter(o => o.len > 100);
@@ -479,7 +485,7 @@ const trafficRouteLen = r => r.p.reduce((sum, p, i) => i ? sum + Math.hypot(p[0]
   // kind, how many, which roads, speed (m/s)
   const PLAN = [
     ['auto', 12, ['highway', 'tar', 'cc', 'lane'], 9], ['bike', 14, ['highway', 'tar', 'cc', 'lane', 'dirt'], 11],
-    ['hatch', 7, ['highway', 'tar', 'cc'], 13], ['suv', 5, ['highway', 'tar', 'cc'], 14],
+    ['hatch', 9, ['highway', 'tar', 'cc'], 13], ['suv', 8, ['highway', 'tar', 'cc'], 14],
     ['tractor', 5, ['tar', 'dirt', 'cc', 'lane'], 5], ['lorry', 3, ['highway', 'tar'], 12],
     ['bus', 2, ['highway', 'tar'], 12], ['bullockCart', 4, ['dirt', 'lane'], 1.6],
   ];
@@ -488,7 +494,10 @@ const trafficRouteLen = r => r.p.reduce((sum, p, i) => i ? sum + Math.hypot(p[0]
     TRAFFIC_ROUTES[kind] = { routes, spd };
     for (let i = 0; i < n; i++) {
       const o = routes[Math.floor(Math.random() * routes.length)];
-      const v = TrafficModels[kind]();
+      // each category draws from every TrafficModels car of its class ('bike' is already a random two-wheeler mix);
+      // model stays the category (AI tuning, audio), v.type the specific car (player.js PARAMS when you take it)
+      const pool = TRAFFIC_POOL[kind], pk = pool ? pool[Math.random() * pool.length | 0] : kind;
+      const v = (TrafficModels[pk] || TrafficModels[kind])();
       const drv = 0.85 + Math.random() * 0.3;                     // this driver's temperament (speed + headway)
       const speed = spd * (o.r.t === 'highway' ? 1.7 : 1) * drv;
       traffic.push({ ...v, model: kind, r: o.r, len: o.len, s: Math.random() * o.len, dir: Math.random() < 0.5 ? 1 : -1, speed, cur: speed,

@@ -169,12 +169,15 @@
     tractor: { fire0: 16, fire1: 32, vs: 6, bright: 380, rough: 0.8, vol: 0.75, w: 'square' },
     lorry: { fire0: 30, fire1: 65, vs: 18, bright: 520, rough: 0.6, vol: 0.85, w: 'sawtooth' },
     bus: { fire0: 30, fire1: 65, vs: 18, bright: 560, rough: 0.55, vol: 0.8, w: 'sawtooth' },
+    v8: { vs: 30 }, v8flat: { vs: 34 }, v10: { vs: 34 }, flat6: { vs: 32 },
   };
   function sndOf(tc) {      // per-vehicle sound identity, rolled once
     if (!tc._snd) {
       let type = tc.model;
+      const sk = tc.snd || (tc.g && tc.g.userData && (tc.g.userData.snd || tc.g.userData.sndKind));
       const ut = tc.g && tc.g.userData && tc.g.userData.type, UT = { splendor: 'bike', scooter: 'scooter', classic: 'bullet', classic2: 'jawa', sport: 'ktm', cycle: 'cycle', mpv: 'innova', fortuner: 'fortuner' };
-      if (ut && UT[ut]) type = UT[ut];
+      if (sk) type = sk;
+      else if (ut && UT[ut]) type = UT[ut];
       else if (type === 'bike') { const r = Math.random(); type = r < 0.25 ? 'bullet' : r < 0.32 ? 'bullet500' : r < 0.55 ? 'scooter' : r < 0.64 ? 'ktm' : r < 0.68 ? 'jawa' : 'bike'; }
       tc._snd = { type, pitch: rnd(0.92, 1.08), lastV: 0, stopT: 0 };
     }
@@ -245,6 +248,7 @@
     const P = typeof Player !== 'undefined' ? Player : null; if (!P) return 'crysta';
     if (P.mode === 'crysta') return 'crysta';
     const a = P.active; if (!a) return 'crysta';
+    const sk = a.snd || (a.g && a.g.userData && (a.g.userData.snd || a.g.userData.sndKind)); if (sk) return sk;
     if (a.model === 'bike') return (a._snd && a._snd.type) || 'bike';
     return a.model || 'hatch';
   }
@@ -297,6 +301,71 @@
   window.triggerHorn = playerHorn;
   try { triggerHorn = playerHorn; } catch (e) {}
 
-  window.SFX = { horn, impact, bikeFall, door, footstep, bark, moo, airBrake, skid: skidSet, playerHorn, voices };
+  // ------------------------------------------------------------------ ambient traffic horns: ONLY from a real, visible
+  // traffic vehicle within maxD of the listener, spatialised at that vehicle. Returns the vehicle or null (no horn).
+  function hornCandidates(cx, cz, maxD) {
+    const T = (window.GAME && GAME.traffic) || [], out = [];
+    for (const tc of T) {
+      const g = tc && tc.g; if (!g || !g.visible || g.parent == null) continue;
+      if (/cart|cycle/i.test(tc.model || '') || (tc.g.userData && tc.g.userData.type === 'cycle')) continue;
+      if (Math.hypot(g.position.x - cx, g.position.z - cz) < (maxD || 120)) out.push(tc);
+    }
+    return out;
+  }
+  function ambientHorn(cx, cz, maxD) {
+    const near = hornCandidates(cx, cz, maxD); if (!near.length) return null;
+    const tc = near[Math.floor(Math.random() * near.length)];
+    horn(sndOf(tc).type, tc.g.position.x, tc.g.position.z, false);
+    return tc;
+  }
+
+  // ------------------------------------------------------------------ engine start / stop (called by player.js)
+  let muteUntil = 0;
+  const TWO = /bike|bullet|scooter|ktm|jawa|splendor|sport/;
+  const DIESEL = /crysta|innova|fortuner|bolero|scorpio|suv|tractor|lorry|bus|truck|mpv/;
+  function kindOf(k) { return k || playerKind(); }
+  function engineStart(k) {
+    k = kindOf(k);
+    if (/cycle|cart/.test(k)) return;
+    const two = TWO.test(k), dsl = DIESEL.test(k);
+    // starter (cars) ~0.5-0.9 s of cranking, self-start (bikes) ~0.35 s, Bullet / 500 sometimes kick-started
+    const kick = (k === 'bullet' || k === 'bullet500' || k === 'jawa') && Math.random() < 0.5;
+    const crank = two ? (kick ? 0.55 : 0.35) : dsl ? 0.75 + Math.random() * 0.3 : 0.5 + Math.random() * 0.25;
+    muteUntil = performance.now() + crank * 1000 + 60;
+    if (!ok()) return;
+    const out = dest(null, 0, 0.5), t0 = ctx.currentTime + 0.05;
+    if (kick) {
+      burst(out, t0, { type: 'bandpass', f: 900, q: 2, peak: 0.25, d: 0.08 });          // lever clack
+      for (let i = 0; i < 3; i++) tone(out, t0 + 0.1 + i * 0.12, { type: 'sawtooth', f: 60 - i * 6, peak: 0.25, d: 0.08, lp: 400 });
+    } else {
+      // starter motor whine (geared, rising slightly) + compression chug: the crank slows on each compression stroke
+      const o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter(), am = ctx.createOscillator(), amG = ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(two ? 260 : 150, t0); o.frequency.linearRampToValueAtTime(two ? 340 : 210, t0 + crank);
+      lp.type = 'lowpass'; lp.frequency.value = two ? 1600 : 1100;
+      am.type = 'square'; am.frequency.setValueAtTime(two ? 9 : dsl ? 5.5 : 7, t0); am.frequency.linearRampToValueAtTime(two ? 13 : dsl ? 8 : 10, t0 + crank);
+      amG.gain.value = 0.35; g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(two ? 0.12 : 0.18, t0 + 0.03);
+      g.gain.setValueAtTime(two ? 0.12 : 0.18, t0 + crank - 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t0 + crank + 0.08);
+      am.connect(amG); amG.connect(g.gain); o.connect(lp); lp.connect(g); g.connect(out);
+      o.start(t0); am.start(t0); o.stop(t0 + crank + 0.1); am.stop(t0 + crank + 0.1);
+      burst(out, t0, { type: 'highpass', f: 2500, peak: 0.12, d: 0.04 });                // solenoid click
+    }
+    // catch: a few hard first firings, then the engine voice fades in (EngineSound un-mutes at muteUntil)
+    const tc = t0 + crank;
+    for (let i = 0; i < 3; i++) tone(out, tc + i * (dsl ? 0.07 : 0.05), { type: 'square', f: dsl ? 55 : two ? 90 : 75, f2: dsl ? 40 : 60, peak: 0.3 - i * 0.07, d: 0.06, lp: dsl ? 500 : 900 });
+    if (dsl) burst(out, tc, { type: 'bandpass', f: 3000, q: 2, peak: 0.08, d: 0.4 });   // cold diesel clatter on catch
+  }
+  function engineOff(k) {
+    k = kindOf(k);
+    if (/cycle|cart/.test(k) || !ok()) { muteUntil = performance.now() + 400; return; }
+    muteUntil = performance.now() + 400;
+    const two = TWO.test(k), dsl = DIESEL.test(k), out = dest(null, 0, 0.5), t0 = ctx.currentTime;
+    // run-down: a few slowing firings; diesels shudder (big low thump + body rattle)
+    const n = dsl ? 5 : 3;
+    for (let i = 0; i < n; i++) tone(out, t0 + i * (0.06 + i * 0.03), { type: 'sawtooth', f: (dsl ? 45 : two ? 80 : 60) * (1 - i * 0.1), peak: 0.22 * (1 - i / n), d: 0.08, lp: 450 });
+    if (dsl) { tone(out, t0 + 0.35, { type: 'sine', f: 28, f2: 18, peak: 0.35, d: 0.35 }); burst(out, t0 + 0.38, { type: 'bandpass', f: 600, q: 1.5, peak: 0.12, d: 0.25 }); }
+    if (!two) burst(out, t0 + 0.6, { type: 'highpass', f: 4000, peak: 0.03, d: 0.15 });      // fan / relay tick
+  }
+
+  window.SFX = { ambientHorn, hornCandidates, engineStart, engineOff, engineMuted: () => performance.now() < muteUntil, get engineOn() { try { return Player.mode !== 'foot' && performance.now() >= muteUntil; } catch (e) { return true; } }, horn, impact, bikeFall, door, footstep, bark, moo, airBrake, skid: skidSet, playerHorn, voices };
   GameHooks.update.push((dt, game) => { try { update(dt, game); } catch (e) { console.warn('sfx', e); } });
 })();

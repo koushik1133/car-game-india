@@ -87,7 +87,7 @@ const CharacterCreator = (function () {
   function build() {
     const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
     root = document.createElement('div'); root.id = 'ccRoot';
-    root.innerHTML = `<div id="ccStage"><div id="ccTitle">Nellutla · Village look<b>Create your character</b></div>
+    root.innerHTML = `<div id="ccStage"><div id="ccTitle">Spark Gaming · Village look<b>Create your character</b></div>
       <div id="ccHint">Drag to turn · scroll to zoom</div><div id="ccZoom"><button data-z="0">Full body</button><button data-z="1">Face</button></div></div>
       <div id="ccPanel"><div id="ccTabs"></div><div id="ccBody"></div>
       <div id="ccFoot"><button id="ccRand">Randomize</button><button id="ccCancel">Cancel</button><button id="ccSave">Save</button></div></div>`;

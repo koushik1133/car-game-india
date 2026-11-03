@@ -18,10 +18,9 @@
   function detect() {
     const minSide = Math.min(screen.width, screen.height), mem = navigator.deviceMemory || 8, cores = navigator.hardwareConcurrency || 8;
     if (isTouch && minSide < 600) return 'low';                       // phones
-    if (mem <= 2 || cores <= 2) return 'low';
-    if (isTouch || mem <= 4 || cores <= 4) return 'medium';            // tablets, low-end laptops
-    if (/Mac/.test(navigator.platform || navigator.userAgent) && (devicePixelRatio || 1) >= 2) return 'medium';   // Retina laptops: keeps them cool
-    return 'high';
+    if (isTouch && (mem <= 2 || cores <= 2)) return 'low';
+    if (isTouch) return 'medium';                                      // tablets
+    return 'high';                                                     // every laptop / desktop: High by default (the player can still pick a tier)
   }
   let saved = null; try { saved = localStorage.getItem(KEY); } catch (e) {}
   const mode = TIERS[saved] ? saved : 'auto';                         // 'auto' or a fixed tier the player picked
@@ -67,7 +66,7 @@
       antialias: aaAtStart, antialiasWanted: T.antialias, why };
     Q.onChange.forEach(f => { try { f(name, why); } catch (e) {} });
   }
-  Q.attach = function (ctx) { Q.ctx = ctx; apply(tier, 'start'); startMonitor(); watchBattery(); };
+  Q.attach = function (ctx) { Q.ctx = ctx; apply(tier, 'start'); startMonitor(); watchBattery(); };   // battery: only tracked, never downgrades
   // laptops running on battery: in auto mode use Medium instead of High (and go back up when plugged in)
   function watchBattery() {
     if (!navigator.getBattery) return;
@@ -76,8 +75,7 @@
         Q.onBattery = !b.charging;
         if (Q.mode !== 'auto') return;
         const want = detect() === 'high' && Q.onBattery ? 'medium' : null;
-        if (want && tier === 'high') { apply('medium', 'battery'); notice('On battery: graphics set to Medium'); }
-        else if (!Q.onBattery && tier === 'medium' && Q.applied.why === 'battery') apply('high', 'plugged in');
+        void want;   // no auto-downgrade on battery (player wants High on laptops)
       };
       check(); b.addEventListener('chargingchange', check);
     }).catch(() => {});
@@ -109,10 +107,9 @@
         cool = Math.max(0, cool - 0.5);
         slowFor = avg > 33 ? slowFor + 0.5 : 0;
         const i = ORDER.indexOf(tier);
-        if (slowFor >= 3 && i > 0 && cool === 0 && Q.mode === 'auto') {   // a tier the player picked by hand is respected
+        if (isTouch && slowFor >= 3 && i > 0 && cool === 0 && Q.mode === 'auto') {   // phones/tablets only, silently; laptops stay on High
           slowFor = 0; cool = 6;
           apply(ORDER[i - 1], 'adaptive');
-          notice('Low frame rate: graphics set to ' + TIERS[tier].name);
         }
       }
     })(performance.now());

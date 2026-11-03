@@ -27,12 +27,17 @@ const EngineProfiles = (function () {
   // muff: silencer formant Hz; drive: shaper amount; bright: low-pass Hz at idle; rough: combustion noise;
   // clatter: diesel/mechanical tick; turbo; whine (CVT); jitter: cycle-to-cycle cents; pops: overrun burble.
   const P = {
-    innova:   { stroke: 4, ang: [0, .25, .5, .75], imb: [1, .93, 1.04, .96], idle: 780, red: 4200, pulseMs: 9, pipe: 3.4, fb: .45, muff: 110, drive: 2.5, bright: 700, rough: .35, clatter: .55, turbo: 1, vol: .55 },
-    fortuner: { stroke: 4, ang: [0, .25, .5, .75], imb: [1, .9, 1.05, .95], idle: 720, red: 3800, pulseMs: 11, pipe: 3.8, fb: .5, muff: 90, drive: 3, bright: 620, rough: .4, clatter: .5, turbo: 1.2, vol: .62 },
-    bolero:   { stroke: 4, ang: [0, 1 / 3, 2 / 3], imb: [1, .9, 1.06], idle: 750, red: 3800, pulseMs: 12, pipe: 3.2, fb: .45, muff: 95, drive: 3, bright: 600, rough: .5, clatter: .65, turbo: .5, vol: .58, jitter: 6 },   // 1.5 3-cyl mHawk75
-    scorpio:  { stroke: 4, ang: [0, .25, .5, .75], imb: [1, .92, 1.05, .97], idle: 760, red: 4000, pulseMs: 10, pipe: 3.5, fb: .5, muff: 100, drive: 3.2, bright: 680, rough: .4, clatter: .5, turbo: 1, vol: .6 },
+    innova:   { diesel: 1, stroke: 4, ang: [0, .25, .5, .75], imb: [1, .93, 1.04, .96], idle: 740, red: 4200, pulseMs: 9, pipe: 3.4, fb: .45, muff: 95, drive: 2.8, bright: 640, rough: .4, clatter: .75, turbo: 1.3, vol: .55 },
+    fortuner: { diesel: 1, stroke: 4, ang: [0, .25, .5, .75], imb: [1, .9, 1.05, .95], idle: 690, red: 3800, pulseMs: 12, pipe: 3.8, fb: .5, muff: 80, drive: 3.2, bright: 580, rough: .45, clatter: .7, turbo: 1.5, vol: .62 },
+    bolero:   { diesel: 1, stroke: 4, ang: [0, 1 / 3, 2 / 3], imb: [1, .9, 1.06], idle: 720, red: 3800, pulseMs: 13, pipe: 3.2, fb: .45, muff: 85, drive: 3.2, bright: 560, rough: .55, clatter: .9, turbo: .8, vol: .58, jitter: 6 },   // 1.5 3-cyl mHawk75
+    scorpio:  { diesel: 1, stroke: 4, ang: [0, .25, .5, .75], imb: [1, .92, 1.05, .97], idle: 730, red: 4000, pulseMs: 11, pipe: 3.5, fb: .5, muff: 88, drive: 3.3, bright: 620, rough: .45, clatter: .75, turbo: 1.3, vol: .6 },
     swift:    { stroke: 4, ang: [0, .25, .5, .75], imb: [1, .98, 1.01, .99], idle: 850, red: 6200, pulseMs: 5, pipe: 3.0, fb: .4, muff: 140, drive: 1.5, bright: 1100, rough: .15, clatter: .08, turbo: 0, vol: .45 },
     tractor:  { stroke: 4, ang: [0, 1 / 3, 2 / 3], imb: [1, .82, 1.1], idle: 650, red: 2200, pulseMs: 22, pipe: 1.1, fb: .35, muff: 70, drive: 4, bright: 420, rough: .7, clatter: .8, turbo: 0, vol: .7, jitter: 12 },   // vertical exhaust, short stack
+    // sports engines (pops scaled down via popVol so the crackle stays tasteful)
+    v8:       { stroke: 4, ang: [0, .115, .25, .385, .5, .61, .75, .87], imb: [1, .82, 1.08, .86, 1.04, .8, 1.1, .84], idle: 700, red: 6800, pulseMs: 6, pipe: 3.0, fb: .55, muff: 85, drive: 3.5, bright: 650, rough: .3, clatter: .1, turbo: 0, vol: .7, jitter: 8, pops: .8, popVol: .45 },   // cross-plane: uneven per-bank pulses -> lumpy burble
+    v8flat:   { stroke: 4, ang: [0, .125, .25, .375, .5, .625, .75, .875], imb: [1, .97, 1.02, .98, 1, .96, 1.03, .99], idle: 1000, red: 9000, pulseMs: 3, pipe: 2.4, fb: .45, muff: 240, drive: 4, bright: 1600, rough: .2, clatter: .08, turbo: 0, vol: .62, pops: .7, popVol: .4 },   // flat-plane: even, screaming
+    v10:      { stroke: 4, ang: [0, .1, .2, .3, .4, .5, .6, .7, .8, .9], imb: [1, .95, 1.03, .97, 1.02, .96, 1.04, .98, 1.01, .95], idle: 950, red: 8700, pulseMs: 3, pipe: 2.6, fb: .48, muff: 210, drive: 4.2, bright: 1500, rough: .22, clatter: .08, turbo: 0, vol: .65, pops: .9, popVol: .45 },
+    flat6:    { stroke: 4, ang: [0, 1 / 6, 2 / 6, 3 / 6, 4 / 6, 5 / 6], imb: [1, .93, 1.04, .95, 1.03, .92], idle: 900, red: 9000, pulseMs: 4, pipe: 2.2, fb: .5, muff: 180, drive: 3.6, bright: 1300, rough: .25, clatter: .15, turbo: 0, vol: .6, pops: .7, popVol: .4 },   // boxer: metallic howl
     lorry:    { stroke: 4, ang: [0, 1 / 6, 2 / 6, 3 / 6, 4 / 6, 5 / 6], imb: [1, .95, 1.03, .97, 1.02, .94], idle: 600, red: 2600, pulseMs: 14, pipe: 4.5, fb: .5, muff: 75, drive: 3.5, bright: 520, rough: .55, clatter: .6, turbo: .9, vol: .75 },
     bus:      { stroke: 4, ang: [0, 1 / 6, 2 / 6, 3 / 6, 4 / 6, 5 / 6], imb: [1, .96, 1.02, .97, 1.03, .95], idle: 620, red: 2600, pulseMs: 13, pipe: 5.5, fb: .5, muff: 80, drive: 3, bright: 560, rough: .5, clatter: .5, turbo: .8, vol: .72 },
     auto:     { stroke: 4, ang: [0], imb: [1], idle: 1150, red: 5200, pulseMs: 10, pipe: 0.9, fb: .35, muff: 160, drive: 4, bright: 1100, rough: .7, clatter: .55, turbo: 0, vol: .5, jitter: 10 },   // RE-style single, rattly
@@ -47,7 +52,7 @@ const EngineProfiles = (function () {
   const ALIAS = { crysta: 'innova', mpv: 'innova', innova: 'innova', fortuner: 'fortuner', suv: 'bolero', bolero: 'bolero', scorpio: 'scorpio',
     hatch: 'swift', swift: 'swift', car: 'swift', tractor: 'tractor', lorry: 'lorry', truck: 'lorry', bus: 'bus', auto: 'auto',
     bike: 'splendor', splendor: 'splendor', bullet: 'bullet', classic: 'bullet', classic2: 'bullet500', bullet500: 'bullet500',
-    scooter: 'scooter', ktm: 'ktm', sport: 'ktm', sportbike: 'sportbike', jawa: 'jawa', cycle: null, bullockCart: null, cart: null, none: null };
+    scooter: 'scooter', ktm: 'ktm', sport: 'ktm', sportbike: 'sportbike', jawa: 'jawa', v8: 'v8', muscle: 'v8', v8flat: 'v8flat', ferrari: 'v8flat', v10: 'v10', lambo: 'v10', flat6: 'flat6', porsche: 'flat6', cycle: null, bullockCart: null, cart: null, none: null };
   function resolve(k) {
     if (k in ALIAS) return ALIAS[k];
     if (k in P) return k;
@@ -151,7 +156,8 @@ function EngineSound(ctx) {
     nBP.frequency.value = prof.muff * 3;
     smoothedRpm = prof.idle;
   }
-  function pop(strength) {   // overrun burble / lift-off crackle out of the exhaust
+  function pop(strength) {
+    strength *= (prof && prof.popVol) || 1;   // overrun burble / lift-off crackle out of the exhaust
     const t0 = ctx.currentTime, n = 1 + (Math.random() * 3 * strength | 0);
     for (let i = 0; i < n; i++) {
       const t = t0 + i * (0.03 + Math.random() * 0.08), s = ctx.createBufferSource(); s.buffer = nb;
@@ -159,6 +165,13 @@ function EngineSound(ctx) {
       g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35 * strength, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
       s.connect(f); f.connect(g); g.connect(out); s.start(t, Math.random()); s.stop(t + 0.07);
     }
+  }
+  function blowoff(s) {   // diesel wastegate / turbo "chuff" on lift (soft: Indian-market diesels have no dump valve)
+    const t = ctx.currentTime, n = ctx.createBufferSource(); n.buffer = nb;
+    const f = bq('bandpass', 2400, 1.2), g = ctx.createGain();
+    f.frequency.setValueAtTime(3000, t); f.frequency.exponentialRampToValueAtTime(900, t + 0.35);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05 * s, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+    n.connect(f); f.connect(g); g.connect(out); n.start(t, Math.random()); n.stop(t + 0.45);
   }
   const set = (p, v, tc) => p.setTargetAtTime(v, ctx.currentTime, tc || 0.04);
   const silence = () => [engOut, cOut, iOut, turboOut, whineOut, gL, gC, nAM].forEach(g => set(g.gain, 0, 0.1));
@@ -168,19 +181,24 @@ function EngineSound(ctx) {
     setKind(k) {
       // the player's bike keeps the sound identity sfx.js rolled for it in traffic (Bullet / scooter / KTM / commuter)
       try { if (k === 'bike' && typeof Player !== 'undefined' && Player.active && Player.active._snd) k = Player.active._snd.type; } catch (e) {}
+      try { const A = Player.active; if (A && Player.mode !== 'crysta') { const sk = A.snd || (A.g && A.g.userData && (A.g.userData.snd || A.g.userData.sndKind)); if (sk) k = sk; } } catch (e) {}
       try { if (Player.active && Player.active.p && Player.active.p.pedal) k = 'cycle'; } catch (e) {}   // pedal cycle: no engine
       const name = EngineProfiles.resolve(k);
       if (name !== kind || (name && !prof)) applyProfile(name);
     },
     // rpm: crank rpm; throttle 0..1; speedKmh; surface: world surface name; shifting: true during a gear change
     update({ rpm, throttle, speedKmh, surface, shifting, on }) {
+      // engine voice only while the engine runs: off on foot, and muted while sfx.js plays a crank / shutdown
+      let engOn = on;
+      try { if (Player.mode === 'foot') engOn = on = false; } catch (e) {}
+      if (window.SFX && SFX.engineMuted && SFX.engineMuted()) engOn = false;
       const E = prof, sp = Math.abs(speedKmh || 0); throttle = Math.max(0, Math.min(1, throttle || 0));
       const rough = surface === 'dirt' || surface === 'field' || surface === 'river';
       set(roadOut.gain, on ? Math.min(0.18, sp / 600) * (rough ? 0.6 : 1) : 0, 0.1);
       roadF.frequency.value = 300 + sp * 6;
       set(gravelOut.gain, on && rough ? Math.min(0.22, sp / 300) : 0, 0.1);
       gravelLFO.frequency.value = 12 + sp * 0.6;
-      if (!E || !on) { set(out.gain, on ? 1 : 0, 0.15); silence(); return; }
+      if (!E || !engOn) { set(out.gain, on ? 1 : 0, 0.15); silence(); return; }
       set(out.gain, 1, 0.15);
       if (shifting && !wasShifting) shiftDip = 1;
       wasShifting = shifting; shiftDip *= 0.9;
@@ -202,17 +220,19 @@ function EngineSound(ctx) {
       set(engOut.gain, E.vol * 0.55 * (0.45 + load * 0.55) * (1 - shiftDip * 0.5), 0.04);
       nBP.frequency.value = E.muff * 3 + rr * 900;
       set(nAM.gain, E.rough * 0.25 * (0.3 + load), 0.05); set(nDepth.gain, E.rough * 0.25 * (0.3 + load), 0.05);
-      set(cAM.gain, 0.15, 0.1); set(cDepth.gain, 0.6, 0.1);
-      set(cOut.gain, E.vol * E.clatter * 0.12 * (1 - rr * 0.4) * (0.6 + load * 0.4), 0.06);
+      set(cAM.gain, 0.15, 0.1); set(cDepth.gain, E.diesel ? 0.9 : 0.6, 0.1);
+      cHP.frequency.value = E.diesel ? 3200 - rr * 900 : 2600; cHP.Q.value = E.diesel ? 2.2 : 1.4;
+      set(cOut.gain, E.vol * E.clatter * (E.diesel ? 0.2 : 0.12) * (1 - rr * (E.diesel ? 0.6 : 0.4)) * (0.6 + load * 0.4), 0.06);
       iBP.frequency.value = 400 + rr * 2000 + fire * 2;
       set(iOut.gain, E.vol * throttle * (0.03 + rr * 0.12), 0.06);
       spool += ((E.turbo ? rr * throttle : 0) - spool) * (throttle > spool ? 0.02 : 0.06);
       set(turbo.frequency, 1800 + spool * 7000, 0.1);
-      set(turboOut.gain, (E.turbo || 0) * spool * 0.035, 0.1);
+      set(turboOut.gain, (E.turbo || 0) * spool * (E.diesel ? 0.05 : 0.035), 0.1);
+      if (E.diesel && lastThrottle > 0.5 && throttle < 0.1 && spool > 0.35 && crackleT <= 0) { blowoff(spool); crackleT = 0.8; }
       set(whine.frequency, 250 + sp * 20, 0.1); set(whineOut.gain, (E.whine || 0) * Math.min(0.05, sp / 900) * (0.4 + throttle), 0.1);
-      // overrun: pops on a sharp lift at high rpm, light burble while coasting down from revs
+      // overrun: pops (diesels never pop) on a sharp lift at high rpm, light burble while coasting down from revs
       crackleT -= 1 / 60;
-      if (crackleT <= 0 && throttle < 0.15) {
+      if (crackleT <= 0 && throttle < 0.15 && !E.diesel) {
         if (lastThrottle > 0.6 && rr > 0.5) { pop(0.8 + (E.pops || 0) * 0.4); crackleT = 0.6; }
         else if (E.pops && rr > 0.35 && Math.random() < 0.06 * E.pops) { pop(0.4 * E.pops); crackleT = 0.15; }
       }

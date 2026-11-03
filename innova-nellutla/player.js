@@ -20,15 +20,22 @@ const Player = (function () {
     cycle:       { name: 'BICYCLE',       top: 25,  accel: 1.6, brake: 6,   rev: 1.2, turn: 3.0, steerRate: 8,  turnFade: 8,  offroad: 0.5,  hw: 0.32, gears: 1, lean: true, pedal: true },
     mpv:         { name: 'MPV',           top: 165, accel: 4.0, brake: 9,   rev: 4,   turn: 2.0, steerRate: 5.5, turnFade: 18, offroad: 0.3, hw: 0.92, gears: 6 },
     // Fortuner-style 4x4: 2.8 L diesel (500 Nm), ~2.2 t, top ~180, low-range grip off the tarmac; sounds as 'suv' (diesel)
-    fortuner:    { name: 'FORTUNER 4X4',  top: 180, accel: 4.6, brake: 8.5, rev: 4.5, turn: 1.85, steerRate: 5,  turnFade: 19, offroad: 0.8, hw: 0.95, gears: 6 },
+    fortuner:    { name: 'FORTUNER 4X4',  top: 180, accel: 5.0, brake: 8, rev: 4.5, turn: 1.85, steerRate: 5,  turnFade: 19, offroad: 0.8, hw: 0.95, gears: 6 },
     // Indian car range (traffic-models.js): light petrol hatches, diesel utilities, mini truck, faired 155 cc sport bike
-    swift:       { name: 'SWIFT',         top: 160, accel: 4.6, brake: 9,   rev: 4,   turn: 2.2, steerRate: 6.5, turnFade: 18, offroad: 0.1, hw: 0.85, gears: 5 },
+    swift:       { name: 'SWIFT',         top: 155, accel: 4.4, brake: 9,   rev: 4,   turn: 2.2, steerRate: 6.5, turnFade: 18, offroad: 0.1, hw: 0.85, gears: 5 },
     dzire:       { name: 'DZIRE',         top: 155, accel: 4.3, brake: 9,   rev: 4,   turn: 2.1, steerRate: 6,  turnFade: 18, offroad: 0.1,  hw: 0.87, gears: 5 },
-    alto:        { name: 'ALTO',          top: 140, accel: 3.9, brake: 8.5, rev: 4,   turn: 2.4, steerRate: 7,  turnFade: 16, offroad: 0.1,  hw: 0.75, gears: 5 },
-    bolero:      { name: 'BOLERO',        top: 140, accel: 3.4, brake: 8,   rev: 4,   turn: 1.8, steerRate: 4.5, turnFade: 17, offroad: 0.75, hw: 0.9, gears: 5 },
-    scorpio:     { name: 'SCORPIO',       top: 150, accel: 3.8, brake: 8.2, rev: 4,   turn: 1.8, steerRate: 4.8, turnFade: 18, offroad: 0.7, hw: 0.97, gears: 5 },
+    alto:        { name: 'ALTO',          top: 140, accel: 2.9, brake: 8, rev: 4,   turn: 2.4, steerRate: 7,  turnFade: 16, offroad: 0.1,  hw: 0.75, gears: 5 },
+    bolero:      { name: 'BOLERO',        top: 125, accel: 2.9, brake: 7.5,   rev: 4,   turn: 1.7, steerRate: 4.5, turnFade: 17, offroad: 0.75, hw: 0.9, gears: 5 },
+    scorpio:     { name: 'SCORPIO',       top: 150, accel: 4.1, brake: 8.2, rev: 4,   turn: 1.75, steerRate: 4.8, turnFade: 18, offroad: 0.7, hw: 0.97, gears: 5 },
     ace:         { name: 'MINI TRUCK',    top: 85,  accel: 2.4, brake: 7,   rev: 3,   turn: 2.0, steerRate: 5,  turnFade: 12, offroad: 0.4,  hw: 0.78, gears: 4 },
     faired:      { name: 'SPORT 155',     top: 155, accel: 8.8, brake: 11.5, rev: 2.5, turn: 2.7, steerRate: 8.5, turnFade: 19, offroad: 0.25, hw: 0.4, gears: 6, lean: true },
+    // real Crysta copy parked at the safe house (2.4 D, ~2 t, 0-100 ~13 s, ~170 km/h)
+    crysta:      { name: 'INNOVA CRYSTA', top: 170, accel: 4.3, brake: 8.5, rev: 4.5, turn: 1.9, steerRate: 5.5, turnFade: 18, offroad: 0.4, hw: 0.95, gears: 6 },
+    // sports cars (accel ~ 2 x the real 0-100 average, the scale the rest of this table uses): light, low and grippy
+    berlinetta:  { name: 'BERLINETTA V8', top: 320, accel: 19,  brake: 12,  rev: 4.5, turn: 2.6, steerRate: 7.5, turnFade: 30, offroad: 0.05, hw: 1.0, gears: 7 },   // 0-100 2.9 s, 1.4 t
+    muscle:      { name: 'MUSCLE V8',     top: 250, accel: 12.9, brake: 10.5, rev: 4.5, turn: 2.2, steerRate: 6.5, turnFade: 26, offroad: 0.1, hw: 0.97, gears: 6 },   // 0-100 4.3 s, 1.75 t
+    wedge:       { name: 'WEDGE V10',     top: 330, accel: 19,  brake: 12,  rev: 4.5, turn: 2.5, steerRate: 7.5, turnFade: 30, offroad: 0.05, hw: 0.99, gears: 7 },   // 0-100 2.9 s, 1.45 t
+    coupe911:    { name: 'FLAT-SIX COUPE', top: 300, accel: 15.9, brake: 12.5, rev: 4.5, turn: 2.7, steerRate: 8, turnFade: 30, offroad: 0.08, hw: 0.93, gears: 8 },  // 0-100 3.5 s, 1.5 t
     bullockCart: { name: 'BULLOCK CART',  top: 8,   accel: 0.8, brake: 3,   rev: 0.8, turn: 1.0, steerRate: 3,  turnFade: 4,  offroad: 0.9,  hw: 0.9,  gears: 1 },
   };
   const CRYSTA_HW = 0.95, CRYSTA_LEN = 4.7;
@@ -48,12 +55,16 @@ const Player = (function () {
     alto: { rollK: 0.009, pitchK: 0.006, maxSteer: 0.62, w: 10 }, ace: { rollK: 0.015, pitchK: 0.007, maxSteer: 0.6, w: 8 },
     bolero: { rollK: 0.017, pitchK: 0.007, maxSteer: 0.55, w: 7.5 }, scorpio: { rollK: 0.016, pitchK: 0.007, maxSteer: 0.55, w: 7.5 },   // soft ladder-frame utilities
     faired: { rollK: 0, pitchK: 0.004, maxSteer: 0.38, w: 12 },
+    crysta: { rollK: 0.01, pitchK: 0.005, maxSteer: 0.55, w: 9 },
+    berlinetta: { rollK: 0.003, pitchK: 0.003, maxSteer: 0.55, w: 14 }, muscle: { rollK: 0.006, pitchK: 0.004, maxSteer: 0.55, w: 11 },
+    wedge: { rollK: 0.003, pitchK: 0.003, maxSteer: 0.52, w: 14 }, coupe911: { rollK: 0.004, pitchK: 0.004, maxSteer: 0.58, w: 13 },
   };
   // specific model of a vehicle (userData.type from traffic-models.js), when we tune it
   const typeOf = v => { const t = (v.userData && v.userData.type) || (v.g && v.g.userData && v.g.userData.type) || v.type; return t && PARAMS[t] ? t : v.model; };
   const feelOf = v => FEEL[v._ty || v.model] || FEEL.hatch;
   // engine-audio.js voices for the player's two-wheeler (it reads Player.active._snd.type for model 'bike')
-  const SND = { splendor: 'bike', scooter: 'scooter', classic: 'bullet', classic2: 'jawa', sport: 'ktm', faired: 'sportbike' };
+  const SND = { splendor: 'bike', scooter: 'scooter', classic: 'bullet', classic2: 'jawa', sport: 'ktm', faired: 'sportbike',
+    berlinetta: 'v8flat', muscle: 'v8', wedge: 'v10', coupe911: 'flat6' };
 
   // where the driver sits in each TrafficModels vehicle (local x, seat height, local z, HumanModel.sit pose);
   // the same numbers traffic-models.js uses for its AI drivers
@@ -170,7 +181,48 @@ const Player = (function () {
       if (f.t > 7) { scene.remove(f.g); fleeing.splice(i, 1); }
     }
   }
-  function setTail(v, on) { v.tail.forEach(m => m.material.color.setHex(on ? 0xff1a1a : 0x661111)); }
+  // ---------------------------------------------------------------- lamps for whatever the player drives
+  // head/tail lamp meshes come from traffic-models.js (v.head / v.tail); otherwise found by material colour, and if
+  // a model has none, small lamp quads are added at its front / back from its bounding box. L (headlightsOn) and the
+  // brake drive them; one shared SpotLight rides on the front of the active vehicle.
+  let pSpot = null;
+  function lampsOf(v) {
+    if (v._lamps) return v._lamps;
+    let head = (v.head || []).filter(m => m && m.material), tail = (v.tail || []).filter(m => m && m.material);
+    if (!head.length || !tail.length) {
+      const fh = [], ft = [];
+      v.g.traverse(o => { if (!o.isMesh || !o.material || Array.isArray(o.material) || isHumanPart(o)) return;
+        const n = (o.material.name || o.name || '').toLowerCase(), c = o.material.color;
+        if (/head ?l(amp|ight)|headlamp/.test(n) || (c && c.getHex() === 0x777766)) fh.push(o);
+        else if (/tail ?l(amp|ight)|brake/.test(n) || (c && c.getHex() === 0x661111)) ft.push(o); });
+      if (!head.length) head = fh; if (!tail.length) tail = ft;
+    }
+    const bx = boxOf(v), mk = (front) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 0.08), new THREE.MeshBasicMaterial({ color: front ? 0x777766 : 0x661111, side: THREE.DoubleSide }));
+      m.position.set(0, Math.max(0.5, bx.max.y * 0.5), front ? bx.max.z + 0.01 : bx.min.z - 0.01); m.name = front ? 'headlamp-added' : 'taillamp-added';
+      v.g.add(m); return m; };
+    if (!head.length) head = [mk(true)]; if (!tail.length) tail = [mk(false)];
+    // the material is shared per vehicle kit, but clone if it is shared with other vehicles' lamps
+    const own = arr => arr.forEach(m => { if (!m.userData._ownMat) { m.material = m.material.clone(); m.userData._ownMat = true; if (m.lens) m.lens.visible = true; } });
+    own(head); own(tail);
+    return (v._lamps = { head, tail, front: bx.max.z, y: Math.max(0.5, bx.max.y * 0.45) });
+  }
+  function setTail(v, on) {
+    const L = lampsOf(v), lights = typeof headlightsOn !== 'undefined' && headlightsOn && v === active;
+    L.tail.forEach(m => m.material.color.setHex(on ? 0xff1a1a : lights ? 0xb01818 : 0x661111));
+    L.head.forEach(m => m.material.color.setHex(lights ? 0xfff6d8 : 0x777766));
+  }
+  function syncSpot(v) {
+    const on = !!v && typeof headlightsOn !== 'undefined' && headlightsOn;
+    if (!pSpot) {
+      if (!on) return;
+      pSpot = new THREE.SpotLight(0xfff2d0, 0, 45, 0.55, 0.5, 1.2); pSpot.castShadow = false;
+      pSpot.target = new THREE.Object3D();
+    }
+    if (on && pSpot.parent !== v.g) { const L = lampsOf(v); v.g.add(pSpot); v.g.add(pSpot.target); pSpot.position.set(0, L.y + 0.2, L.front); pSpot.target.position.set(0, 0, L.front + 14); }
+    pSpot.intensity = on ? 1.8 : 0;
+    if (!on && pSpot.parent) { pSpot.parent.remove(pSpot.target); pSpot.parent.remove(pSpot); }
+  }
 
   // ---------------------------------------------------------------- get in / out
   // a spot where the walker (radius WALK_R) can stand: no wall within reach, not in a building footprint, not
@@ -237,13 +289,15 @@ const Player = (function () {
       const c = { g: playerCarGroup, len: CRYSTA_LEN, hw: CRYSTA_HW, crysta: true };
       parked.push(c); lastLeft = c;
       exitTo(carRot, spot);
+      engineOff('crysta');
     } else {
       const v = active, spot = findExit(v.g.position.x, v.g.position.z, v.g.rotation.y, v.hw, v.len || 4, v);
       if (!spot) { showComboPopup('NO SPACE TO GET OUT'); return; }
-      setTail(v, false);
       v.g.rotation.z = 0;
       parked.push(v); active = null; lastLeft = v;
+      setTail(v, false); syncSpot(null);
       exitTo(v.g.rotation.y, spot);
+      engineOff(v);
     }
     setHud();
   }
@@ -278,7 +332,8 @@ const Player = (function () {
     const score = (d, cx, cz, extra) => {
       const dx = cx - carPos.x, dz = cz - carPos.z, n = Math.hypot(dx, dz) || 1;
       const facing = (dx * fx + dz * fz) / n;                 // 1 = straight ahead, -1 = behind
-      return Math.max(0, d) + (1 - facing) * 0.6 + extra;
+      // raw distance (not clamped at 0): side-by-side bikes all within reach still rank by which is nearest
+      return d + (1 - facing) * 0.3 + extra;
     };
     const consider = (v, list) => {
       if (!v || !v.g) return;
@@ -392,8 +447,49 @@ const Player = (function () {
       camSnap = true;
       if (v.onTaken) try { v.onTaken(v); } catch (e) {}
     }
-    showComboPopup(mode === 'crysta' ? 'INNOVA CRYSTA' : v.p.name);
+    enterCard(mode === 'crysta' ? null : v); engineStart(mode === 'crysta' ? 'crysta' : v);
     setHud();
+  }
+  // ---------------------------------------------------------------- engine on/off + "now driving" card
+  const kindOf = v => { if (!v) return 'foot'; if (v.crysta || v === 'crysta') return 'crysta'; const t = v._ty || typeOf(v) || v.model || 'car'; return SND[t] || t; };
+  function engineOff(v) { try { window.SFX && SFX.engineOff && SFX.engineOff(kindOf(v)); } catch (e) {} }
+  function engineStart(v) { try { window.SFX && SFX.engineStart && SFX.engineStart(kindOf(v)); } catch (e) {} }
+  const NICE = { fortuner: 'Fortuner 4x4', mpv: 'Crysta-style MPV', suv: 'SUV', hatch: 'Hatchback', swift: 'Swift', dzire: 'Dzire', alto: 'Alto 800',
+    bolero: 'Bolero', scorpio: 'Scorpio', ace: 'Tata Ace Mini Truck', tractor: 'Tractor', lorry: 'Lorry', bus: 'RTC Bus', auto: 'Auto Rickshaw',
+    bike: 'Motorbike', splendor: 'Splendor', scooter: 'Scooter', classic: 'Classic 350', classic2: 'Jawa Classic', sport: 'Sport / Adventure Bike',
+    faired: 'Faired Sport 155', cycle: 'Bicycle', bullockCart: 'Bullock Cart' };
+  const COLS = [[0x111111, 'Black'], [0xf2f2f2, 'White'], [0xb8bcc2, 'Silver'], [0x6b6f75, 'Grey'], [0xb01c1c, 'Red'], [0x7a1420, 'Maroon'], [0x1c4fb0, 'Blue'],
+    [0x13284f, 'Navy'], [0x1f7a3a, 'Green'], [0xf2c200, 'Yellow'], [0xe8761c, 'Orange'], [0x8a6a3c, 'Bronze'], [0xd8c8a0, 'Beige'], [0x4a2a6a, 'Purple']];
+  function colourName(v) {
+    const cnt = new Map();
+    v.g.traverse(o => { if (!o.isMesh || isHumanPart(o) || !o.material || Array.isArray(o.material) || !o.material.isMeshPhongMaterial) return;
+      const m = o.material; if (m.transparent || m.shininess !== 85) return; cnt.set(m, (cnt.get(m) || 0) + 1); });
+    let best = null, n = 0; cnt.forEach((k, m) => { if (k > n) { n = k; best = m; } });
+    if (!best) return '';
+    const c = best.color; let nm = '', d = 1e9;
+    for (const [h, name] of COLS) { const r = ((h >> 16) & 255) / 255 - c.r, g = ((h >> 8) & 255) / 255 - c.g, b = (h & 255) / 255 - c.b, dd = r * r + g * g + b * b; if (dd < d) { d = dd; nm = name; } }
+    return nm;
+  }
+  function vehicleTitle(v) {
+    if (!v || v.crysta || mode === 'crysta') return { name: 'Innova Crysta 2.4 V', sub: 'TS 08 HN 1111' };
+    const t = v._ty || typeOf(v), base = NICE[t] || (v.p && v.p.name ? v.p.name.charAt(0) + v.p.name.slice(1).toLowerCase() : 'Vehicle');
+    let col = ''; try { col = colourName(v); } catch (e) {}
+    return { name: (col ? col + ' ' : '') + base, sub: v.p ? Math.round(v.p.top) + ' km/h top · ' + (v.p.gears > 1 ? v.p.gears + '-speed' : 'single speed') : '' };
+  }
+  function enterCard(v) {
+    let el = document.getElementById('vehCard');
+    if (!el) {
+      const st = document.createElement('style');
+      st.textContent = '#vehCard{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 18%);transform:translate(-50%,-12px) scale(.96);z-index:40;pointer-events:none;opacity:0;transition:opacity .35s,transform .35s cubic-bezier(.2,.8,.2,1);text-align:center;padding:12px 30px 14px;border-radius:14px;background:linear-gradient(135deg,rgba(12,16,28,.88),rgba(30,20,8,.82));border:1px solid rgba(251,191,36,.45);box-shadow:0 10px 40px rgba(0,0,0,.45),inset 0 0 0 1px rgba(255,255,255,.05);font-family:system-ui,sans-serif;color:#fff;min-width:220px}'
+        + '#vehCard.on{opacity:1;transform:translate(-50%,0) scale(1)}#vehCard small{display:block;font:700 10px system-ui;letter-spacing:.32em;color:#fbbf24;text-transform:uppercase}'
+        + '#vehCard b{display:block;font:800 clamp(20px,3.4vw,30px)/1.15 system-ui;letter-spacing:.02em;margin-top:4px}#vehCard i{display:block;font:500 12px system-ui;font-style:normal;color:#cbd5e1;margin-top:3px}'
+        + '#vehCard:after{content:"";display:block;height:2px;margin:9px auto 0;width:60%;background:linear-gradient(90deg,transparent,#fbbf24,transparent)}';
+      document.head.appendChild(st);
+      el = document.createElement('div'); el.id = 'vehCard'; document.body.appendChild(el);
+    }
+    const t = vehicleTitle(v);
+    el.innerHTML = '<small>Now driving</small><b></b><i></i>'; el.children[1].textContent = t.name; el.children[2].textContent = t.sub;
+    el.classList.add('on'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('on'), 2000);
   }
   function toggle() { if (mode === 'foot') getIn(); else getOut(); hintT = 1; if (hintEl && mode !== 'foot') hintEl.style.display = 'none'; }
 
@@ -506,7 +602,7 @@ const Player = (function () {
     v.g.rotation.z += (lean - v.g.rotation.z) * Math.min(1, dt * 6);
     suspend(v, dt, !!P.lean);
     spinWheels(v, dt);
-    setTail(v, braking || v.vF < -0.1);
+    setTail(v, braking || v.vF < -0.1); syncSpot(v);
     isReversing = v.vF < -0.1;
     currentGear = 1 + Math.floor(Math.min(0.99, Math.abs(v.vF) / (P.top / 3.6)) * P.gears);
     engineRPM = 800 + (Math.abs(v.vF) / (P.top / 3.6) * P.gears % 1) * 2600 + (inputState.gas ? 400 : 0);
@@ -1108,7 +1204,9 @@ const Player = (function () {
   // the direction WASD moves toward (camera yaw, or the held yaw during Alt free-look)
   function moveYaw() { return R.altYaw !== null ? R.altYaw : (typeof R.ret === 'number' ? R.ret : R.yaw); }
   // which views use the rig: chase (0) and close chase (1) everywhere
-  const rigView = () => { const i = (typeof cameraIndex === 'number' ? cameraIndex : 0) % 5; return i === 0 || i === 1; };
+  // on foot every view but top-down orbits (shoulder, close, first-person look-around, low) so the drag always turns the camera 360
+  const rigView = () => { const i = (typeof cameraIndex === 'number' ? cameraIndex : 0) % 5; return i === 0 || i === 1 || (mode === 'foot' && i !== 4); };
+  const footIdx = () => (typeof cameraIndex === 'number' ? cameraIndex : 0) % 5;
 
   // the rig itself: called after physics with the final position
   function rig(dt, close) {
@@ -1118,6 +1216,9 @@ const Player = (function () {
       px = { x: carPos.x, z: carPos.z }; gy = ped.y; L = 0; h = 1.55;
       sprint = !!inputState.nos && Math.abs(ped.speed) > 3;
       dist = (close ? 1.9 : 2.55) + (sprint ? 0.35 : 0); side = close ? 0.45 : 0.55;
+      const fi = footIdx();
+      if (fi === 2) { dist = 0.05; side = 0; h = 1.6; }                       // first person: look around from the eyes
+      else if (fi === 3) { dist = 1.6; side = 0.4; h = 1.0; }                  // low shoulder
     } else {
       const g = mode === 'crysta' ? playerCarGroup : active.g;
       px = { x: g.position.x, z: g.position.z }; gy = g.position.y;
@@ -1158,6 +1259,11 @@ const Player = (function () {
         const tgt = carRot + slip * a, w = (7 + Math.min(3, spd * 0.12)) * ease;
         [R.yaw, R.yv] = spring(R.yaw, R.yv, R.yaw + wrap(tgt - R.yaw), w, dt);
         [R.pitch, R.pv] = spring(R.pitch, R.pv, 0.2, w * 0.6, dt);
+      } else if (R.idle > 1.6) {
+        // stopped / reversing: the look-around still springs back behind the vehicle (after a short pause)
+        const w = 5 * Math.min(1, (R.idle - 1.6) / 0.6);
+        [R.yaw, R.yv] = spring(R.yaw, R.yv, R.yaw + wrap(carRot - R.yaw), w, dt);
+        [R.pitch, R.pv] = spring(R.pitch, R.pv, 0.2, w * 0.6, dt);
       } else { R.yv *= Math.exp(-dt * 8); R.pv *= Math.exp(-dt * 8); }
     }
     R.yaw = wrap(R.yaw);
@@ -1180,7 +1286,7 @@ const Player = (function () {
     const kmh = Math.abs(carSpeed), fovT = 65 + (mode === 'foot' ? (sprint ? 5 : 0) : Math.min(12, kmh * 0.07)) + (typeof isNosActive !== 'undefined' && isNosActive && mode === 'crysta' ? 6 : 0);
     R.fov += (fovT - R.fov) * (1 - Math.exp(-dt * 3));
     if (Math.abs(camera.fov - R.fov) > 0.01) { camera.fov = R.fov; camera.updateProjectionMatrix(); }
-    if (mode !== 'crysta') body.visible = true;
+    if (mode !== 'crysta') body.visible = !(mode === 'foot' && footIdx() === 2);
     if (typeof updateCamera !== 'undefined') updateCamera.yaw = yaw;
     camSnap = false;
   }
@@ -1232,7 +1338,7 @@ const Player = (function () {
   function resetToCrysta() {
     if (mode === 'crysta') return;
     if (mode === 'passenger') { if (passengerExit) passengerExit(active); unseatBody(); active = null; }
-    if (mode === 'vehicle') { active.g.rotation.z = 0; setTail(active, false); unseatBody(); parked.push(active); active = null; }
+    if (mode === 'vehicle') { const v0 = active; active.g.rotation.z = 0; unseatBody(); parked.push(active); active = null; setTail(v0, false); syncSpot(null); engineOff(v0); }
     const i = parked.findIndex(v => v.crysta); if (i >= 0) parked.splice(i, 1);
     body.visible = false; mode = 'crysta'; lastLeft = null; setHud();
   }

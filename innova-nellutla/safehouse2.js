@@ -454,6 +454,33 @@
       live[s.id] = obj; P.addParked(obj);
     }
   }
+  // ---------------------------------------------------------------- bike row in the front courtyard
+  // The family's motorbikes stand side by side in front of the veranda (west of the porch path, clear of the car
+  // lane from the main gate to the car bay), all nose to the gate, each leaning a little on its side stand, like an
+  // Indian home courtyard. Built with TrafficModels, registered with Player.addParked so F mounts exactly that bike.
+  // (The scooter and the bicycle stay outside the gate: parked.js.)
+  const BIKE_ROW = ['classic', 'classic2', 'sport', 'faired', 'bike'];
+  const rowBikes = [];
+  function spawnBikeRow() {
+    const P = PL(), TMs = TM(); if (!P || !TMs || !P.addParked || rowBikes.length) return;
+    const rot = TH + Math.PI;                                  // facing -b: nose toward the front wall / gate
+    BIKE_ROW.forEach((kind, i) => {
+      if (!TMs[kind]) return;
+      const v = TMs[kind](); v.g.name = 'safehouse-bike-' + kind;
+      const p = W(-13.55 + i * 0.85, -0.75);
+      v.g.position.set(p.x, 0, p.z); v.g.rotation.order = 'YXZ'; v.g.rotation.set(0, rot, 0.13);   // leaning left on the side stand
+      // side stand: a short black rod from under the footrest to the floor on the left
+      const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.36, 5), new THREE.MeshLambertMaterial({ color: 0x151515 }));
+      stand.position.set(0.17, 0.16, -0.05); stand.rotation.z = -0.55; v.g.add(stand);
+      v.g.traverse(o => { if (o.userData && o.userData.human) o.visible = false; });
+      scene.add(v.g);
+      const obj = { ...v, model: 'bike', type: kind, r: null, len: 100, s: 0, dir: 1, speed: 0, cur: 0, len2: (v.len || 2.1) / 2, hw: 0.36,
+        wheelR: 0.33, wheels: v.wheels || [], tail: v.tail || [], head: v.head || [], parked: true, _yardBike: kind,
+        onTaken: (o) => { o.g.rotation.z = 0; if (stand.parent) stand.parent.remove(stand); } };
+      rowBikes.push(obj); P.addParked(obj);
+    });
+  }
+  window.SafeHouse2Bikes = () => rowBikes;
   function slotAt(x, z, maxD) { const l = L(x, z); let best = null; for (const s of SLOTS) { const d = Math.hypot(l.a - s.a, l.b - s.b); if (d < (maxD || 2.2) && (!best || d < best.d)) best = { s, d }; } return best && best.s; }
   function storeVehicle(s) {
     const P = PL(), v = P && P.active;
@@ -529,7 +556,7 @@
     if (world.addMapIcon) world.addMapIcon(c.x, c.z, '⌂', 'Safe House 2');
     MGw = W(MGc.a, MGc.b);
     window.SafeHouse2 = { W, L, slots: SLOTS, live, state: S, anim, want, manual, center: c, gate: W(MGc.a, MGc.b - 6), door: W(DOORc.a, DOORc.b) };
-    setTimeout(spawnStored, 0);
+    setTimeout(spawnStored, 0); setTimeout(() => { try { spawnBikeRow(); } catch (e) { console.error("safehouse2 bikes", e); } }, 0);
   });
 
   // ---------------------------------------------------------------- NPCs near the gates (traffic, carts, herds, walkers)

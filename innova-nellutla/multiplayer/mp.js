@@ -274,7 +274,7 @@ const MP = (function () {
       else if (m.t === 'ping_clear') removePing(m.owner);
       else if (m.t === 'horn') {
         const r = remotes[m.from];
-        if (r && Math.hypot(r.g.position.x - carPos.x, r.g.position.z - carPos.z) < 120) { try { triggerHorn(); } catch (e) {} }
+        if (r && Math.hypot(r.g.position.x - carPos.x, r.g.position.z - carPos.z) < 120) { try { SFX.horn(r.kind || 'hatch', r.g.position.x, r.g.position.z); } catch (e) {} }   // their horn, from their car
       }
     };
   }

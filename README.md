@@ -1,6 +1,6 @@
-# Nellutla — open-world village driving game (Telangana)
+# Spark Gaming — open-world village driving game (Telangana)
 
-A browser open-world game set in a real-data recreation of **Nellutla village** (Lingala Ghanpur mandal, Jangaon district, Telangana), built with three.js r128 and plain JavaScript (no build step).
+**Spark Gaming** is a browser open-world game set in a real-data recreation of a Telangana village (Lingala Ghanpur mandal, Jangaon district), built with three.js r128 and plain JavaScript (no build step).
 
 ## Run it
 ```bash
