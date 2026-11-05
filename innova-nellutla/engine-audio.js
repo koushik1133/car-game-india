@@ -35,9 +35,9 @@ const EngineProfiles = (function () {
     tractor:  { stroke: 4, ang: [0, 1 / 3, 2 / 3], imb: [1, .82, 1.1], idle: 650, red: 2200, pulseMs: 22, pipe: 1.1, fb: .35, muff: 70, drive: 4, bright: 420, rough: .7, clatter: .8, turbo: 0, vol: .7, jitter: 12 },   // vertical exhaust, short stack
     // sports engines (pops scaled down via popVol so the crackle stays tasteful)
     v8:       { stroke: 4, ang: [0, .115, .25, .385, .5, .61, .75, .87], imb: [1, .82, 1.08, .86, 1.04, .8, 1.1, .84], idle: 700, red: 6800, pulseMs: 6, pipe: 3.0, fb: .55, muff: 85, drive: 3.5, bright: 650, rough: .3, clatter: .1, turbo: 0, vol: .7, jitter: 8, pops: .8, popVol: .45 },   // cross-plane: uneven per-bank pulses -> lumpy burble
-    v8flat:   { stroke: 4, ang: [0, .125, .25, .375, .5, .625, .75, .875], imb: [1, .97, 1.02, .98, 1, .96, 1.03, .99], idle: 1000, red: 9000, pulseMs: 3, pipe: 2.4, fb: .45, muff: 240, drive: 4, bright: 1600, rough: .2, clatter: .08, turbo: 0, vol: .62, pops: .7, popVol: .4 },   // flat-plane: even, screaming
-    v10:      { stroke: 4, ang: [0, .1, .2, .3, .4, .5, .6, .7, .8, .9], imb: [1, .95, 1.03, .97, 1.02, .96, 1.04, .98, 1.01, .95], idle: 950, red: 8700, pulseMs: 3, pipe: 2.6, fb: .48, muff: 210, drive: 4.2, bright: 1500, rough: .22, clatter: .08, turbo: 0, vol: .65, pops: .9, popVol: .45 },
-    flat6:    { stroke: 4, ang: [0, 1 / 6, 2 / 6, 3 / 6, 4 / 6, 5 / 6], imb: [1, .93, 1.04, .95, 1.03, .92], idle: 900, red: 9000, pulseMs: 4, pipe: 2.2, fb: .5, muff: 180, drive: 3.6, bright: 1300, rough: .25, clatter: .15, turbo: 0, vol: .6, pops: .7, popVol: .4 },   // boxer: metallic howl
+    v8flat:   { scream: .5, stroke: 4, ang: [0, .125, .25, .375, .5, .625, .75, .875], imb: [1, .97, 1.02, .98, 1, .96, 1.03, .99], idle: 1000, red: 9000, pulseMs: 3, pipe: 2.4, fb: .45, muff: 240, drive: 4, bright: 1600, rough: .2, clatter: .08, turbo: 0, vol: .62, pops: .7, popVol: .4 },   // flat-plane: even, screaming
+    v10:      { scream: .45, stroke: 4, ang: [0, .1, .2, .3, .4, .5, .6, .7, .8, .9], imb: [1, .95, 1.03, .97, 1.02, .96, 1.04, .98, 1.01, .95], idle: 950, red: 8700, pulseMs: 3, pipe: 2.6, fb: .48, muff: 210, drive: 4.2, bright: 1500, rough: .22, clatter: .08, turbo: 0, vol: .65, pops: .9, popVol: .45 },
+    flat6:    { scream: .4, stroke: 4, ang: [0, 1 / 6, 2 / 6, 3 / 6, 4 / 6, 5 / 6], imb: [1, .93, 1.04, .95, 1.03, .92], idle: 900, red: 9000, pulseMs: 4, pipe: 2.2, fb: .5, muff: 180, drive: 3.6, bright: 1300, rough: .25, clatter: .15, turbo: 0, vol: .6, pops: .7, popVol: .4 },   // boxer: metallic howl
     lorry:    { stroke: 4, ang: [0, 1 / 6, 2 / 6, 3 / 6, 4 / 6, 5 / 6], imb: [1, .95, 1.03, .97, 1.02, .94], idle: 600, red: 2600, pulseMs: 14, pipe: 4.5, fb: .5, muff: 75, drive: 3.5, bright: 520, rough: .55, clatter: .6, turbo: .9, vol: .75 },
     bus:      { stroke: 4, ang: [0, 1 / 6, 2 / 6, 3 / 6, 4 / 6, 5 / 6], imb: [1, .96, 1.02, .97, 1.03, .95], idle: 620, red: 2600, pulseMs: 13, pipe: 5.5, fb: .5, muff: 80, drive: 3, bright: 560, rough: .5, clatter: .5, turbo: .8, vol: .72 },
     auto:     { stroke: 4, ang: [0], imb: [1], idle: 1150, red: 5200, pulseMs: 10, pipe: 0.9, fb: .35, muff: 160, drive: 4, bright: 1100, rough: .7, clatter: .55, turbo: 0, vol: .5, jitter: 10 },   // RE-style single, rattly
@@ -45,14 +45,21 @@ const EngineProfiles = (function () {
     bullet500:{ stroke: 4, ang: [0], imb: [1], idle: 560, red: 4800, pulseMs: 28, pipe: 1.6, fb: .58, muff: 75, drive: 4, bright: 380, rough: .5, clatter: .25, turbo: 0, vol: .7, jitter: 16, pops: .6 },
     splendor: { stroke: 4, ang: [0], imb: [1], idle: 1400, red: 8000, pulseMs: 6, pipe: 1.3, fb: .4, muff: 190, drive: 2, bright: 1300, rough: .35, clatter: .2, turbo: 0, vol: .42, jitter: 5 },   // 100cc putter
     scooter:  { stroke: 4, ang: [0], imb: [1], idle: 1700, red: 8000, pulseMs: 4, pipe: 0.8, fb: .3, muff: 260, drive: 1.2, bright: 1500, rough: .2, clatter: .1, turbo: 0, vol: .32, whine: 1, jitter: 3 },
-    ktm:      { stroke: 4, ang: [0], imb: [1], idle: 1500, red: 10500, pulseMs: 5, pipe: 1.1, fb: .5, muff: 200, drive: 5, bright: 2200, rough: .45, clatter: .25, turbo: 0, vol: .55, jitter: 6, pops: 1 },   // 390 single, raspy
-    sportbike:{ stroke: 4, ang: [0], imb: [1], idle: 1600, red: 11500, pulseMs: 4, pipe: 1.0, fb: .5, muff: 230, drive: 5, bright: 2600, rough: .4, clatter: .2, turbo: 0, vol: .55, jitter: 5, pops: 1 },
+    ktm:      { scream: .2, stroke: 4, ang: [0], imb: [1], idle: 1500, red: 10500, pulseMs: 5, pipe: 1.1, fb: .5, muff: 200, drive: 5, bright: 2200, rough: .45, clatter: .25, turbo: 0, vol: .55, jitter: 6, pops: 1 },   // 390 single, raspy
+    sportbike:{ scream: .35, stroke: 4, ang: [0], imb: [1], idle: 1600, red: 11500, pulseMs: 4, pipe: 1.0, fb: .5, muff: 230, drive: 5, bright: 2600, rough: .4, clatter: .2, turbo: 0, vol: .55, jitter: 5, pops: 1 },
+    // 1000 cc inline-four, 4-2-1 header: even 180 deg firing, very short pulses, a 14000 rpm howl (scream layer)
+    i4sport:  { stroke: 4, ang: [0, .25, .5, .75], imb: [1, .98, 1.01, .97], idle: 1250, red: 14000, pulseMs: 3.2, pipe: 1.0, fb: .46, muff: 340, drive: 4.2, bright: 3000, rough: .22, clatter: .22, turbo: 0, vol: 1.1, jitter: 3, pops: 1.2, popVol: .5, scream: 1 },
+    // 1250 cc air-cooled flat twin (GS): even 360 deg firing, big slow pulses, flat chuffing idle, tappet clatter
+    boxer:    { stroke: 4, ang: [0, .5], imb: [1, .9], idle: 1050, red: 9000, pulseMs: 8, pipe: 1.7, fb: .5, muff: 105, drive: 3.6, bright: 820, rough: .5, clatter: .5, turbo: 0, vol: .66, jitter: 9, pops: .6, popVol: .4 },
     jawa:     { stroke: 2, ang: [0, .5], imb: [1, .9], idle: 1300, red: 6500, pulseMs: 4, pipe: 1.3, fb: .55, muff: 170, drive: 3, bright: 1500, rough: .5, clatter: .15, turbo: 0, vol: .5, jitter: 6, pops: .7 },   // 2-stroke parallel twin, twin pipes (2nd pipe: +12%)
   };
-  const ALIAS = { crysta: 'innova', mpv: 'innova', innova: 'innova', fortuner: 'fortuner', suv: 'bolero', bolero: 'bolero', scorpio: 'scorpio',
+  P.safari = Object.assign({}, P.scorpio, { idle: 750, pulseMs: 12, muff: 84, rough: .5, pipe: 3.7 });                       // 2.2 DICOR
+  P.sumo = Object.assign({}, P.bolero, { ang: [0, .25, .5, .75], imb: [1, .88, 1.08, .93], idle: 700, red: 3600, pulseMs: 15, bright: 500, rough: .65, clatter: 1, turbo: 0 });   // 3.0 CR4, truck-derived
+  P.scorpioN = Object.assign({}, P.scorpio, { idle: 760, red: 4400, pulseMs: 9, bright: 700, rough: .3, clatter: .45 });     // 2.2 mHawk, refined
+  const ALIAS = { defender: 'fortuner', thar: 'scorpioN', hector: 'innova', safari: 'safari', sumo: 'sumo', scorpioN: 'scorpioN', crysta: 'innova', mpv: 'innova', innova: 'innova', fortuner: 'fortuner', suv: 'bolero', bolero: 'bolero', scorpio: 'scorpio',
     hatch: 'swift', swift: 'swift', car: 'swift', tractor: 'tractor', lorry: 'lorry', truck: 'lorry', bus: 'bus', auto: 'auto',
     bike: 'splendor', splendor: 'splendor', bullet: 'bullet', classic: 'bullet', classic2: 'bullet500', bullet500: 'bullet500',
-    scooter: 'scooter', ktm: 'ktm', sport: 'ktm', sportbike: 'sportbike', jawa: 'jawa', v8: 'v8', muscle: 'v8', v8flat: 'v8flat', ferrari: 'v8flat', v10: 'v10', lambo: 'v10', flat6: 'flat6', porsche: 'flat6', cycle: null, bullockCart: null, cart: null, none: null };
+    scooter: 'scooter', ktm: 'ktm', sport: 'ktm', sportbike: 'sportbike', i4sport: 'i4sport', boxer: 'boxer', jawa: 'jawa', v8: 'v8', muscle: 'v8', v8flat: 'v8flat', ferrari: 'v8flat', v10: 'v10', lambo: 'v10', flat6: 'flat6', porsche: 'flat6', cycle: null, bullockCart: null, cart: null, none: null };
   function resolve(k) {
     if (k in ALIAS) return ALIAS[k];
     if (k in P) return k;
@@ -103,7 +110,12 @@ const EngineProfiles = (function () {
 window.EngineProfiles = EngineProfiles;
 
 function EngineSound(ctx) {
-  const out = ctx.createGain(); out.gain.value = 0; out.connect(ctx.destination);
+  const out = ctx.createGain(); out.gain.value = 0;
+  // engine bus: every player engine / road layer goes through this one trim, so the mix stays balanced (Settings slider)
+  const bus = ctx.createGain(), cabin = ctx.createBiquadFilter(); cabin.type = 'lowpass'; cabin.frequency.value = 18000; cabin.Q.value = 0.5;
+  out.connect(cabin); cabin.connect(bus); bus.connect(ctx.destination);       // cabin: the closed-car cockpit view muffles the top end
+  const levels = () => { bus.gain.setTargetAtTime(window.GameAudio ? GameAudio.engineGain : 0.5, ctx.currentTime, 0.03); };
+  bus.gain.value = window.GameAudio ? GameAudio.engineGain : 0.5; if (window.GameAudio) GameAudio.listeners.push(levels);
   const ENGINES = EngineProfiles.P;
   try { EngineProfiles.prewarm(ctx); } catch (e) {}
   // --- shared noise
@@ -135,6 +147,8 @@ function EngineSound(ctx) {
   // --- turbo whistle + CVT whine (one oscillator each)
   const turbo = ctx.createOscillator(), turboOut = gain(0); turbo.type = 'sine'; turbo.connect(turboOut); turboOut.connect(out);
   const whine = ctx.createOscillator(), whineOut = gain(0); whine.type = 'triangle'; whine.connect(whineOut); whineOut.connect(out);
+  // --- high-rev scream: the pulse train through a formant that follows the firing rate (multi-cylinder headers howl)
+  const sBP = bq('bandpass', 2000, 2.4), sOut = gain(0); shaper.connect(sBP); sBP.connect(sOut); sOut.connect(out);
   // --- tyre / road noise
   const roadSrc = noise(), roadF = bq('bandpass', 300, 0.7), roadOut = gain(0); roadSrc.connect(roadF); roadF.connect(roadOut); roadOut.connect(out);
   const gravelSrc = noise(), gravelHP = bq('highpass', 1800), gravelAM = gain(0), gravelOut = gain(0);
@@ -142,7 +156,7 @@ function EngineSound(ctx) {
   gravelSrc.connect(gravelHP); gravelHP.connect(gravelAM); gravelAM.connect(gravelOut); gravelOut.connect(out);
   [oscL, oscC, turbo, whine, gravelLFO].forEach(o => o.start());
 
-  let kind = null, prof = null, lastThrottle = 0, crackleT = 0, shiftDip = 0, smoothedRpm = 800, spool = 0, wasShifting = false, jitT = 0;
+  let kind = null, prof = null, lastThrottle = 0, crackleT = 0, shiftDip = 0, smoothedRpm = 800, spool = 0, wasShifting = false, jitT = 0, limT = 0;
   function applyProfile(name) {
     prof = name ? ENGINES[name] : null; kind = name;
     if (!prof) return;
@@ -174,7 +188,7 @@ function EngineSound(ctx) {
     n.connect(f); f.connect(g); g.connect(out); n.start(t, Math.random()); n.stop(t + 0.45);
   }
   const set = (p, v, tc) => p.setTargetAtTime(v, ctx.currentTime, tc || 0.04);
-  const silence = () => [engOut, cOut, iOut, turboOut, whineOut, gL, gC, nAM].forEach(g => set(g.gain, 0, 0.1));
+  const silence = () => [engOut, cOut, iOut, turboOut, whineOut, gL, gC, nAM, sOut].forEach(g => set(g.gain, 0, 0.1));
 
   return {
     profiles: EngineProfiles,
@@ -187,7 +201,8 @@ function EngineSound(ctx) {
       if (name !== kind || (name && !prof)) applyProfile(name);
     },
     // rpm: crank rpm; throttle 0..1; speedKmh; surface: world surface name; shifting: true during a gear change
-    update({ rpm, throttle, speedKmh, surface, shifting, on }) {
+    // range: real rev position 0 idle..1 redline (window.Drive), placed on this voice's own idle..red span
+    update({ rpm, range, throttle, speedKmh, surface, shifting, on }) {
       // engine voice only while the engine runs: off on foot, and muted while sfx.js plays a crank / shutdown
       let engOn = on;
       try { if (Player.mode === 'foot') engOn = on = false; } catch (e) {}
@@ -203,7 +218,7 @@ function EngineSound(ctx) {
       if (shifting && !wasShifting) shiftDip = 1;
       wasShifting = shifting; shiftDip *= 0.9;
       // map the caller's rpm range onto this engine (callers fake 800..3500/7500 for non-Crysta vehicles)
-      let r = rpm || E.idle; if (r > E.red) r = E.red; if (r < E.idle) r = E.idle;
+      let r = range !== undefined ? E.idle + range * (E.red - E.idle) : rpm || E.idle; if (r > E.red) r = E.red; if (r < E.idle) r = E.idle;
       r *= 1 - shiftDip * 0.08;
       smoothedRpm += (r - smoothedRpm) * 0.3;
       const rr = (smoothedRpm - E.idle) / (E.red - E.idle);
@@ -217,7 +232,13 @@ function EngineSound(ctx) {
       set(gL.gain, lw, 0.06); set(gC.gain, (1 - lw) * 0.9, 0.06);
       set(pre.gain, 0.6 + load * 0.9, 0.05);                          // harder into the shaper under load: bark
       set(engLP.frequency, E.bright * (0.7 + load * 0.9 + rr * 2.2), 0.05);
-      set(engOut.gain, E.vol * 0.55 * (0.45 + load * 0.55) * (1 - shiftDip * 0.5), 0.04);
+      limT = rr > 0.985 && throttle > 0.5 ? limT + 1 : 0;              // bouncing off the limiter
+      const cut = limT && limT % 4 < 2 ? 0.55 : 1;
+      set(engOut.gain, E.vol * 0.55 * (0.45 + load * 0.55) * (1 - shiftDip * 0.5) * cut, 0.015);
+      sBP.frequency.value = Math.min(7000, fire * 3 + 300);
+      set(sOut.gain, (E.scream || 0) * E.vol * 0.3 * rr * rr * (0.35 + load * 0.65) * cut, 0.04);
+      const closed = !!(window.Cockpit && Cockpit.seated && Cockpit.seated.S.kind !== 'bike' && Cockpit.seated.S.kind !== 'tractor' && Cockpit.seated.S.kind !== 'auto');
+      cabin.frequency.setTargetAtTime(closed ? 1500 + rr * 900 : 18000, ctx.currentTime, 0.08);
       nBP.frequency.value = E.muff * 3 + rr * 900;
       set(nAM.gain, E.rough * 0.25 * (0.3 + load), 0.05); set(nDepth.gain, E.rough * 0.25 * (0.3 + load), 0.05);
       set(cAM.gain, 0.15, 0.1); set(cDepth.gain, E.diesel ? 0.9 : 0.6, 0.1);

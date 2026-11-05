@@ -1,0 +1,362 @@
+/* SparkV interface. Direction: a Telangana highway. Peacock-teal lorry paint for panels, marigold for attention,
+   the white roadside milestone with a yellow cap as the speedo (the single loud element). Barlow is highway-sign lettering.
+   Module styles are injected after this sheet, so `html #id` selectors here deliberately out-rank them; !important only beats inline cssText. */
+:root {
+  --sl: env(safe-area-inset-left, 0px); --sr: env(safe-area-inset-right, 0px);
+  --st: env(safe-area-inset-top, 0px);  --sb: env(safe-area-inset-bottom, 0px);
+  --g: 12px; --rad: clamp(120px, 20vmin, 220px); --cs: 1; --u: clamp(56px, 11vmin, 76px); --bar: 40px;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px;
+  --t-xs: .6875rem; --t-sm: .8125rem; --t-md: .9375rem; --t-lg: 1.25rem; --t-xl: 1.75rem;
+  --glass: rgba(7, 44, 50, .86); --glass-hi: rgba(16, 66, 72, .92); --solid: #083037; --deep: #052227;
+  --line: rgba(196, 236, 226, .24); --text: #f4f8f2; --dim: #b9d2cc; --paper: #fbf6e8; --ink: #0c2a2e;
+  --marigold: #f6b21b; --kumkum: #f2587e; --neem: #63e2ab; --nitro: #5ccbf7;
+  --r: 10px; --r-s: 6px;
+  --font: "Barlow", "Noto Sans Telugu", "Kohinoor Telugu", system-ui, -apple-system, sans-serif;
+  --cond: "Barlow Condensed", "Noto Sans Telugu", "Kohinoor Telugu", system-ui, sans-serif;
+  /* height of the dash, the floor of the prompt stack */
+  --dashTop: calc(var(--sb) + 104px); --rearH: 0px; --popTop: calc(var(--st) + 172px);
+}
+@media (min-width: 2400px) { html { font-size: 21px; } :root { --rad: 300px; --bar: 52px; --dashTop: calc(var(--sb) + 140px); } }
+@media (min-width: 3400px) { html { font-size: 30px; } :root { --rad: 420px; --bar: 74px; --dashTop: calc(var(--sb) + 196px); } }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; background: var(--deep); font-family: var(--font); color: var(--text); user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+body { position: fixed; inset: 0; }
+canvas#gl { display: block; position: fixed; inset: 0; touch-action: none; }
+button, input, select { font-family: inherit; }
+kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 1.6em; height: 1.6em; padding: 0 .35em; border-radius: 4px; background: var(--paper); color: var(--ink); font: 700 .8em/1 var(--cond); box-shadow: 0 2px 0 var(--marigold); }
+.ic { width: 1.25em; height: 1.25em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; vertical-align: -.25em; }
+.panel { background: var(--glass); border: 1px solid var(--line); border-radius: var(--r); }
+html[data-tier="high"] .panel { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+:focus { outline: none; }
+:focus-visible, html #phone :focus-visible { outline: 2px solid var(--marigold); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+
+/* ---- loading */
+#loader { position: fixed; inset: 0; z-index: 90; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s5); padding: var(--s4); background: var(--deep); transition: opacity .35s; }
+#loader.done { opacity: 0; pointer-events: none; }
+#loader .logo { width: min(340px, 74vw); }
+#ldBar { width: min(340px, 74vw); height: 6px; background: rgba(255,255,255,.14); border-radius: 3px; overflow: hidden; }
+#ldBar i { display: block; height: 100%; background: var(--marigold); transform-origin: 0 50%; transform: scaleX(.02); transition: transform .2s; }
+#ldText { font-size: var(--t-sm); color: var(--dim); min-height: 1.3em; text-align: center; }
+.logo { display: block; height: auto; overflow: visible; }
+
+/* ---- start */
+#start { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: flex-start; justify-content: safe center; gap: var(--s3);
+  padding: calc(24px + var(--st)) calc(24px + var(--sr)) calc(24px + var(--sb)) calc(clamp(24px, 8vw, 120px) + var(--sl)); overflow-y: auto; touch-action: pan-y;
+  background: linear-gradient(90deg, rgba(5,34,39,.94) 0, rgba(5,34,39,.8) min(480px, 60%), rgba(5,34,39,.12) 100%); }
+#start .logo { width: min(400px, 78vw); margin-bottom: var(--s2); }
+#start p { margin: 0 0 var(--s2); color: var(--text); max-width: 42ch; line-height: 1.5; font-size: var(--t-md); }
+#start .plate { background: var(--paper); color: var(--ink); font: 700 var(--t-md)/1 var(--cond); letter-spacing: .16em; padding: 6px 12px; border: 2px solid var(--ink); border-radius: var(--r-s); box-shadow: 0 0 0 1px var(--paper); }
+#start label { font-size: var(--t-sm); color: var(--dim); display: grid; gap: var(--s1); width: min(320px, 100%); }
+#pname { padding: 12px 14px; min-height: 48px; border-radius: var(--r-s); border: 1px solid var(--line); background: var(--solid); color: var(--text); font-size: 16px; width: 100%; user-select: text; -webkit-user-select: text; }
+#pname::placeholder { color: var(--dim); }
+#go { font: 700 var(--t-lg)/1 var(--font); padding: 0 var(--s5); min-height: 54px; width: min(320px, 100%); border-radius: var(--r-s); border: 0; color: var(--ink); background: var(--marigold); box-shadow: 0 3px 0 #a87400; cursor: pointer; }
+#go:hover { background: #ffc53d; } #go:active { transform: translateY(2px); box-shadow: 0 1px 0 #a87400; }
+html #ccOpenBtn { min-height: 48px; width: min(320px, 100%); padding: 0 var(--s4); border-radius: var(--r-s); border: 1px solid var(--line); background: var(--solid); color: var(--text); font: 600 var(--t-md) var(--font); letter-spacing: 0; }
+@media (max-height: 520px) { #start p, #start .plate { display: none; } #start .logo { width: 220px; margin: 0; } #start { gap: var(--s2); padding-top: calc(10px + var(--st)); padding-bottom: calc(10px + var(--sb)); } #go { min-height: 48px; } }
+@media (max-width: 520px) { #start { background: rgba(5,34,39,.86); padding-left: calc(24px + var(--sl)); } }
+
+/* ---- top right bar */
+#hudBar { position: fixed; top: calc(var(--g) + var(--st)); right: calc(var(--g) + var(--sr)); z-index: 12; display: none; gap: 6px; }
+body.playing #hudBar { display: flex; }
+.hud-btn, html #phoneBtn { position: relative; inset: auto; margin: 0; height: var(--bar); min-width: var(--bar); width: auto; padding: 0 10px; border-radius: var(--r-s); border: 1px solid var(--line); background: var(--glass); color: var(--text);
+  font: 600 var(--t-sm) var(--font); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; touch-action: manipulation; }
+html body.playing #phoneBtn { display: inline-flex; }
+.hud-btn .ic, html #phoneBtn .ic { width: 20px; height: 20px; }
+.hud-btn:hover, html #phoneBtn:hover { background: var(--glass-hi); }
+.hud-btn.on { background: var(--marigold); border-color: var(--marigold); color: var(--ink); }
+.hud-btn.on kbd { box-shadow: none; }
+html #phoneBtn em { background: var(--kumkum); color: #2b0510; font-style: normal; }
+.touch-only { display: none !important; }
+html.touch .touch-only { display: inline-flex !important; }
+html.touch .desk-only { display: none !important; }
+
+/* ---- stacks: everything that used to float on its own coordinates flows here, so nothing can overlap */
+#uiLeft { position: fixed; z-index: 6; top: calc(var(--g) + var(--st)); left: calc(var(--g) + var(--sl)); width: min(20rem, 28vw); min-width: 210px; display: flex; flex-direction: column; gap: var(--s2); pointer-events: none; max-height: calc(100vh - 360px); overflow: hidden; }
+#uiRight { position: fixed; z-index: 6; top: calc(var(--g) * 1.5 + var(--bar) + var(--st)); right: calc(var(--g) + var(--sr)); display: flex; flex-direction: column; align-items: flex-end; gap: var(--s2); pointer-events: none; }
+#uiPrompts { position: fixed; z-index: 21; left: 50%; bottom: calc(var(--dashTop) + var(--rearH) + var(--s3)); transform: translateX(-50%); width: min(560px, calc(100vw - 2 * var(--g))); display: flex; flex-direction: column-reverse; align-items: center; gap: var(--s2); pointer-events: none; }
+#uiLeft > *, #uiRight > *, #uiPrompts > * { position: static !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; transform: none !important; margin: 0 !important; max-width: 100% !important; width: auto !important; }
+#uiPrompts > *, html #farmPill, html #jobPill { min-height: 36px; padding: 7px 14px !important; border-radius: var(--r) !important; border: 1px solid var(--line) !important; background: var(--glass) !important; color: var(--text) !important; font: 600 var(--t-md)/1.3 var(--font) !important; text-align: center; white-space: normal !important; box-shadow: none !important; }
+#uiPrompts > button { pointer-events: auto; cursor: pointer; border-color: var(--marigold) !important; touch-action: manipulation; min-height: 44px; }
+#uiPrompts b { color: var(--marigold); }
+html #talkChoices { background: none !important; border: 0 !important; padding: 0 !important; }
+html #talkChoices button { pointer-events: auto; background: var(--glass) !important; color: var(--text) !important; border: 1px solid var(--marigold) !important; border-radius: var(--r) !important; min-height: 44px; font: 600 var(--t-md) var(--font), var(--cond) !important; }
+#uiLeft .stat, html #jobHud, html #farmJob, html #rideHud, html #sh2Safe { display: none; background: var(--glass) !important; color: var(--text) !important; border: 1px solid var(--line) !important; border-left: 3px solid var(--marigold) !important; border-radius: var(--r-s) !important; padding: 6px 10px !important; font: 600 var(--t-sm)/1.3 var(--font) !important; letter-spacing: 0 !important; white-space: normal !important; text-align: left !important; }
+
+/* ---- mission card: collapses to its title after a few seconds so it stops covering the view */
+#mission { position: relative; padding: var(--s2) var(--s3); text-align: left; pointer-events: auto; cursor: pointer; border-left: 3px solid var(--marigold); }
+#mission .t { color: var(--marigold); font: 700 var(--t-sm)/1.25 var(--font); }
+#mission .d { font-size: var(--t-sm); font-weight: 500; line-height: 1.35; margin-top: 2px; }
+#where { display: block; font-size: var(--t-xs); color: var(--dim); margin-top: 3px; }
+#where b { color: var(--text); font-weight: 600; }
+#mission.mini .d, #mission.mini #where { display: none; }
+
+/* ---- compass, coordinates, squad */
+html #mpCompass { top: calc(var(--st) + 8px); transform: translateX(-50%) scale(var(--cs)); transform-origin: 50% 0; background: linear-gradient(90deg, transparent, var(--glass) 15%, var(--glass) 85%, transparent); font-family: var(--cond); }
+html #mpCompass .needle { background: var(--marigold); width: 3px; }
+html #mpHdg { top: calc(var(--st) + 10px + 30px * var(--cs)); color: var(--text); font: 700 var(--t-sm) var(--cond); background: var(--glass); padding: 0 8px; border-radius: 0 0 4px 4px; text-shadow: none; }
+html #mpCoords { background: var(--glass); border: 1px solid var(--line); color: var(--dim); font: 500 var(--t-xs)/1.35 var(--cond); border-radius: var(--r-s); text-align: right; }
+html #mpCoords b { color: var(--marigold) !important; }
+html #mpSquad { font: 500 var(--t-xs) var(--font); min-width: 0; max-height: 34vh; overflow: hidden; }
+#rearHud { top: calc(var(--st) + 64px) !important; width: clamp(220px, 24vw, 340px) !important; border: 2px solid var(--paper) !important; border-radius: var(--r-s) !important; box-shadow: none !important; }
+
+/* ---- multiplayer dock + chat */
+html #socDock { flex-direction: row; gap: 6px; pointer-events: auto; }
+html #socDock button { width: var(--bar); height: var(--bar); border-radius: var(--r-s); border: 1px solid var(--line); background: var(--glass); color: var(--text); display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+html #socDock button .ic { width: 20px; height: 20px; }
+html #socDock button:hover { background: var(--glass-hi); }
+html #socDock button.on { background: var(--kumkum); color: #2b0510; } html #socDock button.live { background: var(--neem); color: var(--ink); }
+html #socDock button[hidden] { display: none; }
+html #socTalk span { background: var(--glass); }
+html #socVoice { right: calc(var(--g) + var(--sr)); top: calc(var(--g) * 2.5 + var(--bar) * 2 + 58px + var(--st)); max-height: calc(100vh - var(--rad) - 220px); background: var(--solid); border-color: var(--line); border-radius: var(--r); font-family: var(--font); }
+html #socVoice button { background: var(--glass-hi); color: var(--text); min-height: 34px; }
+html #socVoice button.pri, html #socVoice button.on { background: var(--marigold); color: var(--ink); }
+html #socChat { left: calc(var(--g) + var(--sl)); bottom: calc(var(--g) + var(--sb) + 58px); width: min(340px, calc(50vw - 200px)); min-width: 240px; font: 500 var(--t-sm)/1.35 var(--font), var(--cond); }
+html #socChat .ln { background: var(--glass); border-radius: var(--r-s); color: var(--text); }
+html #socChat .t { color: var(--dim); }
+html #socChat .chrome { background: var(--solid); border-color: var(--line); border-radius: var(--r); }
+html #socTabs button { background: var(--glass-hi); color: var(--dim); font-family: var(--font); min-height: 34px; }
+html #socTabs button.on { color: var(--ink); background: var(--marigold); }
+html #socRow #mpInput { background: var(--deep); border-color: var(--line); }
+html #socRow #mpInput:focus { border-color: var(--marigold); }
+html #socQuick button { border-color: var(--line); color: var(--text); min-height: 34px; font-family: var(--font); }
+html #mpPanel { left: calc(var(--g) + var(--sl)); bottom: calc(var(--g) + var(--sb)); width: min(340px, calc(50vw - 200px)); min-width: 240px; font-family: var(--font); }
+html #mpStatus { background: var(--glass); border: 1px solid var(--line); border-radius: var(--r-s); color: var(--dim); }
+html #mpLog { max-height: min(200px, 26vh); } html #mpLog .m { background: var(--glass); }
+html #mpBoard { min-width: 0; width: min(520px, 94vw); max-height: 80vh; overflow: auto; background: var(--solid); border: 1px solid var(--line); font-family: var(--font); }
+html #mpWheel { width: min(360px, 90vmin); height: min(360px, 90vmin); margin: calc(min(360px, 90vmin) / -2) 0 0 calc(min(360px, 90vmin) / -2); }
+
+/* ---- instrument cluster: gauges | milestone speedo | money and place */
+#dash { position: fixed; left: 50%; bottom: calc(var(--s3) + var(--sb)); transform: translateX(-50%); z-index: 5; display: flex; align-items: flex-end; gap: var(--s3); padding: var(--s2) var(--s3); white-space: nowrap; }
+#dash .col { display: grid; gap: 5px; min-width: 112px; }
+.gauge { display: grid; grid-template-columns: 2.6em 1fr 2.3em; align-items: center; gap: 6px; font: 600 var(--t-xs) var(--font); color: var(--dim); }
+.gauge output { color: var(--text); text-align: right; font: 700 var(--t-sm) var(--cond); }
+.gauge .tr { height: 6px; background: rgba(255,255,255,.16); border-radius: 3px; overflow: hidden; }
+.gauge i { display: block; height: 100%; transform-origin: 0 50%; background: var(--nitro); }
+#fuelRow i { background: var(--neem); }
+#fuelRow.low i { background: var(--kumkum); } #fuelRow.low output { color: var(--kumkum); }
+#fuelRow.none { display: none; }
+#stone { position: relative; width: 5.75rem; height: 6.25rem; margin: -2.4rem 0 -2px; flex: none; border-radius: 2.875rem 2.875rem var(--r-s) var(--r-s); background: var(--paper); color: var(--ink); text-align: center; overflow: hidden; box-shadow: 0 0 0 2px var(--ink); }
+#stone::before { content: ""; position: absolute; inset: 0 0 auto; height: 1.85rem; background: var(--marigold); }
+#stone.boost::before { background: var(--nitro); }
+#gear { position: absolute; left: 0; right: 0; top: .3rem; font: 800 var(--t-lg)/1.3 var(--cond); color: var(--ink); }
+#spd { position: absolute; left: 0; right: 0; top: 1.9rem; font: 800 2.45rem/1.1 var(--cond); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+#stone small { position: absolute; left: 0; right: 0; bottom: .28rem; font: 600 var(--t-xs)/1 var(--font); color: #40565a; }
+.datum { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s3); font-size: var(--t-xs); font-weight: 600; color: var(--dim); }
+.datum > span:first-child { text-transform: capitalize; }
+.datum .val { font: 700 var(--t-sm) var(--cond); color: var(--text); text-transform: capitalize; overflow: hidden; text-overflow: ellipsis; max-width: 9em; }
+#cash { color: var(--marigold); font-size: var(--t-md); }
+@media (max-width: 1000px) { #dash .opt { display: none; } #dash .col { min-width: 96px; } }
+
+/* ---- minimap */
+#radar { position: fixed; right: calc(14px + var(--sr)); bottom: calc(14px + var(--sb)); width: var(--rad); height: var(--rad); border-radius: 50%; border: 3px solid var(--paper); box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px var(--marigold); background: var(--solid); z-index: 4; cursor: pointer; }
+#radar:hover { border-color: var(--marigold); }
+#propRadar { width: calc(var(--rad) - 6px) !important; height: calc(var(--rad) - 6px) !important; }
+html #propHud { right: calc(14px + var(--sr)); bottom: calc(var(--rad) + 28px + var(--sb)); max-width: min(240px, 46vw); background: var(--glass); border: 1px solid var(--line); border-right: 3px solid var(--marigold); border-radius: var(--r-s); font: 500 var(--t-xs)/1.35 var(--font); z-index: 6; }
+html #propHud b { color: var(--marigold); }
+
+/* ---- big map */
+#bigmap { position: fixed; left: calc(3vw + var(--sl)); top: calc(3vh + var(--st)); width: calc(94vw - var(--sl) - var(--sr)); height: calc(94vh - var(--st) - var(--sb)); display: none; background: var(--deep); border: 1px solid var(--line); border-radius: var(--r); z-index: 30; touch-action: none; }
+#mapClose { position: fixed; right: calc(3vw + 10px + var(--sr)); top: calc(3vh + 10px + var(--st)); z-index: 32; display: none; width: 44px; height: 44px; align-items: center; justify-content: center; border-radius: var(--r-s); border: 1px solid var(--line); background: var(--solid); color: var(--text); cursor: pointer; }
+html.touch #mapClose { width: 56px; height: 56px; }
+#mapClose:hover { background: var(--kumkum); color: #2b0510; }
+body.map-open #mpPanel, body.map-open #uiLeft, body.map-open #uiRight, body.map-open #uiPrompts, body.map-open #socChat, body.map-open #mpCompass, body.map-open #mpHdg, body.map-open #hudBar, body.map-open #tc, body.map-open #dash, body.map-open #propHud, body.map-open #rotateHint { visibility: hidden; }
+
+/* ---- notifications */
+#popup { position: fixed; top: var(--popTop); left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: var(--r-s); background: var(--paper); color: var(--ink); font: 800 var(--t-lg)/1.2 var(--cond); opacity: 0; transition: opacity .25s; text-align: center; max-width: 90vw; pointer-events: none; z-index: 20; }
+#popup:empty { display: none; }
+#qNotice { position: fixed; left: 50%; top: calc(var(--popTop) + 44px); transform: translateX(-50%); z-index: 45; padding: 6px 12px; border-radius: var(--r-s); background: var(--glass); border: 1px solid var(--line); font: 600 var(--t-sm) var(--font); opacity: 0; transition: opacity .3s; pointer-events: none; }
+#qNotice.on { opacity: 1; }
+html #phoneBanner { top: calc(var(--st) + var(--g)); left: 50%; max-width: min(320px, 60vw); border-radius: var(--r); border: 1px solid var(--line); border-left: 3px solid var(--marigold); background: var(--solid); font: 600 var(--t-sm)/1.35 var(--font); }
+html #vehCard { background: var(--solid) !important; border: 1px solid var(--line) !important; border-radius: var(--r) !important; box-shadow: none !important; }
+html #vehCard small { letter-spacing: 0; text-transform: none; color: var(--marigold); font: 700 var(--t-sm) var(--font); }
+html #vehCard b { font-family: var(--cond); } html #vehCard i { font-family: var(--font); color: var(--dim); }
+html #vehCard:after { display: none; }
+
+/* ---- dialogs */
+#scrim { position: fixed; inset: 0; z-index: 37; display: none; background: rgba(3, 22, 26, .62); }
+#scrim.on { display: block; }
+#pause { position: fixed; inset: 0; z-index: 38; display: none; align-items: center; justify-content: center; padding: var(--s4); }
+#pause.on { display: flex; }
+#pause .box { width: min(320px, 100%); display: grid; gap: var(--s2); padding: var(--s4); max-height: 100%; overflow: auto; background: var(--solid); }
+#pause .logo { width: 150px; margin: 2px 0 var(--s2); }
+#pause button, .mi { display: flex; align-items: center; gap: var(--s3); width: 100%; min-height: 46px; padding: 0 var(--s3); border: 1px solid var(--line); border-radius: var(--r-s); background: transparent; color: var(--text); font: 600 var(--t-md) var(--font); cursor: pointer; text-align: left; }
+#pause button kbd { margin-left: auto; }
+#pause button:hover, #pause button:focus-visible { background: var(--glass-hi); }
+#pause button.pri { background: var(--marigold); border-color: var(--marigold); color: var(--ink); }
+#info { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 40; width: min(860px, calc(100vw - 24px - var(--sl) - var(--sr))); max-height: calc(100vh - 24px - var(--st) - var(--sb)); overflow-y: auto; padding: var(--s4) clamp(14px, 3vw, 24px); font-size: var(--t-sm); line-height: 1.4; display: none; background: var(--solid); touch-action: pan-y; overscroll-behavior: contain; user-select: text; }
+#info.open { display: block; }
+#info h2, #settings h2 { margin: 0 0 var(--s3); font: 700 var(--t-lg) var(--font); }
+#info h3 { margin: 0 0 6px; font: 700 var(--t-md) var(--font); color: var(--marigold); }
+#info .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: var(--s4) var(--s5); }
+#info dl { display: grid; grid-template-columns: max-content 1fr; gap: 5px 10px; margin: 0; align-items: center; }
+#info dt { white-space: nowrap; display: flex; gap: 3px; }
+#info dd { margin: 0; color: var(--text); }
+#info .muted, #settings .muted { color: var(--dim); font-size: var(--t-xs); line-height: 1.45; margin-top: var(--s3); }
+.x { position: absolute; top: 8px; right: 8px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: var(--r-s); border: 1px solid var(--line); background: transparent; color: var(--text); cursor: pointer; }
+.x:hover { background: var(--glass-hi); }
+html.touch #info section.touchsec { order: -1; }
+#settings { position: fixed; z-index: 41; top: calc(var(--st) + var(--g) + var(--bar) + 8px); right: calc(var(--g) + var(--sr)); width: min(320px, calc(100vw - 24px)); max-height: calc(100vh - var(--st) - var(--sb) - var(--bar) - 28px); overflow-y: auto; padding: var(--s4); display: none; font-size: var(--t-sm); background: var(--solid); touch-action: pan-y; }
+#settings.open { display: block; }
+#settings .sf { margin-top: var(--s4); font-weight: 600; }
+#settings .seg { display: flex; gap: 2px; margin-top: 6px; padding: 2px; border-radius: var(--r-s); background: var(--deep); }
+#settings .seg button { flex: 1; min-height: 40px; border: 0; border-radius: 4px; background: transparent; color: var(--dim); font: 600 var(--t-sm) var(--font); cursor: pointer; }
+#settings .seg button.on { background: var(--marigold); color: var(--ink); }
+#settings label.ck { display: flex; gap: var(--s2); align-items: center; min-height: 36px; margin-top: var(--s2); cursor: pointer; }
+#settings input[type=checkbox], #settings input[type=range] { accent-color: var(--marigold); }
+#settings input[type=checkbox] { width: 18px; height: 18px; flex: none; }
+#settings input[type=range] { width: 100%; height: 28px; margin: 2px 0 0; }
+#rotateHint { display: none; }
+body:not(.playing) #mpPanel, body:not(.playing) #socChat, body:not(.playing) #uiRight, body:not(.playing) #uiLeft, body:not(.playing) #mpCompass, body:not(.playing) #mpHdg { visibility: hidden; }
+body:not(.playing) #propHud, body:not(.playing) #rotateHint { display: none !important; }
+
+/* shared look for the module panels */
+html #propPanel, html #farmPanel, html #jobPanel, html #srPanel, #actShop, #ridePicker { background: var(--solid) !important; color: var(--text) !important; border: 1px solid var(--line) !important; border-radius: var(--r) !important; box-shadow: none !important; font-family: var(--font) !important; touch-action: pan-y; }
+html #farmPanel h3, html #jobPanel h3 { color: var(--marigold); font: 700 var(--t-lg) var(--font); display: flex; align-items: center; gap: 6px; }
+html #farmPanel .sub, html #srPanel small, html #propPanel .muted { color: var(--dim); }
+html #farmPanel button, html #jobPanel button, html #srPanel button, html #propPanel .row button { background: var(--glass-hi); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-s); font-family: var(--font); }
+html #farmPanel button.go, html #srPanel button.buy, html #srPanel button.on, html #propPanel button.go { background: var(--marigold); border-color: var(--marigold); color: var(--ink); }
+html #srPanel button:hover { background: var(--line); } html #srPanel .est { color: var(--marigold); }
+html #srPanel td { border-color: var(--line); } html #srPanel h2, html #propPanel h2 { font-family: var(--font); }
+html #srPanel { inset: calc(4vh + var(--st)) calc(4vw + var(--sr)) calc(4vh + var(--sb)) calc(4vw + var(--sl)); }
+html #propPanel .hd { background: none; }
+html #propPanel .price { color: var(--neem); font-family: var(--cond); }
+html #busBar { bottom: calc(var(--dashTop) + var(--s2)); }
+html #busBar button { background: var(--glass); border-color: var(--line); color: var(--text); font-family: var(--cond); font-size: var(--t-sm); }
+html #busBar button.on { background: var(--marigold); border-color: var(--marigold); color: var(--ink); }
+
+/* ---- phone */
+html #phone { background: var(--deep); box-shadow: 0 0 0 2px var(--marigold); right: calc(var(--rad) + 34px + var(--sr)); font-family: var(--font), var(--cond); }
+html #phone .ph-in { background: var(--solid); }
+html #phone .ph-bar { font: 700 var(--t-sm) var(--cond); } html #phone .ph-title { font: 700 var(--t-md) var(--font); }
+html #phone .ph-app { background: var(--glass-hi); font: 600 var(--t-xs) var(--font); border-radius: var(--r); }
+html #phone .ph-app i { color: var(--marigold); font-size: 24px; line-height: 1; }
+html #phone .ph-app em { background: var(--kumkum); color: #2b0510; font-style: normal; }
+html #phone .ph-item, html #phone .ph-line { background: var(--glass-hi); border-radius: var(--r-s); font-family: var(--font); }
+html #phone .ph-item small, html #phone .ph-note { color: var(--dim); }
+html #phone .ph-big { color: var(--marigold); font: 800 var(--t-xl) var(--cond); }
+html #phone .sel { outline-color: var(--marigold); background: var(--line); }
+html #phone .ph-back { background: var(--line); }
+@media (max-width: 760px), (max-height: 520px) { html #phone { right: auto; } }
+
+  /* ------------------------------------------------------------ touch controls */
+  #tc { display: none; position: fixed; inset: 0; pointer-events: none; z-index: 8; touch-action: none; }
+  html.touch #tc { display: block; }
+  #tc[data-mode="off"] { display: none !important; }
+  #tc > div { position: absolute; }
+  .tc-btn { pointer-events: auto; touch-action: none; width: var(--u); height: var(--u); border-radius: 50%; border: 2px solid rgba(255,255,255,.4); background: rgba(10,15,25,.38); color: rgba(255,255,255,.92);
+    font: 800 clamp(12px, 2.2vmin, 15px) system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0; line-height: 1.05; }
+  .tc-btn small { font-size: 9.5px; font-weight: 700; opacity: .8; letter-spacing: .04em; }
+  .tc-btn.on { background: rgba(96,165,250,.55); border-color: #bfdbfe; }
+  .tc-stick { pointer-events: auto; touch-action: none; left: calc(var(--g) + var(--sl)); bottom: calc(var(--g) + var(--sb)); width: calc(var(--u) * 2.2); height: calc(var(--u) * 2.2); border-radius: 50%;
+    background: radial-gradient(circle, rgba(10,15,25,.18), rgba(10,15,25,.38)); border: 2px solid rgba(255,255,255,.3); }
+  .tc-knob { position: absolute; left: 50%; top: 50%; width: calc(var(--u) * .9); height: calc(var(--u) * .9); margin: calc(var(--u) * -.45); border-radius: 50%; background: rgba(255,255,255,.45); border: 2px solid rgba(255,255,255,.7); pointer-events: none; }
+  .tc-stick.on .tc-knob { background: rgba(147,197,253,.7); }
+  #tcArrows { left: calc(var(--g) + var(--sl)); bottom: calc(var(--g) + var(--sb)); display: none; gap: 10px; }
+  .tc-arrow { width: calc(var(--u) * 1.15); height: calc(var(--u) * 1.4); border-radius: 16px; font-size: 22px; }
+  #tc[data-steer="arrows"][data-mode="drive"] #tcArrows { display: flex; }
+  #tc[data-steer="arrows"][data-mode="drive"] #tcStick { display: none; }
+  #tcQuick { left: calc(var(--g) + var(--sl)); bottom: calc(var(--g) + var(--sb) + var(--u) * 2.2 + 10px); display: flex; gap: 8px; }
+  #tc[data-mode="foot"] #tcQuick .tc-drive { display: none; }
+  #tc[data-mode="drive"] #tcQuick .tc-footonly { display: none; }
+  #tcDrive, #tcFoot { right: calc(var(--g) + var(--sr)); bottom: calc(var(--g) + var(--sb)); width: calc(var(--u) * 2.3 + 10px); height: calc(var(--u) * 3.3 + 16px); }
+  #tcDrive .tc-btn, #tcFoot .tc-btn { position: absolute; }
+  #tcGas { right: 0; bottom: 0; width: calc(var(--u) * 1.2); height: calc(var(--u) * 2); border-radius: 18px; background: rgba(22,101,52,.42); }
+  #tcBrake { right: calc(var(--u) * 1.2 + 8px); bottom: 0; width: calc(var(--u) * 1.1); height: calc(var(--u) * 1.3); border-radius: 16px; background: rgba(127,29,29,.42); }
+  #tcHand { right: calc(var(--u) * 1.2 + 8px); bottom: calc(var(--u) * 1.3 + 8px); }
+  #tcHorn { right: calc(var(--u) * 1.2 + 8px); bottom: calc(var(--u) * 2.3 + 16px); font-size: 20px; }
+  #tcNos { right: calc(var(--u) * .1); bottom: calc(var(--u) * 2 + 8px); background: rgba(30,64,175,.42); }
+  #tcJump { right: 0; bottom: 0; width: calc(var(--u) * 1.3); height: calc(var(--u) * 1.3); }
+  #tcRun { right: calc(var(--u) * 1.3 + 10px); bottom: 0; }
+  #tcUse { right: calc(var(--u) * .15); bottom: calc(var(--u) * 1.3 + 10px); }
+  #tcFoot, #tcDrive { display: none; }
+  #tc[data-mode="drive"] #tcDrive, #tc[data-mode="foot"] #tcFoot { display: block; }
+  #tcMore { pointer-events: auto; right: calc(var(--g) + var(--sr)); top: calc(var(--st) + var(--g) + var(--bar) + 8px); padding: 10px; display: none; grid-template-columns: repeat(4, var(--u)); gap: 8px; z-index: 13; }
+  #tc.more-open #tcMore { display: grid; }
+  #tcMore .tc-btn { border-radius: 14px; font-size: 18px; }
+.tc-btn .ic { width: 22px; height: 22px; }
+
+/* ---- touch devices: radar top-left, bar top-right, controls at the bottom */
+html.touch { --g: 8px; --rad: clamp(96px, 20vmin, 160px); --bar: 48px; --cs: .62; --dashTop: calc(var(--g) + var(--sb) + 58px); --popTop: calc(var(--st) + 68px); }
+html.touch #btnHelp, html.touch #btnSettings { display: none; }
+html.touch #hudBar .lbl-txt { display: none; }
+html.touch #radar { right: auto; bottom: auto; left: calc(var(--g) + var(--sl)); top: calc(var(--g) + var(--st)); }
+html.touch #uiLeft { left: calc(var(--g) * 2 + var(--rad) + var(--sl) + 4px); top: calc(var(--st) + 52px); width: min(220px, 36vw); min-width: 0; max-height: 34vh; }
+html.touch #mission { padding: var(--s1) var(--s2); }
+html.touch #dash { bottom: calc(var(--g) + var(--sb)); gap: var(--s2); padding: var(--s1) var(--s2); }
+html.touch #dash .opt { display: none; }
+html.touch #dash .col { min-width: 118px; }
+html.touch #stone { width: 3.75rem; height: 3.5rem; margin: -.6rem 0 -2px; border-radius: 1.875rem 1.875rem var(--r-s) var(--r-s); }
+html.touch #stone::before { height: 1.15rem; }
+html.touch #gear { font-size: var(--t-sm); top: .02rem; } html.touch #spd { font-size: 1.5rem; top: 1.12rem; } html.touch #stone small { display: none; }
+html.touch #rearHud { top: auto !important; bottom: calc(var(--dashTop) + var(--sb) + 4px); width: 180px !important; }
+html.touch body:has(#rearHud[style*="block"]) { --rearH: 62px; }
+html.touch #mpCoords { display: none; }
+html.touch #uiRight { top: calc(var(--g) + var(--bar) + 6px + var(--st)); }
+html.touch #uiPrompts { width: min(44vw, 360px); }
+html.touch #propHud { bottom: auto; top: calc(var(--st) + var(--g) * 2 + var(--bar) * 2 + 12px); right: calc(var(--g) + var(--sr)); }
+html.touch body #socChat, html.touch body #mpPanel { left: calc(var(--g) * 2 + var(--sl) + var(--u) * 2.2); bottom: calc(var(--dashTop) + 4px); width: calc(50vw - var(--u) * 2.2 - 112px); min-width: 0; top: auto; }
+html.touch body #socChat { bottom: calc(var(--dashTop) + 66px); }
+html.touch #phone { z-index: 58; }
+@media (pointer: coarse) and (max-height: 500px) and (orientation: landscape) {
+  html.touch { --u: 56px; --rad: 96px; --cs: .6; }
+  html.touch #uiLeft { width: min(240px, calc(100vw - var(--rad) - 300px)); }
+}
+/* portrait phone: bar, then radar beside the mission, dash just above the pedals */
+@media (orientation: portrait) and (max-width: 600px) {
+  :root { --rad: 104px; --cs: .7; --row: calc(var(--st) + var(--g) + var(--bar) + 44px); }
+  html.touch { --cs: .78; --u: 56px; --rad: 104px; --dashTop: calc(var(--g) + var(--sb) + var(--u) * 3.3 + 74px); --popTop: calc(var(--row) + var(--rad) + 8px); }
+  html.touch #mpCompass { top: calc(var(--st) + var(--g) + var(--bar) + 4px); }
+  html.touch #mpHdg { display: none; }
+  html.touch #radar { top: var(--row); }
+  html.touch #uiLeft { top: var(--row); right: calc(var(--g) + var(--sr)); width: auto; max-height: var(--rad); }
+  html.touch #uiRight { top: calc(var(--row) + var(--rad) + 8px); }
+  html.touch #propHud { top: calc(var(--row) + var(--rad) + 8px); right: auto; left: calc(var(--g) + var(--sl)); }
+  html.touch #dash { bottom: calc(var(--g) + var(--sb) + var(--u) * 3.3 + 16px); }
+  html.touch #uiPrompts { width: calc(100vw - 2 * var(--g)); }
+  html.touch body #socChat, html.touch body #mpPanel { left: calc(var(--g) + var(--sl)); width: calc(100vw - 2 * var(--g)); bottom: calc(var(--dashTop) + var(--rearH)); }
+  html.touch body #socChat { bottom: calc(var(--dashTop) + var(--rearH) + 52px); }
+  #rotateHint { display: block; position: fixed; left: calc(var(--g) + var(--sl)); top: calc(var(--st) + var(--g)); width: 120px; z-index: 9; padding: 6px 8px; border-radius: var(--r-s); background: var(--glass); font: 600 var(--t-xs)/1.3 var(--font); color: var(--text); pointer-events: none; transition: opacity .6s; }
+  #rotateHint.gone { opacity: 0; }
+}
+/* short portrait phones: drop the extras so the road stays visible */
+@media (orientation: portrait) and (max-width: 600px) and (max-height: 700px) {
+  html.touch #rearHud, html.touch #propHud, html.touch #mpStatus, html.touch #rotateHint { display: none !important; }
+  html.touch body #uiPrompts { bottom: calc(var(--dashTop) + var(--s2)); }
+  html.touch body #socChat { bottom: var(--dashTop); } html.touch body #socChat .log { max-height: 44px; }
+}
+/* small keyboard windows */
+@media (max-width: 1000px) { #hudBar .lbl-txt, #hudBar kbd { display: none; } :root { --cs: .85; } html #socDock { flex-wrap: wrap; justify-content: flex-end; max-width: 150px; } }
+@media (max-width: 360px) { html.touch #dash .col { min-width: 96px; } .gauge { grid-template-columns: 2.3em 1fr 2em; } }
+@media (max-width: 640px) { :root { --cs: .7; } #uiLeft { top: calc(var(--st) + 52px); width: min(200px, 52vw); min-width: 0; } }
+
+/* ---- full map */
+#propMapOverlay { display: none !important; }
+#bigmap { left: var(--sl); top: var(--st); width: calc(100vw - var(--sl) - var(--sr) - 320px); height: calc(100vh - var(--st) - var(--sb)); border: 0; border-radius: 0; background: #0a1d22; cursor: grab; touch-action: none; }
+#mapClose { right: calc(10px + var(--sr)); top: calc(10px + var(--st)); }
+#mapSide { display: none; position: fixed; z-index: 31; right: 0; top: 0; bottom: 0; width: calc(320px + var(--sr)); padding: calc(var(--s4) + var(--st)) calc(var(--s3) + var(--sr)) calc(var(--s3) + var(--sb)) var(--s3); flex-direction: column; gap: var(--s2); background: var(--solid); border-left: 1px solid var(--line); font-size: var(--t-sm); touch-action: pan-y; }
+body.map-open #mapSide { display: flex; }
+#mapSide h2 { margin: 0; font: 700 var(--t-lg) var(--font); }
+#mapSearch { min-height: 42px; padding: 0 var(--s3); border-radius: var(--r-s); border: 1px solid var(--line); background: var(--deep); color: var(--text); font-size: 16px; user-select: text; -webkit-user-select: text; }
+#mapRoute { display: grid; grid-template-columns: 1fr auto; gap: 2px var(--s2); align-items: center; color: var(--dim); }
+#mapRoute b { color: var(--text); grid-column: 1; } #mapRoute span { grid-column: 1; }
+#mapRoute button { grid-column: 2; grid-row: 1 / 3; min-height: 38px; padding: 0 var(--s2); border-radius: var(--r-s); border: 1px solid var(--line); background: transparent; color: var(--text); font: 600 var(--t-sm) var(--font); cursor: pointer; }
+#mapList { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+#mapList p { color: var(--dim); }
+#mapList .ch { display: flex; gap: var(--s1); margin-top: var(--s1); }
+#mapList .ch button:first-child { flex: 1; display: flex; align-items: center; gap: var(--s2); min-height: 38px; padding: 0 var(--s2); border: 0; border-radius: var(--r-s); background: var(--glass-hi); color: var(--text); font: 600 var(--t-sm) var(--font); cursor: pointer; text-align: left; }
+#mapList i { width: 10px; height: 10px; border-radius: 50%; flex: none; } #mapList em { margin-left: auto; font-style: normal; color: var(--dim); }
+#mapList .eye { width: 42px; border: 1px solid var(--line); border-radius: var(--r-s); background: transparent; color: var(--dim); font: 600 var(--t-xs) var(--font); cursor: pointer; }
+#mapList .pl { display: flex; justify-content: space-between; gap: var(--s2); width: 100%; min-height: 36px; padding: 4px var(--s2) 4px 26px; align-items: center; border: 0; background: none; color: var(--text); font: 500 var(--t-sm) var(--font), var(--cond); cursor: pointer; text-align: left; }
+#mapList .pl:hover, #mapList .pl:focus-visible { background: var(--glass-hi); } #mapList small { color: var(--dim); flex: none; }
+#mapTools { display: flex; gap: var(--s1); } #mapTools button { flex: 1; min-height: 40px; border: 1px solid var(--line); border-radius: var(--r-s); background: transparent; color: var(--text); font: 600 var(--t-sm) var(--font); cursor: pointer; }
+#mapTools button[data-z] { flex: 0 0 40px; font-size: var(--t-lg); }
+@media (max-width: 760px) { #bigmap { width: 100vw; height: 52vh; } #mapSide { left: 0; right: 0; top: 52vh; width: auto; border-left: 0; padding-top: var(--s2); } #mapSide h2 { display: none; } }
+/* ---- route card and SparkPlay controls */
+#navCard { display: flex; gap: var(--s2); align-items: center; padding: 6px var(--s2); pointer-events: auto; border-left: 3px solid #37d7ff; }
+#navCard .na { width: 34px; height: 34px; color: #37d7ff; stroke-width: 2.4; }
+#navCard .nb { flex: 1; min-width: 0; display: grid; } #navCard b { font: 700 var(--t-md)/1.2 var(--font); } #navCard span { font-size: var(--t-xs); color: var(--dim); }
+#navCard button { width: 32px; height: 32px; flex: none; display: flex; align-items: center; justify-content: center; border: 0; background: none; color: var(--dim); cursor: pointer; padding: 0; }
+#spBar { display: none; position: fixed; z-index: 7; left: 50%; bottom: calc(var(--dashTop) + var(--s2)); transform: translateX(-50%); gap: var(--s1); align-items: center; padding: 4px var(--s2); background: var(--glass); border: 1px solid var(--line); border-radius: var(--r-s); font-size: var(--t-xs); white-space: nowrap; }
+body.sp-on #spBar { display: flex; } html.touch #spBar { bottom: auto; top: calc(var(--st) + 44px); }
+#spBar button { min-height: 32px; padding: 0 var(--s2); border: 0; border-radius: 4px; background: var(--glass-hi); color: var(--text); font: 600 var(--t-xs) var(--font); cursor: pointer; }

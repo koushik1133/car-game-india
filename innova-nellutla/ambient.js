@@ -1,5 +1,5 @@
 // Procedural 3D village ambience (WebAudio, no sound files).
-// Day: birds, crows, cattle, temple bells, distant auto horns. Night: crickets, dogs, frogs near water.
+// Day: birds, crows, cattle, temple bells, horns from real nearby traffic. Night: crickets, dogs, frogs near water.
 // Usage: const amb = VillageAmbience(audioCtx, world); each frame amb.update(dt, camera, timeOfDay, traffic, carSpeed)
 function VillageAmbience(ctx, world) {
   const master = ctx.createGain(); master.gain.value = 0.55; master.connect(ctx.destination);
@@ -68,14 +68,46 @@ function VillageAmbience(ctx, world) {
       env(g, t0, 0.01, 0.6, 0.07); o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + 0.12);
     }
   }
-  function crow(x, y, z) {
-    const out = at(x, y, z, 0.35), k = 1 + Math.floor(Math.random() * 3);
+  function crow(x, y, z) {           // house crow "kaa kaa": hoarse, nasal, falling; a saw through two formants with a rough flutter
+    const out = at(x, y, z, 0.4), k = 2 + Math.floor(Math.random() * 3), b = 480 + Math.random() * 120;
     for (let i = 0; i < k; i++) {
-      const t0 = ctx.currentTime + i * 0.42, o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
-      o.type = 'sawtooth'; o.frequency.setValueAtTime(620, t0); o.frequency.linearRampToValueAtTime(480, t0 + 0.3);
-      f.type = 'bandpass'; f.frequency.value = 1300; f.Q.value = 4;
-      env(g, t0, 0.02, 0.8, 0.28); o.connect(f); f.connect(g); g.connect(out); o.start(t0); o.stop(t0 + 0.35);
+      const t0 = ctx.currentTime + i * (0.36 + Math.random() * 0.1), d = 0.2 + Math.random() * 0.1, o = ctx.createOscillator(), rough = ctx.createOscillator(), rg = ctx.createGain(), g = ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(b * 1.2, t0); o.frequency.linearRampToValueAtTime(b * 0.82, t0 + d);
+      rough.frequency.value = 75; rg.gain.value = 70; rough.connect(rg); rg.connect(o.frequency);
+      for (const [fq, q] of [[1050, 5], [2300, 7]]) { const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = fq; f.Q.value = q; o.connect(f); f.connect(g); }
+      env(g, t0, 0.015, 1.1, d); g.connect(out); o.start(t0); rough.start(t0); o.stop(t0 + d + 0.05); rough.stop(t0 + d + 0.05);
     }
+  }
+  function sparrow(x, y, z) {        // house sparrow: dry repeated "chirrup" notes with a quick drop
+    const out = at(x, y, z, 0.2), n = 3 + Math.floor(Math.random() * 6), b = 3400 + Math.random() * 900;
+    for (let i = 0; i < n; i++) {
+      const t0 = ctx.currentTime + i * (0.14 + Math.random() * 0.1), o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'triangle'; o.frequency.setValueAtTime(b * 1.22, t0); o.frequency.exponentialRampToValueAtTime(b * 0.8, t0 + 0.05); o.frequency.exponentialRampToValueAtTime(b, t0 + 0.09);
+      env(g, t0, 0.006, 0.6, 0.085); o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + 0.12);
+    }
+  }
+  function parrot(x, y, z) {         // rose-ringed parakeet: loud rising "kee-ak" screeches, fast and grating
+    const out = at(x, y, z, 0.3), n = 2 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < n; i++) {
+      const t0 = ctx.currentTime + i * (0.2 + Math.random() * 0.1), b = 2000 + Math.random() * 500, o = ctx.createOscillator(), fm = ctx.createOscillator(), fg = ctx.createGain(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(b, t0); o.frequency.linearRampToValueAtTime(b * 1.5, t0 + 0.09); o.frequency.linearRampToValueAtTime(b * 1.15, t0 + 0.16);
+      fm.frequency.value = 260; fg.gain.value = 420; fm.connect(fg); fg.connect(o.frequency); f.type = 'bandpass'; f.frequency.value = 3000; f.Q.value = 1.6;
+      env(g, t0, 0.01, 0.6, 0.15); o.connect(f); f.connect(g); g.connect(out); o.start(t0); fm.start(t0); o.stop(t0 + 0.19); fm.stop(t0 + 0.19);
+    }
+  }
+  function pigeon(x, y, z) {         // rock pigeon: soft throaty "gu-ru-goo", low and round
+    const out = at(x, y, z, 0.3), syl = [[0, 0.16, 430], [0.2, 0.14, 500], [0.4, 0.46, 470]];
+    for (const [o0, d, b] of syl) {
+      const t0 = ctx.currentTime + o0, o = ctx.createOscillator(), am = ctx.createOscillator(), ag = ctx.createGain(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(b * 0.92, t0); o.frequency.linearRampToValueAtTime(b, t0 + d * 0.4); o.frequency.linearRampToValueAtTime(b * 0.86, t0 + d);
+      am.frequency.value = 34; ag.gain.value = 0.22; am.connect(ag); ag.connect(g.gain);
+      env(g, t0, 0.03, 0.55, d); o.connect(g); g.connect(out); o.start(t0); am.start(t0); o.stop(t0 + d + 0.06); am.stop(t0 + d + 0.06);
+    }
+  }
+  function flutter(x, y, z) {        // a flock lifting off: a burst of wing beats
+    const t0 = ctx.currentTime, out = at(x, y, z, 0.5), s = noise(), f = ctx.createBiquadFilter(), am = ctx.createOscillator(), ag = ctx.createGain(), g = ctx.createGain();
+    f.type = 'bandpass'; f.frequency.value = 1400; f.Q.value = 0.7; am.type = 'square'; am.frequency.value = 17; ag.gain.value = 0.3; am.connect(ag); ag.connect(g.gain);
+    env(g, t0, 0.03, 0.55, 0.9); s.connect(f); f.connect(g); g.connect(out); s.start(t0); am.start(t0); s.stop(t0 + 1); am.stop(t0 + 1);
   }
   function moo(x, y, z) {
     const t0 = ctx.currentTime, out = at(x, y, z, 0.5), o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
@@ -100,14 +132,6 @@ function VillageAmbience(ctx, world) {
       env(g, t0, 0.005, a * 0.5, 3.2 / Math.sqrt(m)); o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + 3.5);
     }
   }
-  function autoHorn(x, y, z) {
-    const out = at(x, y, z, 0.35);
-    for (let i = 0; i < 2; i++) {
-      const t0 = ctx.currentTime + i * 0.22, o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain();
-      o.type = 'square'; o.frequency.value = 480; o2.type = 'square'; o2.frequency.value = 600;
-      env(g, t0, 0.01, 0.3, 0.14); o.connect(g); o2.connect(g); g.connect(out); o.start(t0); o2.start(t0); o.stop(t0 + 0.17); o2.stop(t0 + 0.17);
-    }
-  }
   function frog(x, y, z) {
     const out = at(x, y, z, 0.3), t0 = ctx.currentTime, o = ctx.createOscillator(), am = ctx.createOscillator(), amG = ctx.createGain(), g = ctx.createGain();
     o.type = 'sawtooth'; o.frequency.value = 180 + Math.random() * 60; am.frequency.value = 40; amG.gain.value = 0.5;
@@ -127,14 +151,14 @@ function VillageAmbience(ctx, world) {
       [o, o2].forEach(n => { n.start(t); n.stop(t + d + 0.05); });
     }
   }
-  function cluck(x, y, z) {          // hen: 2-5 short nasal "buk" pops, sometimes a rising "bukaaak"
-    const out = at(x, y, z, 0.3), k = 2 + Math.floor(Math.random() * 4), long = Math.random() < 0.25;
+  function cluck(x, y, z) {          // hen: sharp "buk-buk-buk" with a noisy attack, sometimes climbing into "bu-KAAAK"
+    const out = at(x, y, z, 0.32), k = 3 + Math.floor(Math.random() * 4), long = Math.random() < 0.3;
     for (let i = 0; i < k; i++) {
-      const t = ctx.currentTime + i * (0.14 + Math.random() * 0.1), last = long && i === k - 1, d = last ? 0.35 : 0.05;
-      const o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
-      o.type = 'sawtooth'; o.frequency.setValueAtTime(last ? 500 : 420 + Math.random() * 80, t); o.frequency.linearRampToValueAtTime(last ? 820 : 360, t + d);
-      f.type = 'bandpass'; f.frequency.value = 1400; f.Q.value = 3;
-      env(g, t, 0.006, 0.6, d); o.connect(f); f.connect(g); g.connect(out); o.start(t); o.stop(t + d + 0.05);
+      const t = ctx.currentTime + i * (0.13 + Math.random() * 0.07), last = long && i === k - 1, d = last ? 0.42 : 0.055, b = 640 + Math.random() * 130;
+      const o = ctx.createOscillator(), f = ctx.createBiquadFilter(), f2 = ctx.createBiquadFilter(), g = ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(last ? b : b * 1.15, t); o.frequency.linearRampToValueAtTime(last ? b * 1.75 : b * 0.72, t + (last ? d * 0.45 : d)); if (last) o.frequency.linearRampToValueAtTime(b * 1.3, t + d);
+      f.type = 'bandpass'; f.frequency.value = 1250; f.Q.value = 4; f2.type = 'bandpass'; f2.frequency.value = 2700; f2.Q.value = 6;
+      env(g, t, 0.004, 0.75, d); o.connect(f); o.connect(f2); f.connect(g); f2.connect(g); g.connect(out); o.start(t); o.stop(t + d + 0.05);
     }
   }
   function cattleMoo(x, y, z, buffalo) {   // buffalo: lower, shorter, rougher grunt-moo
@@ -156,14 +180,14 @@ function VillageAmbience(ctx, world) {
       }
     }
   }
-  function bleat(x, y, z) {          // goat "mehhh": nasal with fast vibrato
-    const t0 = ctx.currentTime, out = at(x, y, z, 0.35), o = ctx.createOscillator(), vib = ctx.createOscillator(), vg = ctx.createGain(), f = ctx.createBiquadFilter(), g = ctx.createGain();
-    const b = 300 + Math.random() * 150, d = 0.5 + Math.random() * 0.4;
-    o.type = 'sawtooth'; o.frequency.setValueAtTime(b, t0); o.frequency.linearRampToValueAtTime(b * 0.9, t0 + d);
-    vib.frequency.value = 9 + Math.random() * 4; vg.gain.value = b * 0.06; vib.connect(vg); vg.connect(o.frequency);
-    f.type = 'bandpass'; f.frequency.value = 1100; f.Q.value = 2;
-    env(g, t0, 0.04, 0.6, d); o.connect(f); f.connect(g); g.connect(out);
-    [o, vib].forEach(n => { n.start(t0); n.stop(t0 + d + 0.1); });
+  function bleat(x, y, z) {          // goat "me-e-e-eh": strained, voice-like, a slow shake of the whole note through vowel formants
+    const t0 = ctx.currentTime, out = at(x, y, z, 0.42), o = ctx.createOscillator(), o2 = ctx.createOscillator(), trem = ctx.createOscillator(), tg = ctx.createGain(), vib = ctx.createGain(), mix = ctx.createGain(), g = ctx.createGain();
+    const b = 230 + Math.random() * 140, d = 0.7 + Math.random() * 0.5;
+    o.type = 'sawtooth'; o2.type = 'sawtooth'; o.frequency.setValueAtTime(b, t0); o.frequency.linearRampToValueAtTime(b * 1.12, t0 + d * 0.2); o.frequency.linearRampToValueAtTime(b * 0.9, t0 + d); o2.frequency.setValueAtTime(b * 1.008, t0); o2.frequency.linearRampToValueAtTime(b * 0.905, t0 + d);
+    trem.frequency.value = 6 + Math.random() * 3; tg.gain.value = 0.4; vib.gain.value = b * 0.05; trem.connect(tg); tg.connect(mix.gain); trem.connect(vib); vib.connect(o.frequency); vib.connect(o2.frequency); mix.gain.value = 0.65;
+    for (const [fq, q] of [[720, 6], [1750, 8], [2900, 7]]) { const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = fq; f.Q.value = q; o.connect(f); o2.connect(f); f.connect(mix); }
+    env(g, t0, 0.06, 1.2, d); mix.connect(g); g.connect(out);
+    [o, o2, trem].forEach(n => { n.start(t0); n.stop(t0 + d + 0.15); });
   }
   function loudspeaker(x, y, z) {    // distant temple loudspeaker at dawn: a faint, band-limited devotional melody line
     const out = at(x, y, z, 0.12), notes = [0, 2, 4, 5, 4, 2, 0, -1, 0], base = 330, bp = ctx.createBiquadFilter();
@@ -204,7 +228,7 @@ function VillageAmbience(ctx, world) {
   // ---------------- scheduler
   const temples = world.landmarks.filter(l => l.k === 'temple');
   const lakes = (window.NELLUTLA_MAP.lakes || []).map(lk => [lk.reduce((s, p) => s + p[0], 0) / lk.length, lk.reduce((s, p) => s + p[1], 0) / lk.length]);
-  const next = { koel: 6, bird: 1, crow: 4, moo: 12, bark: 8, bell: 5, horn: 6, frog: 3, rooster: 2, roosterDay: 90, cluck: 3, cowbell: 4, bleat: 8, speaker: 10 };
+  const next = { sparrow: 3, parrot: 9, pigeon: 11, koel: 6, bird: 1, crow: 4, moo: 12, bark: 8, bell: 5, horn: 6, frog: 3, rooster: 2, roosterDay: 90, cluck: 3, cowbell: 4, bleat: 8, speaker: 10 };
   const around = (c, r) => [c.x + (Math.random() - 0.5) * 2 * r, 2 + Math.random() * 8, c.z + (Math.random() - 0.5) * 2 * r];
 
   function update(dt, camera, hour, traffic, carSpeed) {
@@ -227,15 +251,21 @@ function VillageAmbience(ctx, world) {
     cicadaG.gain.setTargetAtTime(hour > 10.5 && hour < 16.5 && !inVillage ? 0.006 : 0, ctx.currentTime, 3);
     if ((dawn || (hour > 8 && hour < 11)) && due('koel', 8, 20)) koel(...around(p, 80));
     if (!night && due('bird', dawn ? 0.4 : 1.2, dawn ? 1.5 : 4)) bird(...around(p, 60));
-    if (!night && due('crow', hour < 10 ? 3 : 7, hour < 10 ? 9 : 18)) crow(...around(p, 90));
+    // each species calls from its real flock when one is near (village-life.js), mostly mornings and evenings; else a far-off one
+    const VB = window.VillageBirds, flock = (id, R) => VB ? VB.near(id, p.x, p.z, R) : null, busy = dawn || dusk;
+    if (!night && due('crow', hour < 10 ? 3 : 7, hour < 10 ? 9 : 18)) { const f = flock('crow', 120); f ? crow(f.x, f.y, f.z) : crow(...around(p, 90)); }
+    if (!night && due('sparrow', busy ? 2 : 5, busy ? 6 : 14)) { const f = flock('sparrow', 70); f ? sparrow(f.x, f.y + 1, f.z) : (inVillage && sparrow(...around(p, 40))); }
+    if (!night && due('parrot', busy ? 7 : 16, busy ? 16 : 40)) { const f = flock('parrot', 200); if (f) parrot(f.x, f.y, f.z); }
+    if (!night && hour > 6 && hour < 17 && due('pigeon', 7, 20)) { const f = flock('pigeon', 80); if (f) pigeon(f.x, f.y + 1, f.z); }
+    if (VB && VB.events.length) for (const e of VB.events.splice(0)) { flutter(e.x, e.y, e.z); if (e.kind === 'crow') crow(e.x, e.y + 3, e.z); else if (e.kind === 'parrot') parrot(e.x, e.y + 3, e.z); }
     if (due('bark', night ? 5 : 18, night ? 16 : 45)) { const D = nearestOf(p, a => a.kind === 'dog', 120); if (D.length) { const a = pickOne(D); bark(a.x, 0.5, a.z); } else bark(...around(p, inVillage ? 60 : 160).map((v, i) => i === 1 ? 0.5 : v)); }
     // temple bells at prayer times, louder when close
     if ((dawn || dusk || Math.random() < 0.2) && due('bell', dawn || dusk ? 3 : 10, dawn || dusk ? 7 : 25)) {
       const tp = temples.map(tl => [Math.hypot(tl.x - p.x, tl.z - p.z), tl]).sort((a, b) => a[0] - b[0])[0];
       if (tp && tp[0] < 300) bell(tp[1].x, 4, tp[1].z);
     }
-    // ambient horns ONLY from a real, visible traffic vehicle within 120 m (sfx.js picks and spatialises it); none otherwise
-    if (!night && due('horn', 6, 16) && window.SFX && SFX.ambientHorn) SFX.ambientHorn(p.x, p.z, 120);
+    // ambient horns ONLY from a real traffic vehicle in plain reach within 60 m (sfx.js picks and spatialises it); none otherwise
+    if (!night && due('horn', 14, 32) && window.SFX && SFX.ambientHorn) SFX.ambientHorn(p.x, p.z, 60);
     villageAnimals(p, hour, night, dawn, due);
     if (night && lakes.length && due('frog', 0.6, 2.5)) {
       const lk = lakes.find(c => Math.hypot(c[0] - p.x, c[1] - p.z) < 400);

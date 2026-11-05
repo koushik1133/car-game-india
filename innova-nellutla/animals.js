@@ -52,32 +52,49 @@
     const buf = kind === 'buffalo', bull = kind === 'bull';
     const T = new Kit(), H = new Kit(), Tl = new Kit(), U = new Kit(), Lw = new Kit();
     const bw = buf ? 1.15 : 1, hip = buf ? 0.8 : 0.84;
-    T.ball([0, 1.03, -0.02], [0.32 * bw, 0.33, 0.86], W, 16);                               // barrel
-    T.ball([0, 1.07, 0.36], [0.3 * bw, 0.32, 0.5], W, 12);                                  // chest / withers
-    T.ball([0, 1.1, -0.42], [0.28 * bw, 0.28, 0.46], W, 12);                                // rump / hip bones
-    if (!buf) T.ball([0, 1.36, 0.42], bull ? [0.15, 0.2, 0.2] : [0.11, 0.14, 0.15], W, 8);  // zebu hump
-    if (!buf) T.ball([0, 0.86, 0.78], [0.05, bull ? 0.24 : 0.18, 0.22], 0xf4f1ea, 8);       // dewlap
-    T.ball([0, 0.72, -0.1], [0.08, 0.06, 0.16], buf ? W : 0xf0e6dc, 6);                     // belly / udder
-    // head (pivot at the neck root): neck, skull, muzzle, ears, horns
-    H.tube([0, 0, 0], [0, 0.04, 0.42], buf ? 0.25 : 0.2, buf ? 0.18 : 0.14, W, 10);
-    H.tube([0, 0.08, 0.36], [0, -0.22, 0.72], buf ? 0.16 : 0.14, buf ? 0.11 : 0.085, W, 10);   // face sloping down
-    H.ball([0, 0.06, 0.4], [0.13 * bw, 0.13, 0.14], W, 8);                                    // poll / forehead
-    H.ball([0, -0.25, 0.74], [buf ? 0.11 : 0.085, 0.07, 0.075], buf ? 0x6a6560 : 0x4a3e36, 8); // muzzle
+    // lean zebu frame instead of one big egg: narrow deep chest, tucked flank, hook and pin bones, a spine line. The
+    // coat tint multiplies these greys, so the belly, neck and joints read as form even on a white animal in sun.
+    const SH = buf ? 0xc8c8c8 : 0xcfcabf, SH2 = buf ? 0xa8a8a8 : 0xb4aea3, HOOF = 0x1c1a18;
+    T.ball([0, 1.06, 0.3], [0.235 * bw, 0.33, 0.5], W, 14);                               // ribcage, deep at the brisket
+    T.ball([0, 1.09, -0.08], [0.24 * bw, 0.27, 0.68], W, 14);                               // barrel, drawn up at the flank
+    T.ball([0, 0.86, 0.2], [0.17 * bw, 0.13, 0.42], SH, 10);                                // underline in shade
+    T.ball([0, 1.13, -0.5], [0.215 * bw, 0.25, 0.36], W, 12);                               // rump
+    T.tube([0, 1.36, 0.3], [0, 1.33, -0.62], 0.05, 0.05, W, 6);                             // spine
+    T.tube([0, 1.34, -0.62], [0, 1.16, -0.86], 0.05, 0.035, W, 6);                          // slope to the tail head
     for (const sx of [-1, 1]) {
-      H.ball([sx * 0.115, 0.02, 0.5], [0.025, 0.025, 0.025], 0x0b0b0b, 5);                    // eyes
-      H.ball([sx * (buf ? 0.22 : 0.19), 0.05, 0.4], [0.13, 0.035, 0.06], W, 6, [0, sx * 0.3, sx * -0.4]);   // ears
+      T.ball([sx * 0.14 * bw, 1.25, -0.4], [0.065, 0.06, 0.13], W, 7);                       // hook bone
+      T.ball([sx * 0.09 * bw, 1.17, -0.8], [0.06, 0.07, 0.07], W, 6);                      // pin bone
+      T.ball([sx * 0.17 * bw, 1.0, 0.5], [0.09, 0.26, 0.15], W, 8);                         // shoulder blade
+      T.ball([sx * 0.16 * bw, 1.0, -0.55], [0.1, 0.27, 0.2], W, 8);                         // thigh
+    }
+    if (!buf) {
+      T.ball([0, 1.33, 0.46], bull ? [0.12, 0.27, 0.22] : [0.09, 0.2, 0.17], W, 9, [-0.3, 0, 0]);   // zebu hump leaning back
+      for (let i = 0; i < 4; i++) T.ball([0, 0.92 - i * 0.04 + (i === 0 ? 0.12 : 0), 0.82 - i * 0.14], [0.035, (bull ? 0.25 : 0.19) - i * 0.03, 0.12], SH, 6);   // dewlap: thin hanging sheet
+    } else T.ball([0, 0.8, -0.34], [0.09, 0.07, 0.13], SH2, 7);                             // udder
+    // head (pivot at the neck root): neck, long narrow face, darker muzzle
+    H.tube([0, -0.04, -0.14], [0, 0.04, 0.36], buf ? 0.21 : 0.17, buf ? 0.13 : 0.095, W, 10);
+    H.tube([0, 0.1, 0.34], [0, -0.3, 0.72], buf ? 0.125 : 0.105, buf ? 0.095 : 0.068, W, 9);    // face sloping down
+    H.ball([0, 0.1, 0.34], [0.115 * bw, 0.1, 0.12], W, 8);                                      // poll
+    H.ball([0, -0.31, 0.74], [buf ? 0.1 : 0.075, 0.065, 0.075], buf ? 0x6a6560 : 0x4a3e36, 8);  // muzzle
+    H.ball([0, -0.24, 0.68], [0.078, 0.05, 0.07], SH, 6);
+    for (const sx of [-1, 1]) {
+      H.ball([sx * 0.095, 0.02, 0.5], [0.024, 0.026, 0.026], 0x0b0b0b, 5);                      // eyes
+      H.ball([sx * 0.092, 0.03, 0.49], [0.04, 0.04, 0.05], SH2, 5);                             // dark eye socket
+      H.ball([sx * (buf ? 0.21 : 0.2), 0.02, 0.33], [0.12, 0.028, 0.055], SH, 6, [0, sx * 0.25, sx * -0.5]);   // ears, drooping
       if (buf) {   // crescent horns swept back and down
-        H.tube([sx * 0.1, 0.14, 0.38], [sx * 0.26, 0.16, 0.26], 0.05, 0.04, 0x3a3532, 6);
-        H.tube([sx * 0.26, 0.16, 0.26], [sx * 0.3, 0.1, 0.08], 0.04, 0.015, 0x3a3532, 6);
-      } else {     // zebu: upturned, slightly outward
-        H.tube([sx * 0.08, 0.15, 0.38], [sx * 0.16, 0.36, 0.34], 0.04, bull ? 0.022 : 0.015, 0x9c8f80, 6);
+        H.tube([sx * 0.08, 0.18, 0.32], [sx * 0.28, 0.21, 0.2], 0.05, 0.04, 0x3a3532, 6);
+        H.tube([sx * 0.28, 0.21, 0.2], [sx * 0.34, 0.13, 0.0], 0.04, 0.015, 0x3a3532, 6);
+      } else {     // zebu: long, upturned, slightly outward
+        H.tube([sx * 0.07, 0.18, 0.31], [sx * 0.16, 0.34, 0.27], 0.036, bull ? 0.026 : 0.02, 0x9c8f80, 6);
+        H.tube([sx * 0.16, 0.34, 0.27], [sx * 0.17, 0.52, 0.2], bull ? 0.026 : 0.02, 0.006, 0x4a4238, 6);
       }
     }
     // tail (pivot at the tail head), switch at the tip
-    Tl.tube([0, 0, 0], [0, -0.72, -0.06], 0.035, 0.02, W, 5); Tl.ball([0, -0.8, -0.06], [0.05, 0.12, 0.05], 0x1c1a18, 6);
-    // legs: upper (forearm/gaskin) and lower (cannon + hoof)
-    U.tube([0, 0.06, 0], [0, -0.42, 0], buf ? 0.12 : 0.105, 0.06, W, 8); U.ball([0, 0.02, 0], [buf ? 0.12 : 0.1, 0.16, 0.13], W, 7);   // thigh / shoulder muscle
-    Lw.ball([0, 0, 0], [0.06, 0.06, 0.06], W, 6); Lw.tube([0, 0, 0], [0, -0.36, 0], 0.055, 0.045, W, 6); Lw.add(new THREE.CylinderGeometry(0.05, 0.06, 0.08, 7), 0x1c1a18, [0, -0.4, 0]);
+    Tl.tube([0, 0, 0], [0, -0.72, -0.06], 0.03, 0.015, W, 5); Tl.ball([0, -0.82, -0.06], [0.05, 0.14, 0.05], 0x1c1a18, 6);
+    // legs: muscled top narrowing fast to thin bone, a knee knob, cannon, pastern and split-looking hoof
+    U.ball([0, 0.0, 0], [buf ? 0.095 : 0.08, 0.17, 0.11], W, 7); U.tube([0, 0.04, 0], [0, -0.42, 0], buf ? 0.085 : 0.07, 0.036, W, 8);
+    Lw.ball([0, 0, 0], [0.05, 0.058, 0.055], SH, 6); Lw.tube([0, 0, 0], [0, -0.33, 0], 0.033, 0.028, SH, 6);
+    Lw.ball([0, -0.34, 0], [0.037, 0.035, 0.04], SH2, 5); Lw.add(new THREE.CylinderGeometry(0.036, 0.052, 0.08, 7), HOOF, [0, -0.4, 0.008]);
     const lx = 0.17 * bw;
     return { torso: T.geo(), head: H.geo(), tail: Tl.geo(), upper: U.geo(), lower: Lw.geo(), Lu: 0.42,
       headP: [0, 1.16, 0.74], tailP: [0, 1.2, -0.8], hips: [[-lx, hip, 0.52, 1], [lx, hip, 0.52, 1], [-lx, hip, -0.55, 0], [lx, hip, -0.55, 0]],
@@ -349,6 +366,8 @@
     else if (kind === 'hen') { a.rooster = Math.random() < 0.2; a.scale = a.rooster ? 1.25 : rnd(0.9, 1.0); if (a.rooster) a.coat.setHex(0x9a3a14); }
     sp.list.push(a); all.push(a); return a;
   }
+  // an animal kept in a pen (safehouse2.js back plot): never recycled, stays within r of (x, z)
+  window.PenAnimal = (kind, x, z, r) => { if (!SP || !SP[kind]) return null; const a = spawnAnimal(kind, SP[kind], { x, z, yaw: rnd(-3, 3) }); a.pen = r; return a; };
   function respawnFree(a, p, rMin, rMax) {
     let at = null;
     if (a.kind === 'hen') at = findSpot(byHouse, p, rMin, rMax);
@@ -522,8 +541,9 @@
     const target = Math.min(max, d * 1.2) * (0.25 + 0.75 * facing);
     a.speed += (target - a.speed) * Math.min(1, dt * 3);
     const step = a.speed * dt, nx = a.x + Math.sin(a.yaw) * step, nz = a.z + Math.cos(a.yaw) * step;
+    if (a.pen && Math.hypot(nx - a.home.x, nz - a.home.z) > a.pen) { a.tx = a.home.x; a.tz = a.home.z; a.speed = 0; return 0; }
     tq.x = nx; tq.z = nz; const c = world.collide(tq, a.sp.rig.r * a.scale * 0.8);
-    if ((world.insideBuilding && world.insideBuilding(tq.x, tq.z, 0.1))) { a.stuck = (a.stuck || 0) + dt; a.speed *= 0.5; return 0; }
+    if ((world.yardAt && window.SafeHouse2 && (world.yardAt(tq.x, tq.z) > 0 || world.yardAt(tq.x, tq.z) !== world.yardAt(a.x, a.z))) || (world.insideBuilding && world.insideBuilding(tq.x, tq.z, 0.1))) { a.stuck = (a.stuck || 0) + dt; a.speed *= 0.5; return 0; }
     const moved = Math.hypot(tq.x - a.x, tq.z - a.z);
     if (c && c.hit) a.stuck = (a.stuck || 0) + dt; else a.stuck = 0;
     a.x = tq.x; a.z = tq.z; return moved;
@@ -614,7 +634,7 @@
     // herds add their own animals on top of the free ones
     SP = {
       cow: new Species(cattle.cow, counts.cow + 14), bull: new Species(cattle.bull, counts.bull + 8), buffalo: new Species(cattle.buffalo, counts.buffalo + 8),
-      dog: new Species(dogRig(), counts.dog), cat: new Species(catRig(), counts.cat), goat: new Species(goatRig(), counts.goat + 12), hen: new Species(henRig(), counts.hen),
+      dog: new Species(dogRig(), counts.dog), cat: new Species(catRig(), counts.cat), goat: new Species(goatRig(), counts.goat + 12), hen: new Species(henRig(), counts.hen + 8),
     };
     crowIM = new THREE.InstancedMesh(crowGeo(), new THREE.MeshLambertMaterial({ vertexColors: true }), counts.crow); crowIM.count = 0;   /* own material: no instanceColor */ crowIM.frustumCulled = false; scene.add(crowIM);
     ropeGeo = new THREE.BufferGeometry(); ropeGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(6 * 6), 3));
@@ -740,7 +760,7 @@
     recycleT -= dt;
     if (recycleT < 0) {
       recycleT = 1.0;
-      for (const a of all) if (!a.herd && !a.gone && (a.dead || Math.hypot(a.x - pp.x, a.z - pp.z) > RECYCLE_R)) a.dead = !respawnFree(a, pp, LOD_R + 5, LOD_R + 60);
+      for (const a of all) if (!a.herd && !a.gone && !a.pen && (a.dead || Math.hypot(a.x - pp.x, a.z - pp.z) > RECYCLE_R)) a.dead = !respawnFree(a, pp, LOD_R + 5, LOD_R + 60);
       for (const H of herds) {
         if (H.trip || Math.hypot(H.hp.x - pp.x, H.hp.z - pp.z) < RECYCLE_R) continue;
         const at = pathNear(pp, LOD_R + 5, LOD_R + 70, H.type === 'goats' ? ['dirt', 'lane'] : ['dirt', 'lane', 'cc']);
@@ -866,5 +886,11 @@
   window.VillageProcessions = { spawn: (k) => { if (!k) return procSpawn(); if (k === 'cattle' || k === 'goats') procHerd(k); else if (k === 'walkers') procWalkers(); else procVehicle(k); }, get items() { return PROC.items; }, get state() { return PROC; } };
   GameHooks.init.push(game => { try { build(game); } catch (e) { console.error('animals build failed', e); } });
   GameHooks.update.push((dt, game) => update(dt, game));
-  window.VillageAnimals = { get all() { return all; }, get herds() { return herds; }, get crows() { return crows; }, species: () => SP };
+  // puppets: drawn by the species but moved by their owner (the bullocks in village-life.js); never in `all`
+  function puppet(kind) {
+    const sp = SP[kind], a = spawnAnimal(kind, sp, { x: 0, z: 0 }, 'puppet'); all.splice(all.indexOf(a), 1); a.vis = false;
+    return a;
+  }
+  function puppetWalk(a, dist) { a.phase = (a.phase + dist / (a.sp.rig.stride * 1.6)) % 1; gaitPose(a, 1, false); a.pose.headX = 0.18; }
+  window.VillageAnimals = { puppet, puppetWalk, get all() { return all; }, get herds() { return herds; }, get crows() { return crows; }, species: () => SP };
 })();

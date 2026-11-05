@@ -10,7 +10,7 @@ Inputs (in DATA_DIR, see tools/README.md for how they were fetched):
 World frame: 1 unit = 1 metre, +x = east, +z = south, origin = village junction.
 """
 import base64, csv, io, json, math, random, re, sys
-import numpy as np
+import numpy as npe
 import cv2
 from PIL import Image
 
@@ -440,7 +440,9 @@ def L(name, lat, lon, kind, te=None):
 landmarks = [
     L('Nellutla', 17.7016013, 79.196277, 'village', 'నెల్లుట్ల'),
     L('Shivalayam Temple', 17.7045605, 79.1967879, 'temple', 'శివాలయం'),
-    L('Government Hospital, Nellutla', 17.7041184, 79.1959865, 'hospital'),
+    # 'Government Hospital, Nellutla' (OSM node 6840179595, 17.7041184 N 79.1959865 E) removed 2026-11-03:
+    # the point sits on ordinary houses (ground truth from the user + imagery); no hospital found in Nellutla on
+    # Google Maps either, so no hospital is modelled.
     L('Sub Centre (BC Colony)', 17.7030644, 79.1957805, 'clinic'),
     L('ZPSS School', 17.7012744, 79.1959099, 'school', 'జి.ప.ఉ.పాఠశాల'),
     # Anganwadi 2: the OSM point sits on the lane; moved onto the blue-roof building beside it (mosaic px 2268,1972)

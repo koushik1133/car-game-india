@@ -393,21 +393,25 @@ function mergeCrystaStatic(chassis) {
 // INTERACTIVE CAR CONTROLS
 // ======================================================================
 function toggleDoor(id) {
+  if (typeof Player !== 'undefined' && Player.vehiclePart && Player.vehiclePart('door', id)) return;   // driving something else: its doors, not the Crysta's
   doorStates[id] = doorStates[id] ? 0 : 1;
   playMechanicalClick();
 }
 
 function toggleTrunk() {
+  if (typeof Player !== 'undefined' && Player.vehiclePart && Player.vehiclePart('boot')) return;
   trunkState = trunkState ? 0 : 1;
   playMechanicalClick();
 }
 
 function toggleHood() {
+  if (typeof Player !== 'undefined' && Player.vehiclePart && Player.vehiclePart('hood')) return;
   hoodState = hoodState ? 0 : 1;
   playMechanicalClick();
 }
 
 function toggleSunroof() {
+  if (typeof Player !== 'undefined' && Player.vehiclePart && Player.vehiclePart('sunroof')) return;
   sunroofState = sunroofState ? 0 : 1;
   playMechanicalClick();
 }
@@ -475,11 +479,11 @@ function updateCarAnimations(dt) {
   });
 
   if (cockpitSpeedoNeedle) {
-    const speedRatio = Math.min(1.0, Math.abs(carSpeed) / 200);
+    const speedRatio = Math.min(1.0, window.Drive.speed / 200);
     cockpitSpeedoNeedle.rotation.z = 1.2 - speedRatio * 2.4;
   }
   if (cockpitTachoNeedle) {
-    const rpmRatio = (engineRPM - 800) / 4700;
+    const rpmRatio = (window.Drive.rpm - window.Drive.idle) / Math.max(1, window.Drive.red - window.Drive.idle);
     cockpitTachoNeedle.rotation.z = 1.2 - rpmRatio * 2.4;
   }
 }
@@ -526,13 +530,10 @@ function updateCamera(dt) {
 
     camera.lookAt(carPos.x, carPos.y + 1.1, carPos.z);
   } else if (cameraIndex === 2) {
+    if (window.Cockpit && Cockpit.camera(dt)) return;     // shared cockpit camera, seated in the sprung body
     const offset = new THREE.Vector3(-0.42, 1.35, 0.25).applyAxisAngle(new THREE.Vector3(0, 1, 0), carRot);
     camera.position.copy(carPos).add(offset);
-    const fwd = new THREE.Vector3(Math.sin(carRot) * 30, -0.1, Math.cos(carRot) * 30);
-    camera.lookAt(camera.position.clone().add(fwd));
-
-    const svgWheel = document.getElementById('cockpitWheel');
-    if (svgWheel) svgWheel.style.transform = `rotate(${-steerAngle * 90}deg)`;
+    camera.lookAt(camera.position.x + Math.sin(carRot) * 30, camera.position.y - 0.1, camera.position.z + Math.cos(carRot) * 30);
   } else if (cameraIndex === 3) {
     const offset = new THREE.Vector3(0, 1.20, 1.4).applyAxisAngle(new THREE.Vector3(0, 1, 0), carRot);
     camera.position.copy(carPos).add(offset);
@@ -557,52 +558,69 @@ function snapCameraToCar() {
 // ======================================================================
 
 // ======================================================================
-// SUSPENSION (visual): per-wheel ground following + sprung body (heave / pitch / roll spring-dampers)
-// s: persistent state; g: vehicle group (position at the ground under its centre, rotation.y = heading);
-// body: the sprung Object3D; wheels: [{ obj, x, z, baseY }] in g's local space.
-// o: { dt, speed (m/s), longAcc, latAcc, ground(x,z), rough(x,z) -> amplitude, bike }
+// SUSPENSION (visual; physics untouched): every wheel samples the ground on its own, and a corner spring/damper
+// joins each wheel to a sprung body with heave, pitch and roll. Heights are tracked in WORLD space, so the group's own
+// y (ground under the centre, which jumps as the centre crosses a hump) never kicks the body.
+// s: persistent state; g: vehicle group (rotation.y = heading); body: sprung Object3D; wheels: [{ obj, x, z, baseY }].
+// o: { dt, speed (m/s), longAcc, latAcc, ground(x,z), rough(x,z), bike, pitchK, rollK, w (rad/s), zeta, travel (m) }
+// Results for the cameras and audio: s.dh (body height over the group), s.p, s.r, s.acc (vertical m/s2 of the body),
+// s.comp (0..1 worst corner compression), s.hit (strongest wheel strike since last read, m/s).
 // ======================================================================
 window.VehicleSuspension = (function () {
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  const noise = (x, z) => Math.sin(x * 3.1 + z * 1.7) * 0.5 + Math.sin(x * 7.3 - z * 5.9) * 0.3 + Math.sin(x * 13.7 + z * 11.1) * 0.2;
-  function dof(s, k, target, w, zeta, dt) {
-    const v = s[k + 'v'] || 0, x = s[k] || 0;
-    const a = w * w * (target - x) - 2 * zeta * w * v;
-    s[k + 'v'] = v + a * dt; s[k] = x + s[k + 'v'] * dt;
+  // chatter (short wavelengths) + slow undulation (5-9 m), both fixed to the ground
+  const noise = (x, z) => Math.sin(x * 3.1 + z * 1.7) * 0.32 + Math.sin(x * 7.3 - z * 5.9) * 0.2 + Math.sin(x * 13.7 + z * 11.1) * 0.12
+    + Math.sin(x * 0.83 - z * 1.1) * 0.75 + Math.sin(x * 1.37 + z * 0.71) * 0.55;
+  const BUMP = 1.25, REBOUND = 1.35, STOP = 7, SUB = 1 / 150;          // dampers: a sharp edge kicks the body (felt, more than a soft real damper would), firm rebound; bump stop
+  // stiffer vehicles get more damping and less travel, so a new row in the player.js table needs only its w
+  const zetaOf = w => clamp(0.22 + (w - 6) * 0.03, 0.22, 0.46), travelOf = (w, bike) => clamp((bike ? 0.19 : 0.17) - w * 0.0065, 0.06, 0.13);
+  function init(s, g, wheels, base) {
+    let n = wheels.length, zm = 0, xm = 0; wheels.forEach(w => { zm += w.z; xm += w.x; }); zm /= n; xm /= n;
+    let zz = 0, xx = 0; wheels.forEach(w => { w.dz = w.z - zm; w.dx = w.x - xm; zz += w.dz * w.dz; xx += w.dx * w.dx; w.wy = undefined; });
+    s.zz = Math.max(zz, 0.2); s.xx = xx; s.h = base; s.hv = 0; s.p = 0; s.pv = 0; s.r = 0; s.rv = 0; s.ok = true; s.hit = 0; s.acc = 0; s.dh = 0; s.comp = 0;
   }
   function step(s, g, body, wheels, o) {
     const dt = Math.min(o.dt, 1 / 30); if (dt <= 0 || !wheels.length) return;
-    const r = g.rotation.y, c = Math.cos(r), sn = Math.sin(r), base = g.position.y;
-    let zf = 0, zr = 0, nf = 0, nr = 0, xl = 0, xr = 0, nl = 0, nrr = 0, front = 0, rear = 0, left = 0, right = 0, sum = 0;
-    let zMid = 0; wheels.forEach(w => zMid += w.z); zMid /= wheels.length;
-    const sp = Math.abs(o.speed || 0);
+    const yaw = g.rotation.y, c = Math.cos(yaw), sn = Math.sin(yaw), base = g.position.y, n = wheels.length;
+    if (!s.ok || Math.abs(base - s.h) > 1.2) init(s, g, wheels, base);          // first frame / teleport
+    const sp = Math.abs(o.speed || 0), w0 = o.w || 9, zeta = o.zeta || zetaOf(w0), trav = o.travel || travelOf(w0, o.bike);
+    const pT = clamp(-(o.longAcc || 0) * (o.pitchK || 0.005), -0.05, 0.05), rT = o.bike ? 0 : clamp((o.latAcc || 0) * (o.rollK || 0.008), -0.07, 0.07);
+    const fade = Math.min(1, sp / 5);
     for (const w of wheels) {
       const wx = g.position.x + w.x * c + w.z * sn, wz = g.position.z - w.x * sn + w.z * c;
-      let h = o.ground(wx, wz) - base;
+      let h = o.ground(wx, wz);
       const amp = o.rough ? o.rough(wx, wz) : 0;
-      if (amp) h += noise(wx, wz) * amp * Math.min(1, sp / 6);
-      h = clamp(h, -0.15, 0.3);
-      // the tyre follows the ground almost rigidly (tiny unsprung lag so a bund edge reads as a hop)
-      w.off = w.off === undefined ? h : w.off + (h - w.off) * Math.min(1, dt * 45);
-      if (w.obj) w.obj.position.y = w.baseY + w.off;
-      sum += w.off;
-      if (w.z >= zMid) { front += w.off; nf++; zf += w.z; } else { rear += w.off; nr++; zr += w.z; }
-      if (w.x > 0.05) { right += w.off; nrr++; xr += w.x; } else if (w.x < -0.05) { left += w.off; nl++; xl += w.x; }
+      if (amp) h += noise(wx, wz) * amp * fade;
+      if (w.wy === undefined) { w.wy = h; w.wv = 0; }
+      // unsprung mass: the tyre tracks the ground closely but not instantly, so a kerb reads as a hop
+      const prev = w.wy; w.wy += (h - w.wy) * Math.min(1, dt * 60);
+      w.wv = (w.wy - prev) / dt;
+      if (Math.abs(w.wv) > (s.hit || 0)) s.hit = Math.abs(w.wv);
+      if (w.obj) w.obj.position.y = w.baseY + clamp(w.wy - base, -0.4, 0.5);
     }
-    const heaveT = sum / wheels.length;
-    let pitchT = 0, rollT = 0;
-    if (nf && nr) { const wb = Math.max(0.5, zf / nf - zr / nr); pitchT = -(front / nf - rear / nr) / wb; }
-    if (nl && nrr && !o.bike) { const tr = Math.max(0.3, xr / nrr - xl / nl); rollT = (right / nrr - left / nl) / tr; }
-    pitchT += clamp(-(o.longAcc || 0) * (o.pitchK || 0.005), -0.045, 0.045);            // dive under braking, squat on throttle
-    if (!o.bike) rollT += clamp((o.latAcc || 0) * (o.rollK || 0.008), -0.06, 0.06); // body rolls out of the corner
-    const w = o.w || 9, z = o.zeta || 0.32;                                            // ~1.4 Hz, underdamped: visible settle
-    dof(s, 'h', heaveT, w * 1.2, z, dt); dof(s, 'p', pitchT, w, z, dt); dof(s, 'r', rollT, w, z, dt);
-    s.h = clamp(s.h, heaveT - 0.09, heaveT + 0.09); s.p = clamp(s.p, -0.12, 0.12); s.r = clamp(s.r, -0.12, 0.12);
-    body.position.y = (body.userData.baseY || 0) + s.h;
+    const hv0 = s.hv;
+    const steps = Math.min(5, Math.ceil(dt / SUB)), h = dt / steps, W2 = w0 * w0, C = 2 * zeta * w0;
+    let comp = 0;
+    for (let k = 0; k < steps; k++) {
+      let aH = 0, aP = 0, aR = 0;
+      for (const w of wheels) {
+        // spring deflection at this corner: + = compressed
+        const d = w.wy - (s.h - (s.p - pT) * w.dz + (s.r - rT) * w.dx), dv = w.wv - (s.hv - s.pv * w.dz + s.rv * w.dx);
+        let F = W2 * d + C * dv * (dv > 0 ? BUMP : REBOUND);
+        if (Math.abs(d) > trav) F += W2 * STOP * (d - Math.sign(d) * trav);   // run out of travel: the stop bites
+        if (d > comp) comp = d;
+        aH += F; aP -= F * w.dz; aR += F * w.dx;
+      }
+      s.hv += aH / n * h; s.pv += aP / s.zz * h; if (s.xx > 0.01 && !o.bike) s.rv += aR / s.xx * h;
+      s.h += s.hv * h; s.p += s.pv * h; s.r += s.rv * h;
+    }
+    s.p = clamp(s.p, -0.16, 0.16); s.r = clamp(s.r, -0.14, 0.14); s.h = clamp(s.h, base - 0.3, base + 0.35);
+    s.acc = (s.hv - hv0) / dt; s.dh = s.h - base; s.comp = clamp(comp / trav, 0, 1);
+    body.position.y = (body.userData.baseY || 0) + s.dh;
     body.rotation.x = s.p; body.rotation.z = s.r;
   }
-  // which surfaces shake the tyres, and how much (m)
-  const ROUGH = { dirt: 0.022, field: 0.035, river: 0.03, lane: 0.006 };
+  // which surfaces shake the tyres, and how much (m): rutted earth and mud most, good tar barely
+  const ROUGH = { dirt: 0.04, field: 0.06, river: 0.05, lane: 0.014, cc: 0.008, tar: 0.005, highway: 0.002 };
   function roughAt(x, z) { try { return ROUGH[world.surfaceAt(x, z)] || 0; } catch (e) { return 0; } }
-  return { step, roughAt };
+  return { step, roughAt, zetaOf, travelOf };
 })();

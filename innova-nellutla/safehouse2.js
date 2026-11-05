@@ -12,7 +12,7 @@
 // with gold fleur-de-lis / scrolls / rosettes and an arched top, cream piers with purple caps, pedestrian gate with a
 // red/yellow step, hibiscus, croton, oleander, bougainvillea arch, small Indian flag at the corner.
 //
-// Controls (same as v1): gate opens on approach in a vehicle or E on foot; front door E; store a vehicle in a slot
+// Controls (same as v1): gate opens on approach in a vehicle, only E on foot; front door E; store a vehicle in a slot
 // with E (saved to localStorage 'nellutla.safehouse2'); bed E = sleep + save; wardrobe E.
 (function () {
   'use strict';
@@ -21,18 +21,23 @@
   // ---------------------------------------------------------------- frame
   // Same axes as the old v1 frame (a along the lane ENE, b into the plot SSE), origin moved 14 m along the lane from
   // v1's front-west corner (38.8,-272.2) so the plot (a -19.5 .. -1.1) now covers map building #317, the real house,
-  // with its east wall 0.5 m clear of lane se_ns and the front wall facing lane east_diag.
+  // with the front wall facing lane east_diag.
   const UX = 13.2 / 14.857, UZ = 6.8 / 14.857;
-  // the house sits 1.5 m further back than the first cut (more courtyard in front); the front wall stays on the lane
-  const SET = 1.5;
+  // the house sits 1.8 m further back than the first cut (more courtyard in front); the front wall stays on the lane
+  const SET = 1.8;
   const O = { x: 38.8 + 14 * UX - SET * UZ, z: -272.2 + 14 * UZ + SET * UX };
   // the generic footprint #317 is also dropped by nellutla-map/tools/map_fixes.json; keep this for older map data
   (window.NELLUTLA_EXCLUDE = window.NELLUTLA_EXCLUDE || []).push({ x: 42.4, z: -263.0, r: 4 });
+  (window.NELLUTLA_FLAT = window.NELLUTLA_FLAT || []).push({ x: 42.4, z: -263.0, r: 19 }, { x: 28, z: -243, r: 15 }, { x: 36, z: -247, r: 15 });   // the rolling land stays out of the plot
   const NX = -UZ, NZ = UX;
   const TH = Math.atan2(-UZ, UX);
   const W = (a, b) => ({ x: O.x + a * UX + b * NX, z: O.z + a * UZ + b * NZ });
   const L = (x, z) => { const dx = x - O.x, dz = z - O.z; return { a: dx * UX + dz * UZ, b: dx * NX + dz * NZ }; };
-  const YARD = { a0: -19.5, a1: -1.1, b0: -2.8 - SET, b1: 14 };
+  const YARD = { a0: -19.5, a1: -1.1, b0: -2.8 - SET - 0.6, b1: 18.5 };   // front wall 0.6 m toward the road (more would stand in the lane at the east corner)
+  // the back plot: gate in the middle of the back wall, steps down, a walled plot at ground level (sketch 86)
+  const RG = [-11.4, -9.2], PLOT = { b1: 31.6 };
+  const KIT = { a0: -12.8, a1: -8.2, b0: 12.91, b1: 16.38 }, KD = [-10.9, -9.9], RD = [-12.4, -11.2];   // kitchen in the rear wing, its door; door in the back plot's end wall
+  const HK = [-10.5, -9.4];
   const HALL = { a0: -14, a1: -6.8, b0: 3.0, b1: 12.8 };
 
   // ---------------------------------------------------------------- state
@@ -143,7 +148,8 @@
     x.fillStyle = '#ff9933'; x.fillRect(0, 0, 96, 22); x.fillStyle = '#ffffff'; x.fillRect(0, 21, 96, 22); x.fillStyle = '#138808'; x.fillRect(0, 42, 96, 22);
     x.strokeStyle = '#000080'; x.lineWidth = 1.5; x.beginPath(); x.arc(48, 32, 8, 0, Math.PI * 2); x.stroke();
   });
-  const tvTex = () => canvasTex(64, 36, (x) => { const gr = x.createLinearGradient(0, 0, 64, 36); gr.addColorStop(0, '#1d3d6b'); gr.addColorStop(1, '#5a2a68'); x.fillStyle = gr; x.fillRect(0, 0, 64, 36); });
+  const tvTex = () => canvasTex(256, 144, (x) => { const gr = x.createLinearGradient(0, 0, 0, 144); gr.addColorStop(0, '#6fb2dc'); gr.addColorStop(0.55, '#f0d9a8'); gr.addColorStop(0.56, '#3f8a3e'); gr.addColorStop(1, '#2c6330'); x.fillStyle = gr; x.fillRect(0, 0, 256, 144);   // a cricket ground on the news
+      x.fillStyle = '#c9a877'; x.fillRect(116, 92, 24, 46); x.fillStyle = '#b3261e'; x.fillRect(0, 124, 256, 20); x.fillStyle = '#fff'; x.font = 'bold 13px sans-serif'; x.fillText('LIVE  IND 212/3  (34.2)', 8, 139); });
 
   // ---------------------------------------------------------------- colliders
   const cols = [];
@@ -158,13 +164,14 @@
   const C = {
     cream: '#efdcae', creamDk: '#d9c48f', white: '#f6f4ec', grey: '#4b4b4d', greyMid: '#8a8b88', cornice: '#9a9b97',
     aub: '#4e2340', aubDk: '#3a1830', lilac: '#b9a2c9', lilacDk: '#9e86b0', wood: '#6b3f22', woodDk: '#43281a',
-    red: '#b8352a', yellow: '#e3b836', black: '#151515', glass: '#2a3238', plinth: '#8c8478', sheet: '#a9aca6',
+    red: '#b8352a', yellow: '#e3b836', black: '#151515', glass: '#2a3238', plinth: '#efdcae', sheet: '#a9aca6',
     green: '#3f7a2c', green2: '#2f6324', croton: '#b6c43a', hib: '#d4202a', oleander: '#f08cb8', bougain: '#d2287a', floor: '#d8cfc0',
   };
+  const YARD_H = 0.85;   // yard and house stand this far above the road: world.yardAt, all of root rides on it
   const FLOOR = 0.12, ROOF = 3.3, T = 0.23;
 
   function build() {
-    root = new THREE.Group(); root.position.set(O.x, 0, O.z); root.rotation.y = TH; root.name = 'safehouse2';
+    root = new THREE.Group(); root.position.set(O.x, YARD_H, O.z); root.rotation.y = TH; root.name = 'safehouse2';
     const B = Builder(), edges = [];
     const E = (a0, y0, b0, a1, y1, b1) => edges.push(a0, y0, b0, a1, y1, b1);
     const edgeBox = (a0, a1, y0, y1, b0, b1) => {
@@ -201,9 +208,10 @@
         b = g1;
       }
     };
-    const DOOR = [-8.8, -7.8];
+    const DOOR = [-8.95, -7.75];                      // 1.2 m clear: the walker (r 0.4) passes without scraping the frame
     wallA(3.0, -14, -6.8, [[-13.2, -12.0, 0.9, 2.1], [-11.2, -10.2, 0.9, 2.1], DOOR.concat([0, 2.2])], C.cream);
-    wallA(12.8, -14, -6.8, [[-12, -11, 0.9, 2.1], [-9, -8, 0.9, 2.1]], C.cream);
+    wallA(12.8, -14, -6.8, [[-12, -11, 0.9, 2.1], [HK[0], HK[1], 0, 2.2], [-9, -8, 0.9, 2.1]], C.cream);   // HK: open doorway, hall to kitchen
+    B.box(HK[0] - 0.08, HK[0], FLOOR, 2.28, 12.65, 12.95, C.woodDk); B.box(HK[1], HK[1] + 0.08, FLOOR, 2.28, 12.65, 12.95, C.woodDk); B.box(HK[0] - 0.08, HK[1] + 0.08, 2.2, 2.28, 12.65, 12.95, C.woodDk);
     wallB(-6.8, 3.0, 12.8, [[4.4, 5.4, 0.9, 2.1], [9.8, 10.8, 0.9, 2.1]], C.cream);
     wallA(8.0, -14, -6.9, [[-11, -9.9, 0, 2.2]], '#f3ead4');                         // partition: front room | bedroom
     // brown wooden windows (frame + shutters + bars)
@@ -322,7 +330,7 @@
     B.geo(new THREE.CylinderGeometry(0.55, 0.55, 1.05, 16), -12.5, PY + 1.9, 11.2, 0, 0, 0, '#1b1b1b');
 
     // ================= compound wall: front (cream, wavy scalloped top + black iron rods), lilac side wall
-    const WB = YARD.b0, PG = [-9.7, -8.6], MG = [-6.3, -2.2];
+    const WB = YARD.b0, PG = [-10.2, -8.6], MG = [-6.3, -2.2]; MG_ = MG;
     function pier(a, w, h, capColor) { B.box(a - w, a + w, 0, h, WB - w, WB + w, C.cream); B.box(a - w - 0.05, a + w + 0.05, h, h + 0.12, WB - w - 0.05, WB + w + 0.05, capColor); col(a - w, a + w, WB - w, WB + w); }
     function wavy(a0, a1) {
       const n = 12;
@@ -344,16 +352,73 @@
     // lilac side walls (west + east) and plain back wall
     const lil = (a0, a1, b0, b1, color, colDk) => { B.box(a0, a1, 0, 0.3, b0 - 0.02, b1 + 0.02, '#7d766c'); B.box(a0, a1, 0.3, 1.8, b0, b1, color); B.box(a0 - 0.03, a1 + 0.03, 1.8, 1.88, b0 - 0.03, b1 + 0.03, colDk); col(a0, a1, b0, b1); };
     lil(YARD.a0 - 0.11, YARD.a0 + 0.11, WB, YARD.b1, C.lilac, C.lilacDk);
-    lil(YARD.a0, YARD.a1, YARD.b1 - 0.11, YARD.b1 + 0.11, C.cream, C.creamDk);
-    // east side wall (along lane se_ns): the plot is fully enclosed, a car only gets in through the main gate
+    // red plinth strip at the foot of the front wall, along the road (photo 40) and a dressed stone base at the corner (42)
+    B.box(-19.4, MG[0] - 0.3, -YARD_H, -YARD_H + 0.11, WB - 0.36, WB - 0.14, '#a5392c');
+    for (let b = WB; b < YARD.b1 - 0.5; b += 1.15) for (let r = 0; r < 2; r++) { const t = 0.5 + 0.07 * ((b * 7 + r * 3 | 0) % 3); B.box(YARD.a1 + 0.1, YARD.a1 + 0.16, r * 0.3, r * 0.3 + 0.29, b + (r ? 0.5 : 0), Math.min(b + 1.1 + (r ? 0.5 : 0), YARD.b1), `rgb(${t * 200 | 0},${t * 190 | 0},${t * 170 | 0})`); }
+    lil(YARD.a0, RG[0] - 0.25, YARD.b1 - 0.11, YARD.b1 + 0.11, C.cream, C.creamDk); lil(RG[1] + 0.25, YARD.a1, YARD.b1 - 0.11, YARD.b1 + 0.11, C.cream, C.creamDk);
+    // east side wall: the plot is fully enclosed, a car only gets in through the main gate
     lil(YARD.a1 - 0.11, YARD.a1 + 0.11, WB, YARD.b1, C.lilac, C.lilacDk);
+    // rear wing: the house carries on to the back, same walls, windows and parapet; the bay behind the car porch stays open
+    { const RW = { a0: -19.3, a1: -6.8, b0: 12.8, b1: 16.6 }; B.box(RW.a0, RW.a1, 0, FLOOR, RW.b0, RW.b1, C.cream); B.box(RW.a0, KIT.a0, FLOOR, ROOF, RW.b0, RW.b1, C.cream); col(RW.a0, KIT.a0, RW.b0, RW.b1); B.box(KIT.a1, RW.a1, FLOOR, ROOF, RW.b0, RW.b1, C.cream); col(KIT.a1, RW.a1, RW.b0, RW.b1);
+      // the kitchen fills the middle of the wing; its door to the back yard stands where the window was
+      for (const [a0, a1] of [[KIT.a0, KD[0]], [KD[1], KIT.a1]]) { B.box(a0, a1, FLOOR, ROOF, KIT.b1, RW.b1, C.cream); col(a0, a1, KIT.b1, RW.b1); }
+      B.box(KD[0], KD[1], 2.25, ROOF, KIT.b1, RW.b1, C.cream);
+      B.box(RW.a0 - 0.12, RW.a1 + 0.12, ROOF, ROOF + 0.15, RW.b0, RW.b1 + 0.12, '#c9c2b4'); B.box(RW.a0 - 0.12, RW.a1 + 0.12, ROOF + 0.15, ROOF + 0.75, RW.b1 - 0.03, RW.b1 + 0.12, C.white); B.box(RW.a1 - 0.03, RW.a1 + 0.12, ROOF + 0.15, ROOF + 0.75, RW.b0, RW.b1 + 0.12, C.white); B.box(RW.a0 - 0.12, RW.a0 + 0.03, ROOF + 0.15, ROOF + 0.75, RW.b0, RW.b1 + 0.12, C.white);
+      edgeBox(RW.a0, RW.a1, 0, ROOF, RW.b0, RW.b1);
+      for (const [a0, a1] of [[-18, -17], [-14.5, -13.5]]) winA(RW.b1, a0, a1, 0.9, 2.1, 1);
+      B.box(KD[0] - 0.1, KD[0], FLOOR, 2.33, KIT.b1 - 0.02, RW.b1 + 0.03, C.woodDk); B.box(KD[1], KD[1] + 0.1, FLOOR, 2.33, KIT.b1 - 0.02, RW.b1 + 0.03, C.woodDk); B.box(KD[0] - 0.1, KD[1] + 0.1, 2.25, 2.33, KIT.b1 - 0.02, RW.b1 + 0.03, C.woodDk);
+      B.box(KD[0] - 0.3, KD[1] + 0.3, 0, 0.07, RW.b1, RW.b1 + 0.6, '#b9ad98'); B.box(KD[0] - 0.4, KD[1] + 0.4, 2.42, 2.5, RW.b1, RW.b1 + 0.55, C.wood);
+      winB(RW.a1, 13.6, 14.6, 0.9, 2.1, 1); B.box(-16, -15, FLOOR, 2.1, RW.b1, RW.b1 + 0.05, C.wood); B.box(-16.1, -14.9, ROOF - 1.05, ROOF - 0.98, RW.b1, RW.b1 + 0.6, C.wood); }
+    // kitchen (photo 92's window became its door): tiled floor and dado, L-shaped granite counter, gas stove and cylinder, steel sink, shelf of vessels, fridge
+    { const K = KIT, F = FLOOR, CE = -10.7, ct = '#2f2d2c', st = '#c9ccd0', top = 0.86, D = 0.6;
+      for (let a = K.a0, i = 0; a < K.a1 - 0.01; a += 0.5, i++) for (let b = K.b0, j = 0; b < K.b1 - 0.01; b += 0.5, j++) B.box(a, Math.min(a + 0.49, K.a1), F, F + 0.012, b, Math.min(b + 0.49, K.b1), (i + j) & 1 ? '#d9d4c6' : '#b9b3a2');
+      B.box(K.a0, K.a1, F, 1.5, K.b0 - 0.005, K.b0 + 0.008, '#e9efe9'); B.box(K.a0, K.a0 + 0.01, F, 1.5, K.b0, K.b1, '#e9efe9'); B.box(K.a1 - 0.01, K.a1, F, 1.5, K.b0, K.b1, '#e9efe9');
+      B.box(K.a0 + D, CE, F, top, K.b0, K.b0 + D, '#7a5a3e'); B.box(K.a0, K.a0 + D, F, top, K.b0, K.b1 - 0.1, '#7a5a3e');          // cabinets
+      B.box(K.a0, CE, top, top + 0.04, K.b0, K.b0 + D + 0.03, ct); B.box(K.a0, K.a0 + D + 0.03, top, top + 0.04, K.b0, K.b1 - 0.1, ct);   // granite top
+      for (let a = K.a0 + D + 0.3; a < CE - 0.5; a += 0.6) B.box(a, a + 0.54, F + 0.1, top - 0.08, K.b0 + D, K.b0 + D + 0.01, '#8a6848');
+      col(K.a0, CE, K.b0, K.b0 + D); col(K.a0, K.a0 + D, K.b0, K.b1 - 0.1);
+      // gas stove on the west arm, red cylinder standing beside the counter
+      { const a = K.a0 + 0.3, b = K.b0 + 1.7; B.box(a - 0.26, a + 0.26, top + 0.04, top + 0.1, b - 0.38, b + 0.38, '#1b1b1d'); for (const q of [-0.18, 0.18]) { B.geo(new THREE.CylinderGeometry(0.09, 0.09, 0.02, 12), a, top + 0.11, b + q, 0, 0, 0, '#3a3a3c'); } B.geo(new THREE.CylinderGeometry(0.11, 0.09, 0.14, 12), a, top + 0.19, b - 0.18, 0, 0, 0, st); B.geo(new THREE.CylinderGeometry(0.13, 0.13, 0.1, 12), a, top + 0.17, b + 0.18, 0, 0, 0, '#3b3532'); }
+      B.geo(new THREE.CylinderGeometry(0.16, 0.16, 0.62, 12), K.a0 + D + 0.2, F + 0.31, K.b1 - 0.3, 0, 0, 0, '#b3261e'); B.geo(new THREE.CylinderGeometry(0.05, 0.08, 0.1, 8), K.a0 + D + 0.2, F + 0.67, K.b1 - 0.3, 0, 0, 0, '#8f1c16');
+      // steel sink and tap under the window on the north arm
+      { const a = -11.5, b = K.b0 + 0.3; B.box(a - 0.32, a + 0.32, top + 0.04, top + 0.05, b - 0.2, b + 0.2, '#e0e2e4'); B.box(a - 0.26, a + 0.26, top + 0.046, top + 0.052, b - 0.15, b + 0.15, '#74787c'); B.geo(new THREE.CylinderGeometry(0.012, 0.012, 0.2, 6), a, top + 0.14, b - 0.17, 0, 0, 0, st); B.box(a - 0.012, a + 0.012, top + 0.23, top + 0.25, b - 0.17, b - 0.04, st); }
+      // shelf with steel vessels on the west wall, plates rack, water pot
+      B.box(K.a0, K.a0 + 0.26, 1.72, 1.76, K.b0 + 0.9, K.b1 - 0.2, '#7a5a3e');
+      for (let i = 0; i < 6; i++) B.geo(new THREE.CylinderGeometry(0.09 - (i % 3) * 0.01, 0.1, 0.17 + (i % 3) * 0.05, 10), K.a0 + 0.13, 1.76 + (0.17 + (i % 3) * 0.05) / 2, K.b0 + 1.05 + i * 0.36, 0, 0, 0, st);
+      B.geo(new THREE.SphereGeometry(0.15, 10, 8), -10.95, top + 0.19, K.b0 + 0.3, 0, 0, 0, '#a86b33');
+      // fridge in the east corner
+      B.box(K.a1 - 0.72, K.a1 - 0.04, F, 1.75, K.b0 + 0.05, K.b0 + 0.75, '#d8dadc'); B.box(K.a1 - 0.725, K.a1 - 0.7, 1.15, 1.16, K.b0 + 0.05, K.b0 + 0.75, '#70757a'); B.box(K.a1 - 0.74, K.a1 - 0.72, 0.75, 1.05, K.b0 + 0.66, K.b0 + 0.69, '#70757a'); col(K.a1 - 0.72, K.a1 - 0.04, K.b0 + 0.05, K.b0 + 0.75);
+      B.box(K.a0 + 1.6, K.a0 + 2.4, ROOF - 0.05, ROOF - 0.03, 14.4, 14.5, '#fbfbf2'); }
+    // car porch over the car bay: an RCC slab tied into the house roof at the same level, on the house side and on two
+    // cream pillars along the east wall, so the whole width from the gate stays open to drive under
+    { const CP = { a0: -6.6, a1: -1.2, b0: 4.9, b1: 11.9 };
+      B.box(CP.a0, CP.a1, ROOF, ROOF + 0.15, CP.b0, CP.b1, '#c9c2b4'); edgeBox(CP.a0, CP.a1, ROOF, ROOF + 0.15, CP.b0, CP.b1);
+      B.box(CP.a0, CP.a1, ROOF - 0.02, ROOF - 0.01, CP.b0, CP.b1, '#f6eed6');
+      B.box(CP.a0, CP.a1, ROOF + 0.15, ROOF + 0.4, CP.b0 - 0.08, CP.b0 + 0.08, C.white);                         // parapet
+      B.box(CP.a1 - 0.08, CP.a1 + 0.08, ROOF + 0.15, ROOF + 0.4, CP.b0, CP.b1, C.white); B.box(CP.a0, CP.a1, ROOF + 0.15, ROOF + 0.4, CP.b1 - 0.08, CP.b1 + 0.08, C.white);
+      for (const b of [CP.b0 + 0.2, CP.b1 - 0.2]) { B.box(CP.a1 - 0.36, CP.a1 - 0.06, 0, ROOF, b - 0.15, b + 0.15, C.cream); B.box(CP.a1 - 0.42, CP.a1, 0, 0.32, b - 0.21, b + 0.21, C.plinth); col(CP.a1 - 0.36, CP.a1 - 0.06, b - 0.15, b + 0.15); edgeBox(CP.a1 - 0.36, CP.a1 - 0.06, 0.32, ROOF, b - 0.15, b + 0.15); }
+      B.box(CP.a1 - 0.36, CP.a1 - 0.06, ROOF - 0.32, ROOF, CP.b0, CP.b1, C.cream);                               // beam between the pillars
+      B.box(CP.a0, CP.a1, ROOF - 0.26, ROOF, CP.b0 - 0.06, CP.b0 + 0.06, C.cream); }
     // courtyard: red/yellow checkerboard tiles, apron to the lane
-    for (let a = -6.65; a < YARD.a1 - 0.2; a += 0.6) for (let b = WB + 0.25; b < YARD.b1 - 0.2; b += 0.6) tile(a, b, 0.6, 0.03, ((Math.round(a / 0.6) + Math.round(b / 0.6)) & 1) ? C.red : C.yellow);
-    B.box(MG[0], MG[1], 0, 0.04, WB - 1.5, WB + 0.1, '#bdb8ae');
+    for (let a = -6.65; a < YARD.a1 - 0.2; a += 0.6) for (let b = WB + 5.1; b < YARD.b1 - 0.2; b += 0.6) tile(a, b, 0.6, 0.03, ((Math.round(a / 0.6) + Math.round(b / 0.6)) & 1) ? C.red : C.yellow);
+    // raised plot: earth slab, retaining walls, the ramp through the main gate (height = world.yardAt), steps at the pedestrian gate
+    { const RA0 = -7.4, RA1 = YARD.a1, RB = WB + 5, RET = C.cream;
+      B.box(YARD.a0, RA0, -YARD_H, 0.015, WB, YARD.b1, '#9c9077'); B.box(RA0, RA1, -YARD_H, 0.015, RB, YARD.b1, '#9c9077');
+      for (const [a0, a1] of [[YARD.a0 - 0.12, PG[0] - 0.2], [PG[1] + 0.2, MG[0] - 0.25], [MG[1] + 0.25, YARD.a1 + 0.12]]) B.box(a0, a1, -YARD_H, 0, WB - 0.14, WB + 0.14, RET);
+      for (const a of MG) B.box(a - 0.25, a + 0.25, -YARD_H, 0, WB - 0.25, WB + 0.25, C.cream);
+      for (const a of PG) B.box(a - 0.2, a + 0.2, -YARD_H, 0, WB - 0.2, WB + 0.2, C.cream);
+      for (const a of [YARD.a0, YARD.a1]) B.box(a - 0.13, a + 0.13, -YARD_H, 0, WB, YARD.b1 + 0.12, RET);
+      B.box(YARD.a0, RG[0] - 0.25, -YARD_H, 0, YARD.b1 - 0.13, YARD.b1 + 0.13, RET); B.box(RG[1] + 0.25, YARD.a1, -YARD_H, 0, YARD.b1 - 0.13, YARD.b1 + 0.13, RET);
+      const N = 11, M = 8, Rp = [], Rc = [], cc = new THREE.Color(); for (let i = 0; i < N; i++) for (let j = 0; j < M; j++) { const a0 = RA0 + (RA1 - RA0) * i / N, a1 = RA0 + (RA1 - RA0) * (i + 1) / N, b0 = WB + (RB - WB) * j / M, b1 = WB + (RB - WB) * (j + 1) / M;
+        const y = (a, b) => { const q = W(a, b); return world.yardAt(q.x, q.z) - YARD_H + 0.012; }, P0 = [a0, y(a0, b0), b0], P1 = [a1, y(a1, b0), b0], P2 = [a1, y(a1, b1), b1], P3 = [a0, y(a0, b1), b1];
+        for (const q of [P0, P2, P1, P0, P3, P2]) { Rp.push(q[0], q[1], q[2]); cc.set(((i + j) & 1) ? C.red : C.yellow); Rc.push(cc.r, cc.g, cc.b); } }
+      const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(Rp, 3)); rg.setAttribute('color', new THREE.Float32BufferAttribute(Rc, 3)); rg.computeVertexNormals();
+      root.add(new THREE.Mesh(rg, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+      B.box(MG[0], MG[1], -YARD_H, -YARD_H + 0.075, WB - 1.0, WB + 0.02, '#bdb8ae');
+      for (let i = 0; i < 3; i++) B.box(PG[0] + 0.02, PG[1] - 0.02, -YARD_H, -YARD_H + 0.2 * (i + 1), WB - 0.85 + i * 0.28, WB, '#b9ad98'); }
     // front path from the pedestrian gate to the porch + red/yellow step
     B.box(PG[0], PG[1], 0, 0.035, WB, -1.2, '#b9ad98');
-    B.box(PG[0], PG[1], 0, 0.09, WB - 0.75, WB - 0.15, C.yellow); B.box(PG[0], PG[1], 0.09, 0.16, WB - 0.45, WB - 0.15, C.red);
-    // slot markings
+        // slot markings
     SLOTS.forEach(s => {
       const hw = s.w / 2, hl = s.l / 2, q = (a0, a1, b0, b1) => B.box(a0, a1, 0.035, 0.045, b0, b1, '#f4f4f4');
       if (s.alongA) { q(s.a - hl, s.a + hl, s.b - hw - 0.04, s.b - hw + 0.04); q(s.a - hl, s.a + hl, s.b + hw - 0.04, s.b + hw + 0.04); }
@@ -381,44 +446,129 @@
     for (let i = 0; i < 12; i++) { const t0 = i / 12 * Math.PI, t1 = (i + 1) / 12 * Math.PI, c = (PG[0] + PG[1]) / 2; const ax = c - Math.cos(t0) * 0.8, ay = 2.05 + Math.sin(t0) * 0.75, bx = c - Math.cos(t1) * 0.8, by = 2.05 + Math.sin(t1) * 0.75; B.geo(new THREE.CylinderGeometry(0.015, 0.015, Math.hypot(bx - ax, by - ay), 4), (ax + bx) / 2, (ay + by) / 2, WB + 0.1, 0, 0, Math.atan2(-(bx - ax), by - ay), C.black); }
 
     // ================= interior furniture (front room + bedroom)
-    B.box(-13.7, -13.0, FLOOR, 0.55, 4.0, 6.6, '#7a4b2a'); B.box(-13.85, -13.55, 0.55, 1.05, 4.0, 6.6, '#7a4b2a'); B.box(-13.6, -13.05, 0.45, 0.62, 4.05, 6.55, '#2d6b8a'); col(-13.85, -13.0, 4.0, 6.6);
-    B.box(-7.5, -7.0, FLOOR, 0.6, 4.4, 6.0, C.woodDk); col(-7.5, -7.0, 4.4, 6.0); B.box(-7.3, -7.2, 0.75, 1.4, 4.6, 5.8, '#111');
+    // TV hall (a -14 .. -6.8, b 3 .. 8): sofa set on a rug facing the TV wall, tiled floor skirting, fan, curtains, frames.
+    // All merged into the house mesh: no extra draw calls, and only the sofa, tables and TV unit collide.
+    { const F = FLOOR, wood = '#6a4128', dark = '#3f2a1c', fabric = '#7c5a3c', fabricDk = '#5f432b', cush = ['#a8452c', '#c98a2e', '#2d6b7a', '#a8452c'];
+      B.box(-13.88, -6.92, F, 0.2, 3.13, 3.17, '#d8cdb4'); B.box(-13.88, -6.92, F, 0.2, 7.83, 7.87, '#d8cdb4'); B.box(-13.9, -13.86, F, 0.2, 3.15, 7.87, '#d8cdb4');
+      B.box(-13.86, -6.94, F + 0.002, F + 0.004, 3.14, 7.86, '#d9d2c2');                                  // pale vitrified floor
+      for (let a = -13.2; a < -7; a += 0.8) B.box(a, a + 0.012, F + 0.004, F + 0.006, 3.14, 7.86, '#b8b0a0');
+      for (let b = 3.8; b < 7.8; b += 0.8) B.box(-13.86, -6.94, F + 0.004, F + 0.006, b, b + 0.012, '#b8b0a0');
+      // rug
+      B.box(-12.5, -8.8, F + 0.006, F + 0.02, 4.1, 7.1, '#7a2e2a'); B.box(-12.32, -8.98, F + 0.02, F + 0.024, 4.28, 6.92, '#c7a36a'); B.box(-12.18, -9.12, F + 0.024, F + 0.028, 4.42, 6.78, '#6c2a33');
+      // three-seat sofa on the west wall
+      B.box(-13.7, -12.8, F + 0.1, 0.42, 4.2, 7.0, fabricDk); B.box(-13.82, -13.5, F + 0.1, 0.98, 4.2, 7.0, fabric); B.box(-13.7, -12.8, 0.42, 0.56, 4.28, 6.92, fabric);
+      for (const b of [4.08, 7.0]) B.box(-13.82, -12.75, F + 0.1, 0.68, b, b + 0.14, fabricDk);
+      for (const b of [5.14, 6.06]) B.box(-13.45, -12.8, 0.56, 0.565, b - 0.005, b + 0.005, fabricDk);
+      for (let i = 0; i < 4; i++) { const b = 4.6 + i * 0.68; B.geo(new THREE.BoxGeometry(0.1, 0.36, 0.36), -13.42, 0.74, b, 0, 0, -0.22, cush[i]); }
+      for (const [a, b] of [[-13.7, 4.14], [-12.82, 4.14], [-13.7, 7.08], [-12.82, 7.08]]) B.box(a - 0.03, a + 0.03, F, F + 0.1, b - 0.03, b + 0.03, dark);
+      col(-13.85, -12.75, 4.08, 7.14);
+      // two-seat sofa on the partition side, facing the door wall
+      B.box(-12.3, -10.9, F + 0.1, 0.42, 7.0, 7.68, fabricDk); B.box(-12.3, -10.9, F + 0.1, 0.92, 7.5, 7.74, fabric); B.box(-12.25, -10.95, 0.42, 0.55, 7.02, 7.5, fabric);
+      B.geo(new THREE.BoxGeometry(0.36, 0.34, 0.1), -11.95, 0.72, 7.42, -0.22, 0, 0, cush[1]); B.geo(new THREE.BoxGeometry(0.36, 0.34, 0.1), -11.25, 0.72, 7.42, -0.22, 0, 0, cush[2]);
+      col(-12.3, -10.9, 7.0, 7.74);
+      // coffee table with a glass-look top, newspaper, steel tumblers and a fruit bowl
+      B.box(-11.2, -9.9, 0.46, 0.5, 4.95, 5.95, wood); for (const [a, b] of [[-11.12, 5.03], [-9.98, 5.03], [-11.12, 5.87], [-9.98, 5.87]]) B.box(a - 0.03, a + 0.03, F, 0.46, b - 0.03, b + 0.03, dark);
+      B.box(-11.15, -9.95, 0.22, 0.24, 5.0, 5.9, dark); B.box(-11.05, -10.7, 0.5, 0.507, 5.2, 5.65, '#ded9cc');
+      B.geo(new THREE.CylinderGeometry(0.05, 0.04, 0.1, 8), -10.3, 0.55, 5.25, 0, 0, 0, '#c9ccd0'); B.geo(new THREE.CylinderGeometry(0.05, 0.04, 0.1, 8), -10.15, 0.55, 5.4, 0, 0, 0, '#c9ccd0');
+      B.geo(new THREE.CylinderGeometry(0.13, 0.07, 0.07, 10), -10.3, 0.535, 5.65, 0, 0, 0, '#a86b33'); for (const [a, b, c] of [[-10.33, 5.63, '#d6a02c'], [-10.25, 5.68, '#c23c28'], [-10.32, 5.7, '#7fa33a']]) B.geo(new THREE.IcosahedronGeometry(0.05, 1), a, 0.59, b, 0, 0, 0, c);
+      col(-11.2, -9.9, 4.95, 5.95);
+      // TV unit on the east wall, between the window and the partition: low cabinet, tall side shelf, wall panel
+      B.box(-7.0, -6.94, 0.6, 2.3, 5.55, 7.65, '#8a6243');
+      B.box(-7.5, -6.94, F, 0.55, 5.6, 7.6, wood); for (const b of [5.95, 6.6, 7.25]) B.box(-7.505, -7.495, 0.18, 0.5, b - 0.3, b + 0.3, dark);
+      for (const b of [6.2, 7.0]) B.box(-7.52, -7.5, 0.3, 0.36, b - 0.015, b + 0.015, '#c9b98a');
+      B.box(-7.08, -7.0, 0.72, 1.56, 5.87, 7.33, '#0c0c0e'); B.box(-7.3, -7.08, 0.55, 0.58, 6.3, 6.9, '#1a1a1c');
+      B.box(-7.42, -7.2, 0.55, 0.62, 5.72, 6.12, '#26262a'); B.geo(new THREE.CylinderGeometry(0.05, 0.05, 0.3, 8), -7.28, 0.72, 7.42, 0, 0, 0, '#1a1a1c');
+      B.geo(new THREE.CylinderGeometry(0.1, 0.07, 0.2, 10), -7.25, 0.65, 5.82, 0, 0, 0, '#b08a52');
+      col(-7.5, -6.94, 5.6, 7.6);
+      // pooja shelf / framed photos on the west wall, clock over the partition, curtains on the door-wall windows
+      for (const [b, w, c] of [[4.7, 0.42, '#c7a36a'], [5.6, 0.62, '#7a5a3a'], [6.5, 0.42, '#c7a36a']]) { B.box(-13.88, -13.86, 1.5, 2.0, b - w / 2, b + w / 2, c); B.box(-13.86, -13.85, 1.55, 1.95, b - w / 2 + 0.05, b + w / 2 - 0.05, '#8fa3ad'); }
+      B.geo(new THREE.CylinderGeometry(0.17, 0.17, 0.03, 16), -8.6, 2.45, 7.87, Math.PI / 2, 0, 0, '#f2eee2'); B.box(-8.61, -8.59, 2.45, 2.57, 7.85, 7.86, '#111'); B.box(-8.6, -8.51, 2.44, 2.46, 7.85, 7.86, '#111');
+      for (const [g0, g1] of [[-13.2, -12.0], [-11.2, -10.2]]) { B.box(g0 - 0.15, g1 + 0.15, 2.2, 2.24, 3.2, 3.24, '#6b4a2e'); for (const a of [g0 - 0.12, g1 - 0.12]) for (let k = 0; k < 4; k++) B.box(a + k * 0.07, a + k * 0.07 + 0.06, 0.8, 2.2, 3.17 + (k % 2) * 0.04, 3.2 + (k % 2) * 0.04, '#b5573c'); }
+      // floor plant, standing fan-free corner, and a ceiling fan
+      B.geo(new THREE.CylinderGeometry(0.17, 0.12, 0.34, 10), -13.5, F + 0.17, 7.6, 0, 0, 0, '#b0603a'); FO.blob(-13.5, 0.85, 7.6, 0.28, 0.5, 0.28, 26, GL, 0.24);
+      B.geo(new THREE.CylinderGeometry(0.015, 0.015, 0.4, 6), -10.4, ROOF - 0.22, 5.5, 0, 0, 0, '#ececec'); B.geo(new THREE.CylinderGeometry(0.1, 0.1, 0.09, 12), -10.4, ROOF - 0.44, 5.5, 0, 0, 0, '#ececec');
+      for (let k = 0; k < 3; k++) { const t = k * 2.094 + 0.4; B.geo(new THREE.BoxGeometry(0.56, 0.012, 0.11), -10.4 + Math.cos(t) * 0.36, ROOF - 0.46, 5.5 + Math.sin(t) * 0.36, 0, -t, 0, '#e4e0d4'); }
+      // tube light over the sofa
+      B.box(-13.86, -13.82, 2.5, 2.54, 4.8, 6.0, '#fbfbf2'); }
     B.box(-13.7, -11.7, FLOOR, 0.5, 10.3, 12.6, C.wood); B.box(-13.7, -11.7, 0.5, 0.68, 10.35, 12.55, '#e6e0d0'); B.box(-13.65, -11.75, 0.68, 0.74, 10.5, 11.7, '#8e2a5a'); col(-13.7, -11.7, 10.3, 12.6);
     B.box(-7.65, -7.0, FLOOR, 2.1, 9.0, 10.6, '#7b5a3a'); col(-7.65, -7.0, 9.0, 10.6);
-    B.box(-11.6, -10.4, FLOOR, 0.75, 5.0, 6.0, '#8d6a48'); col(-11.6, -10.4, 5.0, 6.0);   // dining table
 
+    // ================= the back plot, all at ground level (local y -YARD_H)
+    { const Y = -YARD_H, Bb = YARD.b1, E = PLOT.b1, A0 = YARD.a0, A1 = YARD.a1, wall = C.creamDk;
+      for (const a of RG) { B.box(a - 0.25, a + 0.25, Y, 2.2, Bb - 0.25, Bb + 0.25, C.cream); B.box(a - 0.3, a + 0.3, 2.2, 2.32, Bb - 0.3, Bb + 0.3, C.aub); col(a - 0.25, a + 0.25, Bb - 0.25, Bb + 0.25); }
+      for (let i = 0; i < 5; i++) B.box(RG[0], RG[1], Y, Y + YARD_H * (5 - i) / 5, Bb + 0.05 + i * 0.32, Bb + 0.37 + i * 0.32, '#b9ad98');   // steps going down
+      for (const [a0, a1, b0, b1] of [[A0 - 0.1, RD[0], E - 0.1, E + 0.1], [RD[1], A1 + 0.1, E - 0.1, E + 0.1], [A0 - 0.1, A0 + 0.1, Bb, E], [A1 - 0.1, A1 + 0.1, Bb, E]]) { B.box(a0, a1, Y, Y + 1.9, b0, b1, wall); B.box(a0 - 0.03, a1 + 0.03, Y + 1.9, Y + 1.98, b0 - 0.03, b1 + 0.03, C.cream); col(a0, a1, b0, b1); }
+      // the back door in the end wall (photo 90): frame and lintel, the leaf is a moving part
+      for (const a of RD) B.box(a - 0.09, a + 0.09, Y, Y + 2.1, E - 0.13, E + 0.13, C.cream); B.box(RD[0] - 0.09, RD[1] + 0.09, Y + 2.0, Y + 2.14, E - 0.13, E + 0.13, C.cream);
+      // square concrete water tub for the buffaloes, under the shed edge within their reach: water, thick worn rim, a tap on a pipe
+      { const T0 = { a0: -16, a1: -14.7, b0: 21.6, b1: 22.9 }, t = 0.13, h = 0.62, cc = '#a7a498', rim = '#c4c0b3';
+        B.box(T0.a0, T0.a1, Y, Y + 0.12, T0.b0, T0.b1, cc); B.box(T0.a0, T0.a0 + t, Y, Y + h, T0.b0, T0.b1, cc); B.box(T0.a1 - t, T0.a1, Y, Y + h, T0.b0, T0.b1, cc); B.box(T0.a0, T0.a1, Y, Y + h, T0.b0, T0.b0 + t, cc); B.box(T0.a0, T0.a1, Y, Y + h, T0.b1 - t, T0.b1, cc);
+        B.box(T0.a0 - 0.03, T0.a1 + 0.03, Y + h, Y + h + 0.05, T0.b0 - 0.03, T0.b0 + t, rim); B.box(T0.a0 - 0.03, T0.a1 + 0.03, Y + h, Y + h + 0.05, T0.b1 - t, T0.b1 + 0.03, rim); B.box(T0.a0 - 0.03, T0.a0 + t, Y + h, Y + h + 0.05, T0.b0, T0.b1, rim); B.box(T0.a1 - t, T0.a1 + 0.03, Y + h, Y + h + 0.05, T0.b0, T0.b1, rim);
+        B.box(T0.a0 + t, T0.a1 - t, Y + 0.5, Y + 0.51, T0.b0 + t, T0.b1 - t, '#3f6f70');
+        B.geo(new THREE.CylinderGeometry(0.02, 0.02, 1.0, 6), T0.a1 + 0.1, Y + 0.5, T0.b1 - 0.3, 0, 0, 0, '#7d8a8c'); B.box(T0.a1 - 0.14, T0.a1 + 0.12, Y + 0.97, Y + 1.0, T0.b1 - 0.32, T0.b1 - 0.28, '#7d8a8c');
+        col(T0.a0, T0.a1, T0.b0, T0.b1); }
+      // buffalo shed: long sheet roof on posts along the west wall, stall floor, trough
+      const S0 = { a0: A0 + 0.1, a1: -15, b0: Bb + 0.4, b1: 25.6 }; B.box(S0.a0, S0.a1, Y, Y + 0.06, S0.b0, S0.b1, '#8d8373');
+      for (let b = S0.b0; b <= S0.b1 + 0.01; b += (S0.b1 - S0.b0) / 3) { B.box(S0.a1 - 0.08, S0.a1 + 0.08, Y, Y + 2.5, b - 0.08, b + 0.08, C.wood); col(S0.a1 - 0.08, S0.a1 + 0.08, b - 0.08, b + 0.08); }
+      for (let b = S0.b0 - 0.2, i = 0; b < S0.b1 + 0.2; b += 0.45, i++) B.box(S0.a0 - 0.05, S0.a1 + 0.35, Y + 2.72, Y + 2.78, b, b + 0.42, (i & 1) ? '#9ea3a0' : '#8e9390');
+      B.box(S0.a0, S0.a0 + 0.1, Y, Y + 2.74, S0.b0, S0.b1, C.greyMid); B.box(S0.a0 + 0.15, S0.a0 + 0.6, Y, Y + 0.4, S0.b0 + 0.3, S0.b1 - 0.3, '#7b6a55'); col(S0.a0 + 0.15, S0.a0 + 0.6, S0.b0 + 0.3, S0.b1 - 0.3);
+      // hen enclosure in the bottom-left corner: posts and wire, a small door on its east side
+      const H0 = { a0: A0 + 0.1, a1: -14.6, b0: 26.2, b1: E - 0.1 };
+      for (let a = H0.a0; a <= H0.a1 + 0.01; a += 0.9) { B.box(a - 0.03, a + 0.03, Y, Y + 1.5, H0.b0 - 0.03, H0.b0 + 0.03, C.woodDk); }
+      for (let b = H0.b0; b <= H0.b1; b += 0.9) B.box(H0.a1 - 0.03, H0.a1 + 0.03, Y, Y + 1.5, b - 0.03, b + 0.03, C.woodDk);
+      for (const y of [0.4, 0.9, 1.45]) { B.box(H0.a0, H0.a1, Y + y, Y + y + 0.02, H0.b0 - 0.01, H0.b0 + 0.01, '#b8b8b0'); B.box(H0.a1 - 0.01, H0.a1 + 0.01, Y + y, Y + y + 0.02, H0.b0, H0.b1, '#b8b8b0'); }
+      B.box(H0.a1 - 0.02, H0.a1 + 0.05, Y, Y + 0.75, 28.2, 28.95, C.wood); B.box(H0.a0 + 0.1, H0.a0 + 1.4, Y, Y + 1.1, H0.b1 - 1.5, H0.b1 - 0.1, C.wood);
+      col(H0.a0, H0.a1, H0.b0 - 0.05, H0.b0 + 0.05); col(H0.a1 - 0.05, H0.a1 + 0.05, H0.b0, H0.b1);
+      // soil patch and the yellow-flowering tree at the bottom wall
+      const G0 = [[-12.6, 27.2], [-6.8, 26.8], [-6.2, E - 0.1], [-13.2, E - 0.1]]; { const sh = new THREE.Shape(); G0.forEach((q, i) => i ? sh.lineTo(q[0], -q[1]) : sh.moveTo(q[0], -q[1])); sh.closePath(); B.geo(new THREE.ShapeGeometry(sh), 0, Y + 0.03, 0, -Math.PI / 2, 0, 0, '#6e4a30'); }
+      B.geo(new THREE.CylinderGeometry(0.14, 0.24, 2.2, 7), -9.6, Y + 1.1, E - 0.9, 0, 0, 0, '#5a4630'); col(-9.8, -9.4, E - 1.1, E - 0.7); PLOT_TREE = [-9.6, Y + 3.0, E - 0.9];
+      // two washrooms stacked in the bottom-right corner, doors into the plot
+      const WR = { a0: -5.4, a1: A1 - 0.1, b0: 25.0, b1: E - 0.1 }, mid = (WR.b0 + WR.b1) / 2; B.box(WR.a0, WR.a1, Y, Y + 2.4, WR.b0, WR.b1, C.cream); B.box(WR.a0 - 0.1, WR.a1 + 0.05, Y + 2.4, Y + 2.52, WR.b0 - 0.1, WR.b1, '#c9c2b4'); col(WR.a0, WR.a1, WR.b0, WR.b1); edgeBox(WR.a0, WR.a1, Y, Y + 2.4, WR.b0, WR.b1); B.box(WR.a0 - 0.02, WR.a0 + 0.02, Y, Y + 2.4, mid - 0.04, mid + 0.04, C.creamDk);
+      for (const b of [(WR.b0 + mid) / 2, (mid + WR.b1) / 2]) { B.box(WR.a0 - 0.05, WR.a0, Y, Y + 2.0, b - 0.45, b + 0.45, C.wood); B.box(WR.a0 - 0.08, WR.a0 - 0.05, Y + 0.95, Y + 1.05, b + 0.25, b + 0.33, C.yellow); } }
     const mesh = B.mesh(); root.add(mesh);
     (window.WALKABLES = window.WALKABLES || []).push(mesh);
+    // no jumping over the compound walls: an invisible guard to 6 m in the walkable set, so the jump test finds them solid
+    { const gm = new THREE.MeshBasicMaterial(), H = 6, e = 0.16, g = new THREE.Group();
+      for (const [a0, a1, b0, b1] of [[YARD.a0 - e, PG[0] - 0.2, WB - e, WB + e], [PG[1] + 0.2, MG[0] - 0.25, WB - e, WB + e], [MG[1] + 0.25, YARD.a1 + e, WB - e, WB + e], [YARD.a0 - e, YARD.a0 + e, WB, YARD.b1], [YARD.a1 - e, YARD.a1 + e, WB, YARD.b1], [YARD.a0, RG[0] - 0.25, YARD.b1 - e, YARD.b1 + e], [RG[1] + 0.25, YARD.a1, YARD.b1 - e, YARD.b1 + e]]) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(a1 - a0, H, b1 - b0), gm); m.position.set((a0 + a1) / 2, H / 2, (b0 + b1) / 2); g.add(m); }
+      g.children.forEach(m => { m.material = gm; }); g.visible = false; root.add(g); root.updateMatrixWorld(true);
+      window.WALKABLES.push(...g.children); }
     root.add(lines(edges, 0x3c3c3e));
+    for (let i = 0; i < 7; i++) FO.blob(PLOT_TREE[0] + Math.cos(i * 2.1) * 1.1, PLOT_TREE[1] + Math.sin(i * 1.3) * 0.5, PLOT_TREE[2] - 0.2 + Math.sin(i * 2.1) * 0.6, 1.2, 0.9, 0.9, 70, [['#e6c22a', 4], ['#f2d84a', 3], ['#5d8a30', 3]], 0.3);
     root.add(FO.mesh());
 
     // ================= animated parts: gates, door, flag, pendant light
     const hM = 2.0, gw = (MG[1] - MG[0]) / 2 - 0.25;
     const gMat = new THREE.MeshLambertMaterial({ map: gateLeafTex(true, hM), alphaTest: 0.5, side: THREE.DoubleSide });
     const leaf = (hingeA, sign) => {
-      const p = new THREE.Group(); p.position.set(hingeA, 0, WB);
+      const p = new THREE.Group(); p.position.set(hingeA, -YARD_H, WB);
       const m = new THREE.Mesh(new THREE.PlaneGeometry(gw, hM), gMat); m.position.set(sign * gw / 2, hM / 2 + 0.03, 0); if (sign < 0) m.scale.x = -1;
       p.add(m); root.add(p); return p;
     };
     parts.gateL = leaf(MG[0] + 0.25, 1); parts.gateR = leaf(MG[1] - 0.25, -1);
+    { const bw = (RG[1] - RG[0]) / 2, rear = (h, sign) => { const p = new THREE.Group(); p.position.set(h, 0, YARD.b1); const m = new THREE.Mesh(new THREE.PlaneGeometry(bw, hM), gMat); m.position.set(sign * bw / 2, hM / 2 + 0.03, 0); if (sign < 0) m.scale.x = -1; p.add(m); root.add(p); return p; }; parts.backL = rear(RG[0], 1); parts.backR = rear(RG[1], -1); }
     const pgw = PG[1] - PG[0] - 0.4;
     parts.ped = new THREE.Group(); parts.ped.position.set(PG[0] + 0.2, 0, WB);
     { const pm = new THREE.MeshLambertMaterial({ map: gateLeafTex(false, 1.7), alphaTest: 0.5, side: THREE.DoubleSide }); const m = new THREE.Mesh(new THREE.PlaneGeometry(pgw, 1.7), pm); m.position.set(pgw / 2, 0.88, 0); parts.ped.add(m); root.add(parts.ped); }
     parts.door = new THREE.Group(); parts.door.position.set(DOOR[0], FLOOR, 3.0);
     { const dw = DOOR[1] - DOOR[0], d = new THREE.Mesh(new THREE.BoxGeometry(dw, 2.08, 0.06), new THREE.MeshLambertMaterial({ color: C.wood })); d.position.set(dw / 2, 1.04, 0); parts.door.add(d); root.add(parts.door); }
+    const leafDoor = (a0, a1, y, b, color) => { const g = new THREE.Group(), w = a1 - a0, m = new THREE.Mesh(new THREE.BoxGeometry(w, 2.02, 0.05), new THREE.MeshLambertMaterial({ color })), hd = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.07), new THREE.MeshLambertMaterial({ color: 0xd4a82a })); g.position.set(a0, y, b); m.position.set(w / 2, 1.03, 0); hd.position.set(w - 0.12, 1.0, 0); g.add(m, hd); root.add(g); return g; };
+    parts.kd = leafDoor(KD[0], KD[1], FLOOR, KIT.b1 + 0.11, C.wood); parts.rd = leafDoor(RD[0], RD[1], -YARD_H, PLOT.b1, '#5a6b4a');
     { const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, 1.6, 6), new THREE.MeshLambertMaterial({ color: 0xdddddd })); pole.position.set(YARD.a0 + 0.05, 1.9 + 0.8, WB);
       const fl = new THREE.Mesh(new THREE.PlaneGeometry(0.45, 0.3), new THREE.MeshLambertMaterial({ map: flagTex(), side: THREE.DoubleSide })); fl.position.set(YARD.a0 + 0.3, 3.3, WB); root.add(pole, fl); }
     { const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), new THREE.MeshBasicMaterial({ color: 0xfff1c4 })); bulb.position.set(-8.1, ROOF - 0.55, 0.0);
       const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.45, 4), new THREE.MeshBasicMaterial({ color: 0x222222 })); wire.position.set(-8.1, ROOF - 0.25, 0.0); root.add(bulb, wire); }
-    { const s = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.6), new THREE.MeshBasicMaterial({ map: tvTex() })); s.position.set(-7.33, 1.08, 5.2); s.rotation.y = -Math.PI / 2; root.add(s); }
+    { const s = new THREE.Mesh(new THREE.PlaneGeometry(1.42, 0.8), new THREE.MeshBasicMaterial({ map: tvTex() })); s.position.set(-7.085, 1.14, 6.6); s.rotation.y = -Math.PI / 2; root.add(s); }
     parts.lamp = new THREE.PointLight(0xffe2b0, 0, 12, 1.6); parts.lamp.position.set(-10.4, ROOF - 0.4, 7.5); root.add(parts.lamp);
 
     scene.add(root);
+    blockers.back = Blocker(RG[0], RG[1], YARD.b1 - 0.12, YARD.b1 + 0.12); blockers.back.set(true);
     blockers.gate = Blocker(MG[0] + 0.25, MG[1] - 0.25, WB - 0.12, WB + 0.12);
     blockers.ped = Blocker(PG[0] + 0.2, PG[1] - 0.2, WB - 0.12, WB + 0.12);
     blockers.door = Blocker(DOOR[0], DOOR[1], 2.88, 3.12);
+    blockers.kd = Blocker(KD[0], KD[1], KIT.b1, 16.6); blockers.rd = Blocker(RD[0], RD[1], PLOT.b1 - 0.12, PLOT.b1 + 0.12);
     for (const k in blockers) blockers[k].set(true);
-    MGc = { a: (MG[0] + MG[1]) / 2, b: WB }; PGc = { a: (PG[0] + PG[1]) / 2, b: WB }; DOORc = { a: (DOOR[0] + DOOR[1]) / 2, b: 3.0 };
+    MGc = { a: (MG[0] + MG[1]) / 2, b: WB }; PG_CLEAR = PG[1] - PG[0] - 0.4; PGc = { a: (PG[0] + PG[1]) / 2, b: WB }; DOORc = { a: (DOOR[0] + DOOR[1]) / 2, b: 3.0 };
   }
 
   const SLOTS = [
@@ -434,9 +584,10 @@
     const p = busy ? W(-4.25, 0.6) : W(s.a, s.b + 0.3);
     return { x: p.x, z: p.z, rot: TH + Math.PI, slot: busy ? null : s.id };
   };
-  const parts = {}, blockers = {};
-  let MGc, PGc, DOORc;
-  const anim = { gate: 0, ped: 0, door: 0 }, want = { gate: false, ped: false, door: false }, manual = { gate: false, door: false };
+  const parts = {}, blockers = {}; let PLOT_TREE = [0, 0, 0], penDone = false;
+  let MGc, PGc, DOORc, PG_CLEAR = 0, MG_ = [-6.3, -2.2];
+  const anim = { gate: 0, ped: 0, door: 0, back: 0, kd: 0, rd: 0 }, want = { gate: false, ped: false, door: false, back: false, kd: false, rd: false }, manual = { gate: null, door: false };
+  let gateBlocked = '';     // why the gate cannot swing shut right now ('' = free)
 
   // ---------------------------------------------------------------- storage (same scheme as v1)
   const isPaint = o => o.isMesh && o.material && o.material.isMeshPhongMaterial && o.material.shininess === 85;
@@ -449,26 +600,26 @@
       const s = SLOTS.find(q => q.id === st.slot); if (!s) continue;
       const v = TMs[st.kind]();
       if (st.color != null) v.g.traverse(o => { if (isPaint(o)) o.material = paintCache[st.color] || (paintCache[st.color] = new THREE.MeshPhongMaterial({ color: st.color, specular: 0x8a8a8a, shininess: 85 })); });
-      const p = W(s.a, s.b); v.g.position.set(p.x, 0, p.z); v.g.rotation.y = slotRot(s); scene.add(v.g);
+      const p = W(s.a, s.b); v.g.position.set(p.x, groundY(p.x, p.z), p.z); v.g.rotation.y = slotRot(s); scene.add(v.g);
       const obj = { ...v, model: st.kind, r: null, len: 100, s: 0, dir: 1, speed: 0, cur: 0, len2: v.len / 2, wheelR: 0.4, wheels: v.wheels || [], tail: v.tail || [], _safeSlot: s.id, _waiting: true };
       live[s.id] = obj; P.addParked(obj);
     }
   }
   // ---------------------------------------------------------------- bike row in the front courtyard
-  // The family's motorbikes stand side by side in front of the veranda (west of the porch path, clear of the car
-  // lane from the main gate to the car bay), all nose to the gate, each leaning a little on its side stand, like an
-  // Indian home courtyard. Built with TrafficModels, registered with Player.addParked so F mounts exactly that bike.
-  // (The scooter and the bicycle stay outside the gate: parked.js.)
-  const BIKE_ROW = ['classic', 'classic2', 'sport', 'faired', 'bike'];
+  // The family's motorbikes stand at the side of the house along the east compound wall, in the courtyard strip between
+  // the gate and the car porch: cross-parked at one angle (55 deg to the wall), back wheels to the wall, noses toward the
+  // gate and clear of the driveway, each leaning a little on its side stand. Built with TrafficModels, registered with
+  // Player.addParked so F mounts exactly that bike.
+  const BIKE_ROW = ['classic', 'classic2', 'sport', 'faired', 'bike', 'hayabusa', 's1000rr', 'r1300gsa', 'r1250gsa', 'scooter', 'cycle'];
   const rowBikes = [];
   function spawnBikeRow() {
     const P = PL(), TMs = TM(); if (!P || !TMs || !P.addParked || rowBikes.length) return;
-    const rot = TH + Math.PI;                                  // facing -b: nose toward the front wall / gate
+    const ANG = 55 * Math.PI / 180, rot = TH + Math.PI + ANG;  // -b (toward the front wall) turned ANG toward -a (the house)
     BIKE_ROW.forEach((kind, i) => {
       if (!TMs[kind]) return;
       const v = TMs[kind](); v.g.name = 'safehouse-bike-' + kind;
-      const p = W(-13.55 + i * 0.85, -0.75);
-      v.g.position.set(p.x, 0, p.z); v.g.rotation.order = 'YXZ'; v.g.rotation.set(0, rot, 0.13);   // leaning left on the side stand
+      const p = W(-2.2, -0.2 + i * 0.95);   // clear of the gate leaves' swing (b < -2)
+      v.g.position.set(p.x, groundY(p.x, p.z), p.z); v.g.rotation.order = 'YXZ'; v.g.rotation.set(0, rot, 0.13);   // leaning left on the side stand
       // side stand: a short black rod from under the footrest to the floor on the left
       const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.36, 5), new THREE.MeshLambertMaterial({ color: 0x151515 }));
       stand.position.set(0.17, 0.16, -0.05); stand.rotation.z = -0.55; v.g.add(stand);
@@ -524,17 +675,39 @@
   function currentAction() {
     const mode = G.playerMode, l = L(carPos.x, carPos.z);
     const d = q => Math.hypot(l.a - q.a, l.b - q.b);
+    if (mode === 'foot' && Math.hypot(l.a - (KD[0] + KD[1]) / 2, l.b - 16.5) < 1.7) return { t: want.kd ? 'close kitchen door' : 'open kitchen door', f: () => { want.kd = !want.kd; } };
+    if (mode === 'foot' && Math.hypot(l.a - (RD[0] + RD[1]) / 2, l.b - PLOT.b1) < 1.8) return { t: want.rd ? 'close back door' : 'open back door', f: () => { want.rd = !want.rd; } };
+    if (mode === 'foot' && Math.hypot(l.a - (RG[0] + RG[1]) / 2, l.b - YARD.b1) < 1.9) return { t: want.back ? 'close back gate' : 'open back gate', f: () => { want.back = !want.back; blockers.back.set(!want.back); } };
     if (mode === 'vehicle' || mode === 'crysta') {
       if (inYard(l)) { const s = slotAt(carPos.x, carPos.z, 2.0); if (s && mode === 'vehicle') return { t: 'store vehicle here', f: () => storeVehicle(s) }; }
-      if (d(MGc) < 7) return { t: want.gate ? 'close gate' : 'open gate', f: () => { manual.gate = !want.gate; } };
+      if (d(MGc) < 7) return gateAction();
       return null;
     }
     if (mode !== 'foot') return null;
     if (d(DOORc) < 1.7) return { t: want.door ? 'close door' : 'open door', f: () => { manual.door = !want.door; } };
     if (l.a > -13.9 && l.a < -11.5 && l.b > 9.8 && l.b < 12.7) return { t: 'sleep till morning & save', f: sleep };
     if (l.a > -8.6 && l.a < -7.6 && l.b > 8.8 && l.b < 10.8) return { t: 'wardrobe · change outfit', f: wardrobe };
-    if (d(MGc) < 2.6) return { t: want.gate ? 'close gate' : 'open gate', f: () => { manual.gate = !want.gate; } };
+    if (d(MGc) < 3.2) return gateAction();
     return null;
+  }
+  // E at the main gate: open / close it by hand (manual wins over the automatic opening until you walk / drive away)
+  function gateAction() {
+    if (gateBlocked) { const msg = 'gate blocked · ' + gateBlocked; return { t: msg, f: () => G.showPopup && G.showPopup(msg.toUpperCase()) }; }
+    return { t: want.gate ? 'close gate' : 'open gate', f: () => { manual.gate = want.gate ? 'close' : 'open'; } };
+  }
+  // anything in the arc the two leaves sweep (a MG range, b from the wall 2.2 m into the yard)? Says what, for the prompt.
+  function swingBlocked() {
+    const inArc = (x, z, r) => { const q = L(x, z); return q.a > MG_[0] - r && q.a < MG_[1] + r && q.b > MGc.b - 0.4 - r && q.b < MGc.b + 2.25 + r; };
+    const veh = v => { const g = v && v.g; if (!g || !g.parent) return false; const hl = (v.len2 || (v.len && v.len < 20 ? v.len / 2 : 2.1)), fx = Math.sin(g.rotation.y), fz = Math.cos(g.rotation.y);
+      for (let t = -hl; t <= hl + 1e-3; t += hl / 2) if (inArc(g.position.x + fx * t, g.position.z + fz * t, v.hw || 0.9)) return true; return false; };
+    const P = PL();
+    if (G.playerMode === 'crysta' || G.playerMode === 'vehicle') { const fx = Math.sin(carRot), fz = Math.cos(carRot); for (let t = -2.2; t <= 2.2; t += 1.1) if (inArc(carPos.x + fx * t, carPos.z + fz * t, 0.9)) return 'your vehicle is in the way'; }
+    else if (inArc(carPos.x, carPos.z, 0.4)) return 'you are in the way';
+    try { if (P) { for (const v of P.parkedList || []) if (veh(v)) return 'a parked vehicle is in the way'; } } catch (e) {}
+    try { for (const v of traffic) if (veh(v)) return 'a vehicle is in the way'; } catch (e) {}
+    try { if (window.Crowd) for (const a of Crowd.agents) if (a.g.parent && inArc(a.g.position.x, a.g.position.z, a.r)) return 'someone is in the way'; } catch (e) {}
+    try { const f = window.Visitors && Visitors.friendsGroup; if (f && f.car && veh({ g: f.car.g, hw: 0.95, len2: 2.1 })) return "a friend's car is in the way"; } catch (e) {}
+    return '';
   }
   function sleep() {
     fade.textContent = ''; fade.style.opacity = '1';
@@ -555,7 +728,7 @@
     const c = W(-10.5, 6.5);
     if (world.addMapIcon) world.addMapIcon(c.x, c.z, '⌂', 'Safe House 2');
     MGw = W(MGc.a, MGc.b);
-    window.SafeHouse2 = { W, L, slots: SLOTS, live, state: S, anim, want, manual, center: c, gate: W(MGc.a, MGc.b - 6), door: W(DOORc.a, DOORc.b) };
+    window.SafeHouse2 = { dbg: () => ({ npcGate, npcPed, holdGate, gateBlocked }), W, L, slots: SLOTS, pedGate: { a: PGc.a, b: PGc.b, w: PG_CLEAR }, doorPt: { a: DOORc.a, b: DOORc.b }, yard: YARD, live, state: S, anim, want, manual, center: c, gate: W(MGc.a, MGc.b - 6), door: W(DOORc.a, DOORc.b) };
     setTimeout(spawnStored, 0); setTimeout(() => { try { spawnBikeRow(); } catch (e) { console.error("safehouse2 bikes", e); } }, 0);
   });
 
@@ -571,8 +744,9 @@
     const P = PL();
     try { for (const t of traffic) if (!P || t !== P.active) veh(t, 9); } catch (e) {}
     try { if (window.VillageProcessions) for (const it of VillageProcessions.items) it.kind === 'walker' ? foot(it) : veh(it, 8); } catch (e) {}
-    try { if (window.RoadAnimals) for (const a of RoadAnimals) veh(a, 5); } catch (e) {}
+    try { if (window.RoadAnimals) for (const a of RoadAnimals) veh(a, 2.8); } catch (e) {}   // only an animal right in the gateway (a cat on the lane must not hold it open)
     try { if (world.people) for (const h of world.people) foot(h); } catch (e) {}
+    try { if (window.Crowd) for (const a of Crowd.agents) foot(a); } catch (e) {}
     try { if (window.AutoRides && AutoRides.npcs) for (const n of AutoRides.npcs) foot(n.h || n); } catch (e) {}
   }
   let MGw = { x: 0, z: 0 };
@@ -583,36 +757,54 @@
     const mode = game.playerMode, l = L(carPos.x, carPos.z);
     const dG = Math.hypot(l.a - MGc.a, l.b - MGc.b);
     const driving = mode === 'vehicle' || mode === 'crysta';
-    if (dG > 14) manual.gate = false;
-    // automatic gates: the main gate opens for the player (driving, riding or walking up to it) and for any NPC
+    if (dG > 14) manual.gate = null;
+    // automatic gates: the main gate opens for the player (driving or riding; on foot only with E) and for any NPC
     // vehicle / cart / herd / walker near it; the pedestrian gate for anyone on foot. Both stay open while somebody
     // is still in the gateway and close a moment after the last one has gone.
     if ((npcT -= dt) <= 0) { npcT = 0.25; scanNpcs(); }
-    const pGate = (driving && (dG < 10 || inYard(l) && dG < 16)) || (mode === 'foot' && dG < 4.5) || (mode === 'passenger' && dG < 10);
+    // the player's vehicle only holds the gate while it is actually moving near / through the gateway (a car parked in
+    // the yard no longer keeps it open for ever)
+    const moving = Math.abs(typeof carSpeed === 'number' ? carSpeed : 0) > 2;
+    const pGate = (driving && moving && (dG < 10 || inYard(l) && dG < 12)) || (mode === 'passenger' && dG < 10);
     const pPed = mode === 'foot' && Math.hypot(l.a - PGc.a, l.b - PGc.b) < 3.0;
     holdGate = pGate || npcGate ? 1.2 : Math.max(0, holdGate - dt);
     holdPed = pPed || npcPed ? 1.0 : Math.max(0, holdPed - dt);
-    want.gate = holdGate > 0 || manual.gate;
+    // closed by hand stays closed for passers-by: once shut it is 'shut', when only the player's own approach reopens it
+    // (traffic on the lane used to reopen it the moment it latched, which read as E not working). Reset at dG > 14.
+    if (manual.gate === 'close' && anim.gate === 0 && !pGate) manual.gate = 'shut';
+    want.gate = manual.gate === 'open' ? true : manual.gate === 'close' ? false : manual.gate === 'shut' ? pGate : mode === 'foot' && dG < 6 ? false : holdGate > 0;
+    // never swing shut into a vehicle or a person standing in the leaves' arc
+    gateBlocked = !want.gate && anim.gate > 0.02 ? swingBlocked() : '';
+    if (gateBlocked) want.gate = true;
     want.ped = holdPed > 0;
     if (Math.hypot(l.a - DOORc.a, l.b - DOORc.b) > 3.2) manual.door = false;
     want.door = manual.door;
-    for (const k of ['gate', 'ped', 'door']) {
+    // multiplayer: publish what this client wants, then open for whatever anyone else wants
+    { const R = S.remote, lw = S.localWant || (S.localWant = {}); lw.gate = want.gate; lw.ped = want.ped; lw.door = want.door;
+      if (R) { want.gate = want.gate || R.gate; want.ped = want.ped || R.ped; want.door = want.door || R.door; } }
+    for (const k of ['gate', 'ped', 'door', 'kd', 'rd']) {
       const sp = k === 'gate' ? 0.6 : 1.2, t = want[k] ? 1 : 0;
       anim[k] += Math.sign(t - anim[k]) * Math.min(Math.abs(t - anim[k]), dt * sp);
       blockers[k].set(anim[k] < 0.05);
     }
     const e = x => x * x * (3 - 2 * x);
     parts.gateL.rotation.y = -e(anim.gate) * Math.PI * 0.5; parts.gateR.rotation.y = e(anim.gate) * Math.PI * 0.5;
+    if (!penDone && window.PenAnimal) { const q = [W(-17.2, 20.6), W(-17.2, 22.4), W(-17.2, 24.2)], h = W(-17, 28.6); if (PenAnimal('buffalo', q[0].x, q[0].z, 0.5)) { penDone = true; q.slice(1).forEach(p => PenAnimal('buffalo', p.x, p.z, 0.5)); for (let i = 0; i < 6; i++) PenAnimal('hen', h.x + (i - 2.5) * 0.3, h.z + (i % 3 - 1) * 0.4, 1.6); } }
+    anim.back += ((want.back ? 1 : 0) - anim.back) * Math.min(1, dt * 3); parts.backL.rotation.y = e(anim.back) * Math.PI * 0.5; parts.backR.rotation.y = -e(anim.back) * Math.PI * 0.5;
     parts.ped.rotation.y = -e(anim.ped) * Math.PI * 0.5;
     parts.door.rotation.y = -e(anim.door) * Math.PI * 0.55;
-    parts.lamp.intensity += ((inHouse(l) ? 1.1 : 0) - parts.lamp.intensity) * Math.min(1, dt * 4);
+    parts.kd.rotation.y = e(anim.kd) * Math.PI * 0.55; parts.rd.rotation.y = -e(anim.rd) * Math.PI * 0.55;
+    const inKit = l.a > KIT.a0 && l.a < KIT.a1 && l.b > KIT.b0 && l.b < KIT.b1;
+    if (inKit) parts.lamp.position.set(-10.5, ROOF - 0.4, 14.7); else if (inHouse(l)) parts.lamp.position.set(-10.4, ROOF - 0.4, 7.5);
+    parts.lamp.intensity += ((inHouse(l) || inKit ? 1.1 : 0) - parts.lamp.intensity) * Math.min(1, dt * 4);
     safeTag.style.display = inYard(l) ? 'block' : 'none';
     checkTaken();
     cur = propsPanelOpen() ? null : currentAction();
     setHint(cur ? cur.t : null);
   });
 
-  GameHooks.key.push((e) => {
+  // first in the queue: properties.js also takes E (any plot or bay in reach opens its panel) and would swallow the gate
+  GameHooks.key.unshift((e) => {
     if (e.code !== 'KeyE' || e.repeat || !root || propsPanelOpen()) return false;
     const a = currentAction(); if (!a) return false;
     a.f(); return true;

@@ -2,21 +2,22 @@
 // Parked vehicles are drawn as instanced, baked meshes (one draw call per colour variant), with a
 // box proxy for the far range. When the player presses F on foot near one, a real TrafficModels
 // vehicle replaces the instance and is handed to player.js through the global `traffic` array.
-// Exposes window.Parked = { lots: [{ name, x, z, rot, bays: [{ x, z, rot, taken }] }], vehicles, count }.
+// Exposes window.Parked = { lots: [{ name, x, z, rot, bays: [{ x, z, rot, taken }] }], vehicles, count, layout() }.
 const Parked = (function () {
   const api = { lots: [], vehicles: [], count: 0 };
   // Variant kinds (it.vk) pick the TrafficModels builder; the kind handed to player.js (it.kind / t.model) is what its
   // PARAMS / SEATS know: every two-wheeler drives as 'bike', the Innova-style MPV and Fortuner-style 4x4 as 'suv'.
-  const KINDS = ['bike', 'scooter', 'classic', 'classic2', 'sport', 'faired', 'cycle', 'hatch', 'suv', 'swift', 'dzire', 'alto', 'bolero', 'scorpio', 'ace', 'mpv', 'fortuner', 'fortunerBlack', 'crysta', 'berlinetta', 'muscle', 'wedge', 'coupe911', 'auto', 'tractor', 'lorry', 'bus', 'bullockCart'];
-  const VARIANTS = { bike: 3, scooter: 3, classic: 2, classic2: 2, sport: 2, faired: 2, cycle: 2, hatch: 1, suv: 1, swift: 3, dzire: 2, alto: 3, bolero: 2, scorpio: 2, ace: 1, mpv: 1, fortuner: 1, fortunerBlack: 1, crysta: 1, berlinetta: 1, muscle: 1, wedge: 1, coupe911: 1, auto: 3, tractor: 2, lorry: 2, bus: 1, bullockCart: 1 };
-  const HW = { bike: 0.45, scooter: 0.42, classic: 0.45, classic2: 0.45, sport: 0.45, faired: 0.42, cycle: 0.38, auto: 0.75, hatch: 0.85, suv: 0.95, swift: 0.86, dzire: 0.88, alto: 0.76, bolero: 0.92, scorpio: 0.98, ace: 0.8, mpv: 0.95, fortuner: 0.98, fortunerBlack: 0.98, crysta: 0.95, berlinetta: 1.0, muscle: 0.97, wedge: 0.99, coupe911: 0.93, tractor: 1.0, lorry: 1.2, bus: 1.3, bullockCart: 0.9 };
-  const PLAYER_KIND = { scooter: 'bike', classic: 'bike', classic2: 'bike', sport: 'bike', faired: 'bike', cycle: 'bike', mpv: 'suv', fortuner: 'suv', fortunerBlack: 'suv', crysta: 'suv',
+  const KINDS = ['bike', 'scooter', 'classic', 'classic2', 'sport', 'faired', 'cycle', 'hatch', 'suv', 'activa', 'starCity', 'swift', 'swiftNew', 'dzire', 'alto', 'bolero', 'scorpio', 'scorpioN', 'safari', 'sumo', 'ace', 'mpv', 'fortuner', 'fortunerBlack', 'crysta', 'wagonR', 'innova', 'landCruiser', 'defender', 'gclass', 'tharRoxx', 'thar', 'hector', 'hayabusa', 's1000rr', 'r1250gsa', 'r1300gsa', 'berlinetta', 'muscle', 'wedge', 'coupe911', 'auto', 'tractor', 'lorry', 'bus', 'bullockCart'];
+  const VARIANTS = { defender: 1, gclass: 1, thar: 2, hector: 2, wagonR: 2, innova: 1, landCruiser: 1, tharRoxx: 2, hayabusa: 1, s1000rr: 1, r1250gsa: 1, r1300gsa: 1, activa: 2, starCity: 2, swiftNew: 2, scorpioN: 2, safari: 2, sumo: 2, bike: 3, scooter: 3, classic: 2, classic2: 2, sport: 2, faired: 2, cycle: 2, hatch: 1, suv: 1, swift: 3, dzire: 2, alto: 3, bolero: 2, scorpio: 2, ace: 1, mpv: 1, fortuner: 1, fortunerBlack: 1, crysta: 1, berlinetta: 1, muscle: 1, wedge: 1, coupe911: 1, auto: 3, tractor: 2, lorry: 2, bus: 1, bullockCart: 1 };
+  const HW = { defender: 1.0, gclass: 0.99, thar: 0.91, hector: 0.92, wagonR: 0.81, innova: 0.88, landCruiser: 0.99, tharRoxx: 0.94, hayabusa: 0.42, s1000rr: 0.42, r1250gsa: 0.5, r1300gsa: 0.5, activa: 0.36, starCity: 0.38, swiftNew: 0.88, scorpioN: 0.98, safari: 1.0, sumo: 0.87, bike: 0.45, scooter: 0.42, classic: 0.45, classic2: 0.45, sport: 0.45, faired: 0.42, cycle: 0.38, auto: 0.75, hatch: 0.85, suv: 0.95, swift: 0.86, dzire: 0.88, alto: 0.76, bolero: 0.92, scorpio: 0.98, ace: 0.8, mpv: 0.95, fortuner: 0.98, fortunerBlack: 0.98, crysta: 0.95, berlinetta: 1.0, muscle: 0.97, wedge: 0.99, coupe911: 0.93, tractor: 1.0, lorry: 1.2, bus: 1.3, bullockCart: 0.9 };
+  const PLAYER_KIND = { defender: 'suv', gclass: 'suv', thar: 'suv', hector: 'suv', wagonR: 'hatch', innova: 'suv', landCruiser: 'suv', tharRoxx: 'suv', hayabusa: 'bike', s1000rr: 'bike', r1250gsa: 'bike', r1300gsa: 'bike', activa: 'bike', starCity: 'bike', swiftNew: 'hatch', scorpioN: 'suv', safari: 'suv', sumo: 'suv', scooter: 'bike', classic: 'bike', classic2: 'bike', sport: 'bike', faired: 'bike', cycle: 'bike', mpv: 'suv', fortuner: 'suv', fortunerBlack: 'suv', crysta: 'suv',
     // sports cars: the player kind is the engine-audio.js voice key (PARAMS come from userData.type)
     berlinetta: 'ferrari', muscle: 'muscle', wedge: 'lambo', coupe911: 'porsche',
     swift: 'hatch', dzire: 'hatch', alto: 'hatch', bolero: 'suv', scorpio: 'suv', ace: 'suv' };
   const pk = vk => PLAYER_KIND[vk] || vk;
-  const HOME_BIKES = ['bike', 'bike', 'bike', 'scooter', 'scooter', 'scooter', 'classic', 'classic2', 'sport', 'faired', 'cycle', 'cycle'];
-  const HOME_CARS = ['swift', 'swift', 'alto', 'alto', 'alto', 'dzire', 'bolero', 'bolero', 'scorpio', 'ace', 'mpv'];
+  // big bikes are rare finds in a village: about 1 in 20
+  const HOME_BIKES = ['bike', 'starCity', 'starCity', 'activa', 'activa', 'scooter', 'classic', 'classic2', 'sport', 'faired', 'cycle', 'cycle', 'bike', 'starCity', 'starCity', 'activa', 'activa', 'scooter', 'classic', 'classic2', 'sport', 'faired', 'cycle', 'cycle', 'bike', 'starCity', 'starCity', 'activa', 'activa', 'scooter', 'classic', 'classic2', 'sport', 'faired', 'cycle', 'cycle', 'bike', 'starCity', 'starCity', 'activa', 'activa', 'scooter', 'classic', 'classic2', 'sport', 'faired', 'cycle', 'cycle', 'bike', 'starCity', 'starCity', 'activa', 'activa', 'scooter', 'classic', 'classic2', 'sport', 'faired', 'cycle', 'cycle', 'bike', 'starCity', 'starCity', 'activa', 'activa', 'scooter', 'classic', 'classic2', 'sport', 'faired', 'cycle', 'cycle'];
+  const HOME_CARS = ['swift', 'swiftNew', 'alto', 'alto', 'alto', 'wagonR', 'wagonR', 'wagonR', 'innova', 'innova', 'tharRoxx', 'thar', 'hector', 'fortuner', 'landCruiser', 'dzire', 'bolero', 'sumo', 'safari', 'scorpio', 'scorpioN', 'ace', 'mpv'];
   const NEAR = 130, FAR = ({ low: 300, medium: 380 }[window.Quality && Quality.tier]) || 520;       // full detail inside NEAR, box proxy inside FAR, nothing beyond
 
   // seeded random so the village looks the same every load
@@ -42,6 +43,7 @@ const Parked = (function () {
   function bake(g) {
     g.updateMatrixWorld(true);
     const pos = [], nor = [], col = [], c = new THREE.Color(), nm = new THREE.Matrix3();
+    const gp = [], gn = []; let gMat = null;     // interior-mapped glass stays a separate instanced mesh, drawn near only
     let sum = new THREE.Color(0, 0, 0), wsum = 0;
     g.traverse(o => {
       if (!o.isMesh || !o.visible) return;
@@ -53,6 +55,7 @@ const Parked = (function () {
       geo.applyMatrix4(o.matrixWorld);
       if (!geo.attributes.normal) geo.computeVertexNormals();
       const P = geo.attributes.position, N = geo.attributes.normal, C = geo.attributes.color;
+      if (m.userData && m.userData.interior) { gMat = m; for (let i = 0; i < P.count; i++) { gp.push(P.getX(i), P.getY(i), P.getZ(i)); gn.push(N.getX(i), N.getY(i), N.getZ(i)); } }
       for (let i = 0; i < P.count; i++) {
         pos.push(P.getX(i), P.getY(i), P.getZ(i)); nor.push(N.getX(i), N.getY(i), N.getZ(i));
         if (C) col.push(c.r * C.getX(i), c.g * C.getY(i), c.b * C.getZ(i)); else col.push(c.r, c.g, c.b);
@@ -66,7 +69,8 @@ const Parked = (function () {
     geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     geo.computeBoundingSphere();
     const proxy = wsum ? new THREE.Color(sum.r / wsum, sum.g / wsum, sum.b / wsum) : new THREE.Color(0x777777);
-    return { geo, proxy };
+    let glass = null; if (gMat) { glass = new THREE.BufferGeometry(); glass.setAttribute('position', new THREE.Float32BufferAttribute(gp, 3)); glass.setAttribute('normal', new THREE.Float32BufferAttribute(gn, 3)); glass.computeBoundingSphere(); }
+    return { geo, proxy, glass, gMat };
   }
   // deep clone of a template model with its own materials, keeping wheels / head / tail references
   function cloneModel(t) {
@@ -75,10 +79,11 @@ const Parked = (function () {
     t.g.traverse(o => src.push(o)); g2.traverse(o => dst.push(o));
     dst.forEach(o => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(m => m.clone()) : o.material.clone(); });
     const map = o => dst[src.indexOf(o)];
+    const mp = p => p ? { ...p, mesh: map(p.mesh), ap: p.ap ? map(p.ap) : undefined } : null;
     const ud = t.userData || {}, steer = (t.steer || []).map(map);
     const userData = Object.assign({}, ud, { wheels: (ud.wheels || []).map(w => ({ mesh: map(w.mesh), radius: w.radius, front: w.front })),
-      steer, fork: ud.fork ? map(ud.fork) : null, dims: ud.dims && { ...ud.dims }, center: ud.center && { ...ud.center } });
-    return { g: g2, wheels: t.wheels.map(map), head: t.head.map(map), tail: t.tail.map(map), steer, len: t.len, kind: t.kind, type: t.type, seat: t.seat, userData };
+      steer, fork: ud.fork ? map(ud.fork) : null, doors: (ud.doors || []).map(mp), hood: mp(ud.hood), boot: mp(ud.boot), sunroof: mp(ud.sunroof), top: mp(ud.top), dims: ud.dims && { ...ud.dims }, center: ud.center && { ...ud.center } });
+    return { g: g2, trailer: t.trailer ? map(t.trailer) : undefined, wheels: t.wheels.map(map), head: t.head.map(map), tail: t.tail.map(map), steer, len: t.len, kind: t.kind, type: t.type, seat: t.seat, userData };
   }
 
   // ---------------------------------------------------------------- state
@@ -106,103 +111,126 @@ const Parked = (function () {
     opts = opts || {};
     const vi = opts.vi != null ? opts.vi : Math.floor(rnd() * variants[kind].length);
     const tpl = variants[kind][vi].tpl, hl = tpl.len / 2, hw = HW[kind];
-    const it = { kind: pk(kind), vk: kind, vi, x, z, rot, hw, hl, handle: world.addCollider ? world.addCollider(x, z, hw, hl, rot) : null, where: opts.where || 'road' };
+    const it = { kind: pk(kind), vk: kind, vi, x, z, y: typeof groundY === 'function' ? groundY(x, z) : 0, rot, hw, hl, handle: world.addCollider ? world.addCollider(x, z, hw, hl, rot) : null, where: opts.where || 'road' };
     items.push(it); occupied.push([x, z, Math.max(hw, hl) * 0.9]);
     return it;
   }
   function tryPlace(kind, x, z, rot, opts) {
     const tpl = variants[kind][0].tpl;
+    if (world.landAt && [[0, 0], [3, 0], [-3, 0], [0, 3], [0, -3]].some(o => world.landAt(x + o[0], z + o[1]) > 0.02)) return null;   // nothing parks on the raised land
     if (!fits(x, z, rot, HW[kind] + 0.15, tpl.len / 2 + 0.15, opts && opts.allowRoad)) return null;
     return addItem(kind, x, z, rot, opts);
   }
 
-  // ---------------------------------------------------------------- placement: homes
-  function placeAtHomes(maxBikes, maxCars) {
-    const B = world.buildings.slice();
-    for (let i = B.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [B[i], B[j]] = [B[j], B[i]]; }
-    let bikes = 0, cars = 0;
-    for (const b of B) {
-      if (bikes >= maxBikes && cars >= maxCars) break;
-      if (b.paint) continue;                                  // civic buildings handled by lots
-      const cx = b.p.reduce((s, p) => s + p[0], 0) / b.p.length, cz = b.p.reduce((s, p) => s + p[1], 0) / b.p.length;
-      const nr = world.nearestRoad(cx, cz, r => r.t !== 'highway'); if (!nr || nr.d > 28 || nr.d < 2) continue;
-      const ux = (nr.x - cx) / nr.d, uz = (nr.z - cz) / nr.d;
-      // walk from the centroid to the façade facing the road
-      let t = 0; while (t < nr.d && world.insideBuilding(cx + ux * t, cz + uz * t, 0)) t += 0.25;
-      const bb = b.bb || [0, 0, 0, 0], area = (bb[2] - bb[0]) * (bb[3] - bb[1]);
-      const wantCar = area > 120 && cars < maxCars && rnd() < 0.55;
-      if (!wantCar && bikes >= maxBikes) continue;
-      if (!wantCar && rnd() < 0.35) continue;              // not every house has a bike out front
-      const kind = wantCar ? pick(HOME_CARS) : pick(HOME_BIKES);
-      const along = nr.ang, side = (rnd() - 0.5) * 3;
-      let done = false;
-      for (const gap of wantCar ? [1.6, 2.2, 2.8] : [0.9, 1.3, 1.8]) {
-        const d = t + gap + HW[kind];
-        const x = cx + ux * d + Math.sin(along) * side, z = cz + uz * d + Math.cos(along) * side;
-        // keep off the carriageway: at least the road half-width from the road centre line
-        const n2 = world.nearestRoad(x, z); if (n2 && n2.d < n2.r.w / 2 + HW[kind] + 0.3) break;
-        const rot = wantCar ? along + (rnd() < 0.5 ? 0 : Math.PI) + (rnd() - 0.5) * 0.12
-                            : Math.atan2(-ux, -uz) + (rnd() - 0.5) * 0.5 + (rnd() < 0.3 ? Math.PI / 2 : 0);
-        if (tryPlace(kind, x, z, rot, { where: 'home' })) { done = true; break; }
+  // ---------------------------------------------------------------- placement: straight rows along the road edge
+  // Interim layout until the user gives fixed positions (fill FIXED_SPOTS below and it replaces all of this).
+  // Every vehicle is aligned exactly with its straight stretch of road, on the kerb line. A car straddles the edge,
+  // inner tyres on the paved edge and outer tyres on the flat shoulder: traffic lanes (off = min(2.2, w/4) from the centre)
+  // stay clear, since none of these roads is wide enough to hold a lane and a car wholly on the tarmac. Two-wheelers
+  // are narrow enough to stand wholly on the edge of the road. Nothing goes on a hump, a bund or the raised land,
+  // near a junction, or across a gate.
+  const FIXED_SPOTS = [];   // [{ kind, x, z, rot, where? }]
+  const SAFE = { gx: 51.49, gz: -275.56 };
+  const ROWS = { stretches: null };
+  // straight stretches: runs of a road's polyline within 2 degrees of the first segment's bearing
+  function stretches(minLen) {
+    const out = [];
+    for (const r of world.roads) {
+      const P = r.p; let i = 0;
+      while (i < P.length - 1) {
+        const ang = Math.atan2(P[i + 1][0] - P[i][0], P[i + 1][1] - P[i][1]); let j = i + 1;
+        while (j < P.length - 1) { const a2 = Math.atan2(P[j + 1][0] - P[j][0], P[j + 1][1] - P[j][1]), d = Math.atan2(Math.sin(a2 - ang), Math.cos(a2 - ang)); if (Math.abs(d) > 0.035) break; j++; }
+        const ax = P[i][0], az = P[i][1], bx = P[j][0], bz = P[j][1], L = Math.hypot(bx - ax, bz - az), bear = Math.atan2(bx - ax, bz - az);
+        if (L >= minLen) out.push({ r, x: ax, z: az, ang: bear, L, used: {} });
+        i = j;
       }
-      if (done) { if (wantCar) cars++; else bikes++; }
     }
-    return { bikes, cars };
+    return out;
   }
-
-  // ---------------------------------------------------------------- placement: along roads
-  // line up `n` vehicles on the verge of the road nearest (x, z), starting at that point
-  function lineUp(kind, x, z, n, spacing, filter, where) {
-    const nr = world.nearestRoad(x, z, filter); if (!nr) return 0;
-    const fx = Math.sin(nr.ang), fz = Math.cos(nr.ang), lx = Math.cos(nr.ang), lz = -Math.sin(nr.ang);
-    const tpl = variants[kind][0].tpl;
-    let placed = 0;
-    for (const side of [1, -1]) for (let k = 0; k < n * 4 && placed < n; k++) {
-      const s = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * spacing;
-      const off = nr.r.w / 2 + HW[kind] + 0.5;
-      const px = nr.x + fx * s + lx * off * side, pz = nr.z + fz * s + lz * off * side;
-      const rot = nr.ang + (side > 0 ? 0 : Math.PI) + (rnd() - 0.5) * 0.08;
-      if (fits(px, pz, rot, HW[kind] + 0.1, tpl.len / 2 + 0.1, true) && world.surfaceAt(px, pz) === 'field') { addItem(kind, px, pz, rot, { where }); placed++; }
+  const isBike = k => HW[k] < 0.55;
+  // a spot on the kerb line is good when the body is clear of everything solid, level, and away from side roads
+  function kerbOK(st, kind, x, z, rot, hw, hl) {
+    if (!fits(x, z, rot, hw + 0.05, hl + 0.05, true)) return false;
+    if (world.nearestRoad(x, z, q => q !== st.r && q.t !== 'dirt' && Math.abs(Math.sin(q.p && q.p[1] ? Math.atan2(q.p[1][0] - q.p[0][0], q.p[1][1] - q.p[0][1]) - st.ang : 0)) > 0.3)) {
+      const o = world.nearestRoad(x, z, q => q !== st.r); if (o && o.d < o.r.w / 2 + hl + 1.2 && Math.abs(Math.sin(o.ang - st.ang)) > 0.3) return false;
     }
-    return placed;
-  }
-  // a free spot for a single vehicle near (x, z): rings of candidates
-  function nearSpot(kind, x, z, rMax, where) {
-    for (let r = 4; r < rMax; r += 3) for (let a = 0; a < 12; a++) {
-      const an = a / 12 * Math.PI * 2 + r, px = x + Math.sin(an) * r, pz = z + Math.cos(an) * r;
-      const nr = world.nearestRoad(px, pz); const rot = nr ? nr.ang + (rnd() < 0.5 ? 0 : Math.PI) : an;
-      if (tryPlace(kind, px, pz, rot, { where })) return true;
+    if (ROWS.clearHouse && !isBike(kind) && Math.hypot(x - 45, z + 270) < 125) return false;   // one of each car model near the house: residents park further out
+    if (Math.hypot(x - SAFE.gx, z - SAFE.gz) < 6.5) return false;                   // the safe-house gate stays clear
+    const fx = Math.sin(rot), fz = Math.cos(rot), rx = Math.cos(rot), rz = -Math.sin(rot);
+    if (world.dipAt) for (const a of [-1, -0.5, 0, 0.5, 1]) for (const b of [-1, -0.5, 0, 0.5, 1]) if (world.dipAt(x + fx * hl * a + rx * hw * b, z + fz * hl * a + rz * hw * b) < -0.005) return false;   // nothing parks on the channel
+    for (const a of [-1, 0, 1]) for (const b of [-1, 1]) {
+      const px = x + fx * hl * a + rx * hw * b, pz = z + fz * hl * a + rz * hw * b;
+      if ((world.landAt && world.landAt(px, pz) > 0.02) || (world.humpAt && world.humpAt(px, pz) > 0.005) || (world.dipAt && world.dipAt(px, pz) < -0.005) || (world.bundAt && world.bundAt(px, pz) > 0.02) || (world.undAt && Math.abs(world.undAt(px, pz)) > 0.02)) return false;
+      if (world.surfaceAt(px, pz) === 'river') return false;
     }
-    return false;
+    return true;
   }
-
-  // ---------------------------------------------------------------- safe house: a parked copy of the real Crysta, a BLACK Fortuner-style 4x4, a berlinetta, a Swift 2010,
-  // the faired sports bike and one of each other bike
-  // Just outside the safe-house gate, on free ground (never on the road, inside walls/buildings, or within 3.5 m of
-  // the gate so the gate stays clear). Candidates must be farther from the house than the gate is (outside the
-  // compound) and are tried on rings of growing radius around the gate; orientation follows the nearest road.
-  const SAFE = { hx: 38.9, hz: -264.8, gx: 51.49, gz: -275.56 };
-  function safeHouseParking() {
-    const gateR = Math.hypot(SAFE.gx - SAFE.hx, SAFE.gz - SAFE.hz);
-    // the bikes now stand inside the yard (safehouse2.js); the MPV is replaced by a copy of the real Crysta,
-    // plus the boss's mid-engine berlinetta
-    const want = ['crysta', 'fortunerBlack', 'berlinetta', 'swift', 'scooter', 'cycle'];
-    const placed = [];
-    for (const kind of want) {
-      const car = !['scooter', 'cycle'].includes(kind);
-      let ok = null;
-      for (let r = car ? 5 : 4; r < 26 && !ok; r += 0.75) for (let a = 0; a < 24 && !ok; a++) {
-        const an = a / 24 * Math.PI * 2, x = SAFE.gx + Math.sin(an) * r, z = SAFE.gz + Math.cos(an) * r;
-        if (Math.hypot(x - SAFE.hx, z - SAFE.hz) < gateR + 1.5) continue;
-        if (Math.hypot(x - SAFE.gx, z - SAFE.gz) < 3.5 + (car ? 2.4 : 1)) continue;
-        const nr = world.nearestRoad(x, z);
-        if (nr && nr.d < nr.r.w / 2 + HW[kind] + 0.4) continue;
-        const rot = nr ? (car ? nr.ang + (a % 2 ? 0 : Math.PI) : nr.ang + Math.PI / 2 + (a % 2 ? 0 : Math.PI) + 0.25) : an;
-        ok = tryPlace(kind, x, z, rot, { where: 'safehouse', vi: 0 });
+  // lay `kinds` nose to tail from distance s0 along the stretch, keep-left: the row faces the way traffic runs on that side
+  function fillRow(st, side, s0, kinds, where, gap) {
+    const fx = Math.sin(st.ang), fz = Math.cos(st.ang), lx = Math.cos(st.ang), lz = -Math.sin(st.ang);
+    const rot = st.ang + (side > 0 ? 0 : Math.PI), bike = isBike(kinds[0]);
+    const off = bike ? st.r.w / 2 - 0.5 : st.r.w / 2;           // one centre line per row, so the row is dead straight
+    let s = s0, placed = 0; const got = [];
+    for (const kind of kinds) {
+      const hl = variants[kind][0].tpl.len / 2, hw = HW[kind];
+      for (; s + hl * 2 < st.L - 3; s += 1) {
+        const c = s + hl, x = st.x + fx * c + lx * off * side, z = st.z + fz * c + lz * off * side;
+        if (s > 2 && !(st.r.drainRoad && side < 0 && x > 32.5 && x < 53) && kerbOK(st, kind, x, z, rot, hw, hl)) { const it = addItem(kind, x, z, rot, { where, vi: placed % VARIANTS[kind] }); got.push(it); s += hl * 2 + (gap || 1.1); placed++; break; }
       }
-      if (ok) placed.push(kind + '@' + ok.x.toFixed(1) + ',' + ok.z.toFixed(1)); else console.warn('parked.js: no room by the safe house for', kind);
     }
-    api.safeHouse = placed;
+    st.used[side] = Math.max(st.used[side] || 0, s + 8);
+    return got;
+  }
+  // best row site for a list near (x, z): tries the nearest stretches, both sides; keeps the fullest row
+  function rowNear(x, z, kinds, where, filter, sideFirst) {
+    const list = ROWS.stretches.filter(st => !filter || filter(st.r)).map(st => {
+      const t = THREE.MathUtils.clamp((x - st.x) * Math.sin(st.ang) + (z - st.z) * Math.cos(st.ang), 0, st.L);
+      return { st, t, d: Math.hypot(st.x + Math.sin(st.ang) * t - x, st.z + Math.cos(st.ang) * t - z) };
+    }).sort((a, b) => a.d - b.d).slice(0, 8);
+    let left = kinds.slice(); const got = [];
+    for (const q of list) for (const side of sideFirst ? [sideFirst, -sideFirst] : [1, -1]) {
+      if (!left.length) break;
+      const from = Math.max(q.st.used[side] || 0, Math.max(0, q.t - 12));
+      const it = fillRow(q.st, side, from, left, where); it.forEach(i => { got.push(i); left.splice(left.indexOf(i.vk), 1); });
+    }
+    return got;
+  }
+  // the village: rows of up to six, cars on one stretch and bikes on the next, working outwards from the junction
+  function villageRows(junction, cars, bikes) {
+    ROWS.clearHouse = true;
+    const near = ROWS.stretches.filter(st => st.r.t !== 'dirt' && st.r.t !== 'lane').map(st => ({ st, d: Math.hypot(st.x + Math.sin(st.ang) * st.L / 2 - junction.x, st.z + Math.cos(st.ang) * st.L / 2 - junction.z) })).filter(q => q.d < 1000).sort((a, b) => a.d - b.d);
+    const lanes = ROWS.stretches.filter(st => st.r.t === 'lane');
+    for (let pass = 0; pass < 4 && (cars.length || bikes.length); pass++) for (const { st } of near) {
+      for (const side of [1, -1]) {
+        const s0 = st.used[side] || 6 + pass * 3; if (s0 + 14 > st.L) continue;
+        const bikesHere = !cars.length || (bikes.length && (Math.round(st.x + st.z) + side + pass) % 3 === 0), src = bikesHere ? bikes : cars;
+        if (!src.length) continue;
+        const row = src.slice(0, 6), got = fillRow(st, side, s0, row, 'road');
+        got.forEach(i => src.splice(src.indexOf(i.vk), 1));
+        st.used[side] = (st.used[side] || 0) + 22;
+      }
+    }
+    for (const st of lanes) { if (!bikes.length) break; const got = fillRow(st, 1, st.used[1] || 4, bikes.slice(0, 4), 'road'); got.forEach(i => bikes.splice(bikes.indexOf(i.vk), 1)); }
+  }
+  function safeHouseRow() {
+    // six cars side by side on the level tops of the two raised plots beside the mud lane, noses to the lane; each spot is checked level.
+    // Two-wheelers live in the yard (safehouse2.js); the Innova is only the player's own car. The other models go to the south road.
+    // one each near the house, on the south road edge east of it; every other free car goes out into the village, singly or in twos, far apart
+    const got = []; let home = ['landCruiser', 'safari', 'scorpio', 'swift', 'thar', 'ace'];
+    let free = ['hector', 'fortuner', 'defender', 'gclass', 'tharRoxx', 'berlinetta', 'swiftNew', 'dzire', 'alto', 'wagonR', 'mpv', 'bolero', 'scorpioN', 'sumo', 'muscle', 'wedge', 'coupe911'];
+    for (const st of ROWS.stretches.filter(q => q.r.drainRoad && q.x > 50 && q.x < 115).sort((p, q) => p.x - q.x)) { if (!home.length) break; const row = fillRow(st, -1, 2, home, 'free', 1.1); got.push(...row); home = home.filter(k => !row.some(i => i.vk === k)); }
+    // what the south edge could not hold takes the nearest other road, still by the house
+    for (const q of ROWS.stretches.filter(st => !st.r.drainRoad && st.r.n !== 'east_ns3' && st.r.n !== 'heap_ns' && st.r.t !== 'dirt').map(st => { const t = THREE.MathUtils.clamp((45 - st.x) * Math.sin(st.ang) + (-262 - st.z) * Math.cos(st.ang), 0, st.L); return { st, t, d: Math.hypot(st.x + Math.sin(st.ang) * t - 45, st.z + Math.cos(st.ang) * t + 262) }; }).sort((p, q) => p.d - q.d)) { if (!home.length || q.d > 90) break; const row = fillRow(q.st, -1, Math.max(2, q.t - 20), home, 'free', 1.1); got.push(...row); home = home.filter(k => !row.some(i => i.vk === k)); }
+    if (home.length) console.warn('parked.js: no room near the house for', home.join(','));
+    const hx = 45, hz = -262, mid = st => [st.x + Math.sin(st.ang) * st.L / 2, st.z + Math.cos(st.ang) * st.L / 2], mine = [];
+    const sites = ROWS.stretches.filter(st => st.r.t !== 'highway' && st.r.t !== 'dirt' && st.r.n !== 'heap_ns' && !st.r.drainRoad && st.L >= 22).map(st => ({ st, m: mid(st), d: Math.hypot(mid(st)[0] - hx, mid(st)[1] - hz) })).filter(q => q.d > 135 && q.d < 480).sort((p, q) => (p.m[0] * 7.3 + p.m[1] * 3.1) % 97 - (q.m[0] * 7.3 + q.m[1] * 3.1) % 97);
+    ROWS.clearHouse = true;
+    for (let i = 0; i < sites.length && free.length; i++) { const q = sites[i]; if (mine.some(m => Math.hypot(m[0] - q.m[0], m[1] - q.m[1]) < 70)) continue;
+      const take = free.slice(0, mine.length % 3 === 2 ? 2 : 1), row = fillRow(q.st, q.st.r.w >= 6 && i % 2 ? 1 : -1, Math.max(3, q.st.L * 0.35), take, 'scatter', 3 + i % 4); if (!row.length) continue;
+      got.push(...row); mine.push(q.m); free = free.filter(k => !row.some(c => c.vk === k)); }
+    ROWS.clearHouse = false;
+    if (free.length) console.warn('parked.js: no room for', free.join(','));
+    api.safeHouse = got.map(it => it.vk + '@' + it.x.toFixed(1) + ',' + it.z.toFixed(1));
   }
 
   // ---------------------------------------------------------------- parking lots
@@ -304,7 +332,7 @@ const Parked = (function () {
       const bx = x + rx * b.x + fx * b.z, bz = z + rz * b.x + fz * b.z;
       const brot = rot + (b.dir > 0 ? Math.PI : 0);      // nose into the bay (towards its back line)
       const bay = { x: bx, z: bz, rot: brot, taken: false };
-      if ((bi % 2 === 0) !== (rnd() < 0.2)) {
+      if (fillKinds && fillKinds.length && (bi % 2 === 0) !== (rnd() < 0.2)) {
         const kind = pick(fillKinds);
         const it = addItem(kind, bx + (rnd() - 0.5) * 0.2, bz + (rnd() - 0.5) * 0.2, brot + (rnd() - 0.5) * 0.06, { where: 'lot' });
         it.bay = bay; bay.taken = true;
@@ -317,48 +345,17 @@ const Parked = (function () {
   }
 
   // ---------------------------------------------------------------- auto stand
-  // Autos wait in one neat row on the NH shoulder next to the bus stop shelter, angled 60 degrees to the kerb
-  // (nose out towards the carriageway), on the bus stop's own side of the road. Only shoulder space is used:
-  // every auto must clear the carriageway edge, buildings, walls and the shelter. Registered as a lot so the
-  // map shows it and player/property code sees its bays.
+  // Autos wait nose to tail on the NH kerb line by the bus stop. Registered as a lot so the map shows it and
+  // auto-rides.js / properties.js see its bays; the last bay stays free for the player.
   function autoStand(stop) {
     if (!stop || !stop.x) return null;
-    const nr = world.nearestRoad(stop.x, stop.z, r => r.t === 'highway'); if (!nr) return null;
-    const fx = Math.sin(nr.ang), fz = Math.cos(nr.ang);
-    const side = Math.sign((stop.x - nr.x) * Math.cos(nr.ang) - (stop.z - nr.z) * Math.sin(nr.ang)) || 1;
-    const lx = Math.cos(nr.ang) * side, lz = -Math.sin(nr.ang) * side;          // unit normal, road -> stop side
-    const tpl = variants.auto[0].tpl, hl = tpl.len / 2, hw = HW.auto, A = Math.PI / 3;
-    const depth = hl * Math.sin(A) + hw * Math.cos(A);                          // half-extent across the kerb
-    const off = nr.r.w / 2 + 0.6 + depth;                                        // inner corner 0.6 m off the edge
-    // which way along the road has room: start past the shelter (half width 3.5 m + gap) on each side
-    const lot = { name: 'Auto Stand', x: 0, z: 0, rot: 0, bays: [] };
-    let best = null;
-    for (const dir of [1, -1]) {
-      const bays = [];
-      for (let k = 0; k < 14 && bays.length < 7; k++) {
-        const s = dir * (6.0 + k * 2.1);
-        const x = nr.x + fx * s + lx * off, z = nr.z + fz * s + lz * off;
-        // nose points out towards the road and in the direction of travel on that side
-        const rot = Math.atan2(-lx, -lz) + dir * side * (Math.PI / 2 - A);
-        const ok = fits(x, z, rot, hw + 0.05, hl + 0.05, true) && world.surfaceAt(x, z) === 'field';
-        const n2 = world.nearestRoad(x, z);
-        if (!ok || (n2 && n2.d < n2.r.w / 2 + hw)) { if (bays.length) break; continue; }
-        bays.push({ x, z, rot });
-        occupied.push([x, z, 0.9]);                       // reserve while testing the next one
-      }
-      for (let i = 0; i < bays.length; i++) occupied.pop();
-      if (!best || bays.length > best.length) best = bays;
-    }
-    if (!best || !best.length) { console.warn('parked.js: no room for the auto stand'); return null; }
-    best.forEach((b, i) => {
-      const bay = { x: b.x, z: b.z, rot: b.rot, taken: false };
-      if (i < best.length - 1 || best.length < 3) {        // leave the last slot free for the player
-        const it = addItem('auto', b.x, b.z, b.rot, { where: 'autostand' }); it.bay = bay; bay.taken = true;
-      }
-      lot.bays.push(bay);
-    });
-    lot.x = best.reduce((s, b) => s + b.x, 0) / best.length; lot.z = best.reduce((s, b) => s + b.z, 0) / best.length;
-    lot.rot = Math.atan2(-lx, -lz);
+    const got = rowNear(stop.x + 6, stop.z + 6, Array(6).fill('auto'), 'autostand', r => r.t === 'highway');
+    if (!got.length) { console.warn('parked.js: no room for the auto stand'); return null; }
+    const lot = { name: 'Auto Stand', x: 0, z: 0, rot: got[0].rot, bays: [] };
+    got.forEach(it => { const bay = { x: it.x, z: it.z, rot: it.rot, taken: true }; it.bay = bay; lot.bays.push(bay); });
+    const a = got[got.length - 1], b = got[Math.max(0, got.length - 2)], ex = 2 * a.x - b.x, ez = 2 * a.z - b.z;
+    lot.bays.push({ x: ex, z: ez, rot: a.rot, taken: false });
+    lot.x = got.reduce((s, b2) => s + b2.x, 0) / got.length; lot.z = got.reduce((s, b2) => s + b2.z, 0) / got.length;
     world.addMapIcon && world.addMapIcon(lot.x, lot.z, 'P', 'Auto Stand');
     api.lots.push(lot);
     return lot;
@@ -370,34 +367,51 @@ const Parked = (function () {
     const mat = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 50, specular: 0x333333, side: THREE.DoubleSide });
     for (const k of KINDS) for (const vr of variants[k]) {
       const n = items.filter(it => it.vk === k && variants[k][it.vi] === vr).length;
-      vr.im = new THREE.InstancedMesh(vr.geo, mat, Math.max(1, n)); vr.im.count = 0; vr.im.castShadow = true; vr.im.receiveShadow = true;
-      vr.im.frustumCulled = false; vr.im.name = 'parked-' + k; scene.add(vr.im);
+      vr.im = new THREE.InstancedMesh(boundsGeo(vr.geo), mat, Math.max(1, n)); vr.im.count = 0; vr.im.castShadow = true; vr.im.receiveShadow = true;
+      vr.im.frustumCulled = true; vr.im.name = 'parked-' + k; scene.add(vr.im);
+      if (vr.glass) { vr.gim = new THREE.InstancedMesh(boundsGeo(vr.glass), vr.gMat, Math.max(1, n)); vr.gim.count = 0; vr.gim.name = 'parked-glass-' + k; scene.add(vr.gim); }
     }
     const box = new THREE.BoxGeometry(1, 1, 1); box.translate(0, 0.5, 0);
     proxyIM = new THREE.InstancedMesh(box, new THREE.MeshLambertMaterial(), Math.max(1, items.length));
     proxyIM.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, items.length) * 3), 3);
-    proxyIM.count = 0; proxyIM.frustumCulled = false; proxyIM.name = 'parked-far'; scene.add(proxyIM);
+    proxyIM.geometry = boundsGeo(box); proxyIM.count = 0; proxyIM.frustumCulled = true; proxyIM.name = 'parked-far'; scene.add(proxyIM);
   }
-  const PROXY_H = { bike: 1.1, scooter: 1.1, classic: 1.15, classic2: 1.1, sport: 1.15, faired: 1.15, cycle: 1.05, mpv: 1.8, fortuner: 1.84, fortunerBlack: 1.84, crysta: 1.8, berlinetta: 1.2, muscle: 1.38, wedge: 1.15, coupe911: 1.3,
+  // each InstancedMesh gets its own geometry wrapper (shared GPU buffers) whose bounding sphere is refitted to the
+  // live instances in refreshInstances(), so camera / shadow frustum culling works (r128 culls by the base sphere)
+  function boundsGeo(base) {
+    const g = new THREE.BufferGeometry(); g.index = base.index;
+    for (const n in base.attributes) g.attributes[n] = base.attributes[n];
+    g.groups = base.groups; if (!base.boundingSphere) base.computeBoundingSphere();
+    g.userData.baseR = base.boundingSphere.radius + base.boundingSphere.center.length(); g.boundingSphere = new THREE.Sphere(); return g;
+  }
+  function fitSphere(im, b) {
+    const sp = im.geometry.boundingSphere;
+    if (!im.count) { sp.center.set(0, -1e5, 0); sp.radius = 0; return; }
+    sp.center.set((b[0] + b[2]) / 2, 1, (b[1] + b[3]) / 2); sp.radius = Math.hypot(b[2] - b[0], b[3] - b[1]) / 2 + (im === proxyIM ? 8 : im.geometry.userData.baseR) + 1;
+  }
+  const PROXY_H = { defender: 1.97, gclass: 1.97, thar: 1.86, hector: 1.76, wagonR: 1.68, innova: 1.75, landCruiser: 1.95, tharRoxx: 1.92, hayabusa: 1.16, s1000rr: 1.2, r1250gsa: 1.5, r1300gsa: 1.55, activa: 1.15, starCity: 1.08, swiftNew: 1.52, scorpioN: 1.86, safari: 1.92, sumo: 1.92, bike: 1.1, scooter: 1.1, classic: 1.15, classic2: 1.1, sport: 1.15, faired: 1.15, cycle: 1.05, mpv: 1.8, fortuner: 1.84, fortunerBlack: 1.84, crysta: 1.8, berlinetta: 1.2, muscle: 1.38, wedge: 1.15, coupe911: 1.3,
     swift: 1.52, dzire: 1.52, alto: 1.45, bolero: 1.9, scorpio: 2.0, ace: 1.86, auto: 1.75, hatch: 1.45, suv: 1.75, tractor: 2.2, lorry: 3.2, bus: 3.1, bullockCart: 1.8 };
   function refreshInstances() {
     const cam = game.camera.position;
-    for (const k of KINDS) for (const vr of variants[k]) vr.im.count = 0;
+    for (const k of KINDS) for (const vr of variants[k]) { vr.im.count = 0; if (vr.gim) vr.gim.count = 0; }
     proxyIM.count = 0;
+    const bx = new Map(), grow = (im, x, z) => { let b = bx.get(im); if (!b) bx.set(im, b = [x, z, x, z]); if (x < b[0]) b[0] = x; if (x > b[2]) b[2] = x; if (z < b[1]) b[1] = z; if (z > b[3]) b[3] = z; };
     for (const it of items) {
       if (it.claimed) continue;
       const d = Math.hypot(it.x - cam.x, it.z - cam.z);
       if (d > FAR) continue;
       q.setFromAxisAngle(yAxis, it.rot);
       const vr = variants[it.vk][it.vi];
-      if (d < NEAR) { m4.compose(v3.set(it.x, 0, it.z), q, sc.set(1, 1, 1)); vr.im.setMatrixAt(vr.im.count++, m4); }
+      if (d < NEAR) { m4.compose(v3.set(it.x, it.y, it.z), q, sc.set(1, 1, 1)); vr.im.setMatrixAt(vr.im.count++, m4); grow(vr.im, it.x, it.z); if (vr.gim) { vr.gim.setMatrixAt(vr.gim.count++, m4); grow(vr.gim, it.x, it.z); } }
       else {
+        grow(proxyIM, it.x, it.z);
         const i = proxyIM.count++;
-        m4.compose(v3.set(it.x, 0.08, it.z), q, sc.set(it.hw * 1.9, PROXY_H[it.vk], it.hl * 1.9)); proxyIM.setMatrixAt(i, m4);
+        m4.compose(v3.set(it.x, it.y + 0.08, it.z), q, sc.set(it.hw * 1.9, PROXY_H[it.vk], it.hl * 1.9)); proxyIM.setMatrixAt(i, m4);
         proxyIM.setColorAt(i, vr.proxy);
       }
     }
-    for (const k of KINDS) for (const vr of variants[k]) vr.im.instanceMatrix.needsUpdate = true;
+    for (const k of KINDS) for (const vr of variants[k]) { vr.im.instanceMatrix.needsUpdate = true; fitSphere(vr.im, bx.get(vr.im)); if (vr.gim) { vr.gim.instanceMatrix.needsUpdate = true; fitSphere(vr.gim, bx.get(vr.gim)); } }
+    fitSphere(proxyIM, bx.get(proxyIM));
     proxyIM.instanceMatrix.needsUpdate = true; if (proxyIM.instanceColor) proxyIM.instanceColor.needsUpdate = true;
   }
 
@@ -407,6 +421,17 @@ const Parked = (function () {
     const t = THREE.MathUtils.clamp((x - it.x) * fx + (z - it.z) * fz, -half, half);
     return Math.hypot(x - it.x - fx * t, z - it.z - fz * t) - it.hw;
   }
+  // the item leaves the world: taken here, or by another player (multiplayer)
+  function remove(it) {
+    if (world.removeCollider) world.removeCollider(it.handle);
+    const k = occupied.findIndex(o => o[0] === it.x && o[1] === it.z); if (k >= 0) occupied.splice(k, 1);
+    if (it.bay) it.bay.taken = false;
+    const i = items.indexOf(it); if (i >= 0) items.splice(i, 1); api.count = items.length;
+    it.claimed = true; refreshInstances();
+  }
+  api.remove = remove;
+  api.playerKind = pk;
+  api.layout = () => items.map(it => ({ kind: it.vk, x: +it.x.toFixed(2), z: +it.z.toFixed(2), rot: +it.rot.toFixed(4), where: it.where }));   // paste-ready for FIXED_SPOTS
   function claimNearest(g) {
     const p = g.carPos;
     let best = null;
@@ -414,7 +439,7 @@ const Parked = (function () {
       const d = axisDist(p.x, p.z, it); if (d < 3 && (!best || d < best.d)) best = { it, d }; }
     if (!best) return;
     const it = best.it, model = cloneModel(variants[it.vk][it.vi].tpl);
-    model.g.position.set(it.x, 0, it.z); model.g.rotation.y = it.rot; scene.add(model.g);
+    model.g.position.set(it.x, it.y, it.z); model.g.rotation.y = it.rot; scene.add(model.g);
     const t = { ...model, model: it.kind, type: it.vk, parked: true, len2: model.len / 2, r: null, speed: 0, cur: 0, s: 0, dir: 1, len: 0, hw: it.hw, wheelR: 0.4 };
     g.traffic.push(t);
     it.claimed = true; refreshInstances();
@@ -422,11 +447,7 @@ const Parked = (function () {
     queueMicrotask(() => {
       const i = g.traffic.indexOf(t);
       if (i >= 0) { g.traffic.splice(i, 1); scene.remove(model.g); it.claimed = false; refreshInstances(); return; }
-      // taken: the collider leaves with it, the bay frees up
-      if (world.removeCollider) world.removeCollider(it.handle);
-      const k = occupied.findIndex(o => o[0] === it.x && o[1] === it.z); if (k >= 0) occupied.splice(k, 1);
-      if (it.bay) it.bay.taken = false;
-      items.splice(items.indexOf(it), 1); api.count = items.length;
+      remove(it);
     });
   }
 
@@ -439,7 +460,7 @@ const Parked = (function () {
       for (let i = 0; i < VARIANTS[k]; i++) {
         const tpl = k === 'bike' ? TrafficModels.bike('splendor') : TrafficModels[k](); stripPeople(tpl.g);
         tpl.head.forEach(m => m.material.color && m.material.color.setHex(0x8a8a80));
-        const b = bake(tpl.g); variants[k].push({ tpl, geo: b.geo, proxy: b.proxy });
+        const b = bake(tpl.g); variants[k].push({ tpl, geo: b.geo, proxy: b.proxy, glass: b.glass, gMat: b.gMat });
       }
     }
     const LM = (k, name) => world.landmarks.find(l => l.k === k && (!name || l.name.startsWith(name)));
@@ -451,9 +472,9 @@ const Parked = (function () {
     //    its long axis runs WNW-ESE, so the bay row is laid along it.
     //  - Govt Hospital: a 4-bay row on open ground right beside the hospital, only if it fits within 25 m.
     const LOTS = [
-      { name: 'ZPSS School', at: { x: -31.5, z: 43.5, rot: -0.452 }, n: 4, aisle: 4.5, kinds: ['bike', 'bike', 'bike', 'auto'] },
-      { name: 'Govt Hospital', near: LM('hospital'), n: 4, aisle: 5.0, kinds: ['hatch', 'auto', 'bike', 'bike'], slide: 25 },
-    ];
+      { name: 'ZPSS School', at: { x: -31.5, z: 43.5, rot: -0.452 }, n: 4, aisle: 4.5, kinds: [] },
+      { name: 'Govt Hospital', near: LM('hospital'), n: 4, aisle: 5.0, kinds: [], slide: 25 },
+    ].filter(D => D.at || D.near);   // the hospital landmark was removed from the map (it sat on houses)
     for (const D of LOTS) {
       let done = false;
       for (const nn of [D.n, D.n - 1, 3]) {
@@ -471,25 +492,23 @@ const Parked = (function () {
       }
       if (!done) console.warn('parked.js: no room for lot', D.name);
     }
-    autoStand(junction);
-    // one bus pulled over at the stop
-    lineUp('bus', junction.x, junction.z, 1, 12, r => r.t === 'highway', 'busstop');
-    const fac = LM('factory'); if (fac) { for (let i = 0; i < 4; i++) nearSpot('lorry', fac.x, fac.z, 70, 'factory'); }
-    // tractors (with trolleys) and carts where the village meets the fields
-    const edgeRoads = world.roads.filter(r => r.t === 'dirt' && r.p.length >= 2);
-    let tractors = 0, carts = 0, guard = 0;
-    while ((tractors < 8 || carts < 3) && guard++ < 300) {
-      const r = pick(edgeRoads), p = pick(r.p), d = Math.hypot(p[0] - junction.x, p[1] - junction.z);
-      if (d < 250 || d > 1100) continue;
-      if (tractors < 8) tractors += lineUp('tractor', p[0], p[1], 1, 8, rr => rr === r, 'field');
-      else carts += lineUp('bullockCart', p[0], p[1], 1, 6, rr => rr === r, 'field');
+    ROWS.stretches = stretches(16);
+    if (FIXED_SPOTS.length) for (const q of FIXED_SPOTS) { if (variants[q.kind]) addItem(q.kind, q.x, q.z, q.rot, { where: q.where || 'road', vi: 0 }); }
+    else {
+      safeHouseRow();
+      autoStand(junction);
+      rowNear(junction.x - 20, junction.z - 20, ['bus'], 'busstop', r => r.t === 'highway');
+      const fac = LM('factory'); if (fac) rowNear(fac.x, fac.z, ['lorry', 'lorry', 'lorry', 'lorry'], 'factory', r => r.t !== 'dirt' && r.t !== 'lane');
+      // tractors (with trolleys) and carts on the dirt roads where the village meets the fields
+      const edge = ROWS.stretches.filter(st => st.r.t === 'dirt').map(st => ({ st, d: Math.hypot(st.x - junction.x, st.z - junction.z) })).filter(q => q.d > 250 && q.d < 1100).sort((a, b) => a.st.x + a.st.z - b.st.x - b.st.z);
+      const farm = ['tractor', 'tractor', 'bullockCart', 'tractor', 'tractor', 'bullockCart', 'tractor', 'tractor', 'bullockCart', 'tractor', 'tractor'];
+      for (let i = 0; i < edge.length && farm.length; i += Math.max(1, edge.length / 14 | 0)) { const got = fillRow(edge[i].st, 1, edge[i].st.used[1] || 4, farm.slice(0, 1), 'field'); if (got.length) farm.shift(); }
+      const target = 200 - items.length, nCars = Math.round(target * 0.42), cars = [], bikes = [];
+      for (let i = 0; i < nCars; i++) cars.push(HOME_CARS[i % HOME_CARS.length]);
+      cars.push('muscle', 'coupe911');
+      for (let i = 0; i < target - nCars; i++) bikes.push(pick(HOME_BIKES));
+      villageRows(junction, cars, bikes);
     }
-    safeHouseParking();
-    // a muscle fastback and a 911-style coupe parked by the hospital / bus-stop junction (rare finds)
-    { const hos = LM('hospital') || junction; nearSpot('muscle', hos.x, hos.z, 40, 'road'); nearSpot('coupe911', junction.x, junction.z, 45, 'road'); }
-    // homes: bikes at doors and gates, cars at the bigger houses (all two-wheeler types mixed in)
-    const target = 200 - items.length;
-    placeAtHomes(Math.round(target * 0.74), Math.round(target * 0.26));
     api.count = items.length;
     api.vehicles = items;
     buildMeshes(); refreshInstances();

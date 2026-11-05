@@ -17,6 +17,7 @@
     if (!ctx) return false;
     if (!master) {
       master = ctx.createGain(); master.gain.value = 0.9; master.connect(ctx.destination);
+      if (window.GameAudio) { const lv = () => master.gain.setTargetAtTime(0.9 * GameAudio.fxGain, ctx.currentTime, 0.03); master.gain.value = 0.9 * GameAudio.fxGain; GameAudio.listeners.push(lv); }
       nb = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
       const d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     }
@@ -29,7 +30,7 @@
     if (x == null) { g.connect(master); return g; }
     const p = ctx.createPanner(); p.panningModel = 'equalpower'; p.distanceModel = 'inverse'; p.refDistance = ref || 6; p.maxDistance = 300; p.rolloffFactor = 1.1;
     if (p.positionX) { p.positionX.value = x; p.positionY.value = 1; p.positionZ.value = z; } else p.setPosition(x, 1, z);
-    g.connect(p); p.connect(master); return g;
+    g.connect(p); p.connect(master); g._panner = p; return g;
   }
   function env(g, t0, a, peak, d) { g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t0 + a); g.gain.exponentialRampToValueAtTime(0.0001, t0 + a + d); }
   function burst(out, t0, { type = 'bandpass', f = 1000, q = 1, a = 0.003, peak = 0.5, d = 0.1, f2 }) {
@@ -58,11 +59,21 @@
     auto: [[480, 600], 'square', 1800, 0.15, 2, 0.01],          // the classic paa-paa
     tractor: [[310], 'sawtooth', 1400, 0.4, 1, 0.01],
     lorry: [[233, 294, 349], 'sawtooth', 1200, 1.0, 1, 0.08],   // air horn chord
+    i4sport: [[510, 640], 'square', 2700, 0.26, 1, 0.005], boxer: [[400, 500], 'sawtooth', 2200, 0.34, 1, 0.008],   // superbike / GS twin horns
     bus: [[262, 330], 'sawtooth', 1300, 0.8, 1, 0.06],
   };
-  function horn(kind, x, z, local) {
-    if (!ok()) return;
-    const H = HORNS[kind] || HORNS.hatch, out = dest(local ? null : x, z, local ? 0.32 : 0.45, 10);
+  // Every horn in the game comes through here, and every one but the player's own must come from a real vehicle within
+  // HORN_R of the listener: anything further is dropped, and the level fades to nothing at that range. src names the
+  // caller, tc (optional) lets the sound travel with the vehicle. SFX.hornLog keeps the last 50 calls for testing.
+  const HORN_R = 60, hornLog = [], following = [];
+  function horn(kind, x, z, local, src, tc) {
+    let d = 0;
+    if (!local) { const c = (window.GAME && GAME.camera && GAME.camera.position) || { x, z }; d = Math.hypot(x - c.x, z - c.z); }
+    const played = local || d <= HORN_R;
+    hornLog.push({ src: src || (local ? 'player' : 'unknown'), kind, d: Math.round(d), played, t: performance.now() }); if (hornLog.length > 50) hornLog.shift();
+    if (!played || !ok()) return;
+    const H = HORNS[kind] || HORNS.hatch, far = d / HORN_R, out = dest(local ? null : x, z, local ? 0.32 : 0.45 * (1 - far * far), 10);
+    if (tc && out._panner) following.push({ p: out._panner, tc, until: ctx.currentTime + H[4] * (H[3] + 0.1) });
     const bp = ctx.createBiquadFilter(); bp.type = 'peaking'; bp.frequency.value = H[2]; bp.Q.value = 1; bp.gain.value = 8;
     const sh = ctx.createWaveShaper(), c = new Float32Array(256); for (let i = 0; i < 256; i++) { const v = i / 128 - 1; c[i] = Math.tanh(v * 2.5); } sh.curve = c;
     bp.connect(sh); sh.connect(out);
@@ -78,6 +89,15 @@
       }
     }
     window.HornEvent = { x, z, t: performance.now(), r: kind === 'lorry' || kind === 'bus' ? 35 : 24 };
+  }
+  // suspension strike: a dull thud through the floor, scaled by how hard a wheel was hit (m/s)
+  let bumpT = 0;
+  function bump(v) {
+    const now = performance.now(); if (now - bumpT < 160 || !ok()) return; bumpT = now;
+    const k = Math.min(1, v / 5), out = dest(null, 0, 0.3 + k * 0.5), t0 = ctx.currentTime;
+    tone(out, t0, { f: 74, f2: 38, peak: 0.25 + k * 0.5, d: 0.16 });
+    burst(out, t0, { type: 'lowpass', f: 420, peak: 0.12 + k * 0.25, d: 0.09 });
+    if (k > 0.6) burst(out, t0 + 0.02, { f: 1500, q: 3, peak: 0.05 * k, d: 0.07 });     // loose bits in the cabin rattle
   }
 
   // ------------------------------------------------------------------ impacts, skids, falls, doors, footsteps
@@ -164,8 +184,10 @@
     bullet: { fire0: 9, fire1: 24, vs: 16, bright: 450, rough: 0.6, vol: 0.6, w: 'square' },
     scooter: { fire0: 30, fire1: 75, vs: 13, bright: 2200, rough: 0.15, vol: 0.3, w: 'triangle' },
     ktm: { fire0: 18, fire1: 95, vs: 20, bright: 2600, rough: 0.5, vol: 0.5, w: 'sawtooth' },
+    i4sport: { vs: 30 }, boxer: { vs: 26 },
     hatch: { fire0: 27, fire1: 90, vs: 20, bright: 1100, rough: 0.2, vol: 0.35, w: 'sawtooth' },
     suv: { fire0: 25, fire1: 75, vs: 22, bright: 800, rough: 0.4, vol: 0.45, w: 'sawtooth' },
+    safari: { fire0: 25, fire1: 72, vs: 22, bright: 760, rough: 0.45, vol: 0.45, w: 'sawtooth' }, sumo: { fire0: 23, fire1: 62, vs: 18, bright: 620, rough: 0.6, vol: 0.5, w: 'sawtooth' }, scorpioN: { fire0: 25, fire1: 78, vs: 24, bright: 850, rough: 0.3, vol: 0.4, w: 'sawtooth' },
     tractor: { fire0: 16, fire1: 32, vs: 6, bright: 380, rough: 0.8, vol: 0.75, w: 'square' },
     lorry: { fire0: 30, fire1: 65, vs: 18, bright: 520, rough: 0.6, vol: 0.85, w: 'sawtooth' },
     bus: { fire0: 30, fire1: 65, vs: 18, bright: 560, rough: 0.55, vol: 0.8, w: 'sawtooth' },
@@ -175,7 +197,7 @@
     if (!tc._snd) {
       let type = tc.model;
       const sk = tc.snd || (tc.g && tc.g.userData && (tc.g.userData.snd || tc.g.userData.sndKind));
-      const ut = tc.g && tc.g.userData && tc.g.userData.type, UT = { splendor: 'bike', scooter: 'scooter', classic: 'bullet', classic2: 'jawa', sport: 'ktm', cycle: 'cycle', mpv: 'innova', fortuner: 'fortuner' };
+      const ut = tc.g && tc.g.userData && tc.g.userData.type, UT = { activa: 'scooter', starCity: 'bike', splendor: 'bike', scooter: 'scooter', classic: 'bullet', classic2: 'jawa', sport: 'ktm', cycle: 'cycle', mpv: 'innova', fortuner: 'fortuner' };
       if (sk) type = sk;
       else if (ut && UT[ut]) type = UT[ut];
       else if (type === 'bike') { const r = Math.random(); type = r < 0.25 ? 'bullet' : r < 0.32 ? 'bullet500' : r < 0.55 ? 'scooter' : r < 0.64 ? 'ktm' : r < 0.68 ? 'jawa' : 'bike'; }
@@ -201,7 +223,7 @@
   function setPos(p, x, z) { if (p.positionX) { p.positionX.setTargetAtTime(x, ctx.currentTime, 0.03); p.positionY.value = 0.8; p.positionZ.setTargetAtTime(z, ctx.currentTime, 0.03); } else p.setPosition(x, 0.8, z); }
   function voiceCount() { const t = (window.Quality && Quality.tier) || 'high'; return t === 'low' ? 2 : t === 'medium' ? 4 : 6; }
   function updateTraffic(dt, game) {
-    const T = game.traffic || [], cp = game.camera.position;
+    const T = (game.traffic || []).concat((window.MP && MP.audioList) || []), cp = game.camera.position;   // other players' engines share the pool
     while (voices.length < voiceCount()) voices.push(makeVoice());
     // nearest vehicles with an engine
     const near = [];
@@ -238,7 +260,7 @@
       v.og.gain.value = 0.5;
       v.nAM.gain.value = 0.25 * E.rough; v.fd.gain.value = 0.25 * E.rough;
       v.lp.frequency.setTargetAtTime(E.bright * (0.8 + load * 0.6 + r * 1.5), now, 0.1);
-      v.g.gain.setTargetAtTime(E.vol * 1.1 * (0.6 + 0.4 * load), now, 0.15);
+      v.g.gain.setTargetAtTime(E.vol * 1.1 * (0.6 + 0.4 * load) * (window.GameAudio ? GameAudio.engineGain / GameAudio.fxGain : 0.5), now, 0.15);
     }
   }
 
@@ -260,7 +282,7 @@
     // doors when getting in / out (bikes: just the stand)
     if (lastMode && mode !== lastMode && !jumped) {
       const veh = mode === 'foot' ? lastKindCache : playerKind();
-      const two = veh === 'bike' || veh === 'bullet' || veh === 'scooter' || veh === 'ktm';
+      const two = TWO.test(veh);
       if ((mode === 'foot' && (lastMode === 'crysta' || lastMode === 'vehicle')) || (lastMode === 'foot' && (mode === 'crysta' || mode === 'vehicle'))) {
         if (two) kickstand(); else if (veh !== 'tractor') { door(false, 0, 0, true); setTimeout(() => door(true, 0, 0, true), 550); }
       }
@@ -270,7 +292,9 @@
     if (mode === 'crysta' || mode === 'vehicle') {
       const decel = (lastSpd - spd) / 3.6 / dt;                                     // m/s^2
       const braking = typeof inputState !== 'undefined' && inputState.brake;
-      const k = playerKind(), two = k === 'bike' || k === 'bullet' || k === 'scooter' || k === 'ktm';
+      const k = playerKind(), two = TWO.test(k);
+      const sus = mode === 'crysta' ? (typeof crystaSusp !== 'undefined' ? crystaSusp : null) : (P.active && P.active.susp && P.active.susp.st);
+      if (sus) { if (sus.hit > 1.1 && spd > 6) bump(sus.hit); sus.hit = 0; }
       skidSet(!jumped && braking && spd > 15 && decel > 5 ? Math.min(1, (decel - 5) / 8) * (two ? 0.5 : 1) * Math.min(1, spd / 40) * (mode === 'crysta' ? 0.6 : 1) : 0);
       if (!jumped && decel > 35 && lastSpd > 8) {
         const s = Math.min(1, (lastSpd - spd) / 70);
@@ -289,6 +313,9 @@
     }
     lastMode = mode; lastSpd = spd; lastPos = { x: pos.x, y: pos.y, z: pos.z };
     updateTraffic(dt, game);
+    for (let i = following.length - 1; i >= 0; i--) {              // a sounding horn stays with its vehicle
+      const f = following[i]; if (ctx.currentTime > f.until || !f.tc.g) following.splice(i, 1); else setPos(f.p, f.tc.g.position.x, f.tc.g.position.z);
+    }
   }
   let lastKindCache = 'crysta';
 
@@ -296,7 +323,7 @@
   function playerHorn() {
     try { if (typeof audioCtx === 'undefined' || !audioCtx) initAudio(); } catch (e) {}
     const p = (window.GAME && GAME.carPos) || { x: 0, z: 0 };
-    horn(playerKind(), p.x, p.z, true);
+    horn(playerKind(), p.x, p.z, true, 'player');
   }
   window.triggerHorn = playerHorn;
   try { triggerHorn = playerHorn; } catch (e) {}
@@ -304,25 +331,31 @@
   // ------------------------------------------------------------------ ambient traffic horns: ONLY from a real, visible
   // traffic vehicle within maxD of the listener, spatialised at that vehicle. Returns the vehicle or null (no horn).
   function hornCandidates(cx, cz, maxD) {
-    const T = (window.GAME && GAME.traffic) || [], out = [];
+    const T = (window.GAME && GAME.traffic) || [], out = [], R = Math.min(maxD || HORN_R, HORN_R), own = typeof Player !== 'undefined' ? Player.active : null;
     for (const tc of T) {
       const g = tc && tc.g; if (!g || !g.visible || g.parent == null) continue;
+      if (tc === own || tc.parked || tc.mode === 'respawn' || g.scale.x < 0.9) continue;       // not the car you are in, nor one fading out
       if (/cart|cycle/i.test(tc.model || '') || (tc.g.userData && tc.g.userData.type === 'cycle')) continue;
-      if (Math.hypot(g.position.x - cx, g.position.z - cz) < (maxD || 120)) out.push(tc);
+      const dx = g.position.x - cx, dz = g.position.z - cz, d = Math.hypot(dx, dz); if (d >= R) continue;
+      // a building in the way hides the source: a horn you can't place is the phantom this rule exists to prevent
+      let clear = true;
+      try { for (let k = 1; k < 6 && clear; k++) { const c = GAME.world.collide({ x: cx + dx * k / 6, z: cz + dz * k / 6 }, 0.3); if (c && c.hit) clear = false; } } catch (e) {}
+      if (clear) out.push(tc);
     }
     return out;
   }
   function ambientHorn(cx, cz, maxD) {
-    const near = hornCandidates(cx, cz, maxD); if (!near.length) return null;
+    const near = hornCandidates(cx, cz, maxD);
+    if (!near.length) { hornLog.push({ src: 'ambient', kind: null, d: 0, played: false, t: performance.now() }); if (hornLog.length > 50) hornLog.shift(); return null; }
     const tc = near[Math.floor(Math.random() * near.length)];
-    horn(sndOf(tc).type, tc.g.position.x, tc.g.position.z, false);
+    horn(sndOf(tc).type, tc.g.position.x, tc.g.position.z, false, 'ambient', tc);
     return tc;
   }
 
   // ------------------------------------------------------------------ engine start / stop (called by player.js)
   let muteUntil = 0;
-  const TWO = /bike|bullet|scooter|ktm|jawa|splendor|sport/;
-  const DIESEL = /crysta|innova|fortuner|bolero|scorpio|suv|tractor|lorry|bus|truck|mpv/;
+  const TWO = /bike|bullet|scooter|ktm|jawa|splendor|sport|i4sport|boxer/;
+  const DIESEL = /safari|sumo|crysta|innova|fortuner|bolero|scorpio|suv|tractor|lorry|bus|truck|mpv/;
   function kindOf(k) { return k || playerKind(); }
   function engineStart(k) {
     k = kindOf(k);
@@ -366,6 +399,6 @@
     if (!two) burst(out, t0 + 0.6, { type: 'highpass', f: 4000, peak: 0.03, d: 0.15 });      // fan / relay tick
   }
 
-  window.SFX = { ambientHorn, hornCandidates, engineStart, engineOff, engineMuted: () => performance.now() < muteUntil, get engineOn() { try { return Player.mode !== 'foot' && performance.now() >= muteUntil; } catch (e) { return true; } }, horn, impact, bikeFall, door, footstep, bark, moo, airBrake, skid: skidSet, playerHorn, voices };
+  window.SFX = { hornLog, bump, HORN_R, ambientHorn, hornCandidates, engineStart, engineOff, engineMuted: () => performance.now() < muteUntil, get engineOn() { try { return Player.mode !== 'foot' && performance.now() >= muteUntil; } catch (e) { return true; } }, horn, impact, bikeFall, door, footstep, bark, moo, airBrake, skid: skidSet, playerHorn, voices };
   GameHooks.update.push((dt, game) => { try { update(dt, game); } catch (e) { console.warn('sfx', e); } });
 })();

@@ -217,7 +217,7 @@
   }
   function setWaypoint(x, z, label) { try { if (window.Properties && Properties.setWaypoint) Properties.setWaypoint(x, z, label); } catch (e) {} }
   function updateJob(dt) {
-    const P = PL(); const myAuto = P && P.mode === 'vehicle' && P.active && P.active.model === 'auto' ? P.active : null;
+    const P = PL(); const myAuto = P && P.mode === 'vehicle' && P.active && P.active.model === 'auto' && !window.Jobs ? P.active : null;   // jobs.js runs the metered taxi work when loaded
     if (job) {
       const car = job.car, n = job.n;
       if (myAuto !== car) {                    // got out / swapped vehicle: the passenger leaves, no fare

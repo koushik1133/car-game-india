@@ -186,9 +186,9 @@ const HumanModel = (function () {
   // legacy { outfit, color } -> full appearance
   function normalize(o) {
     o = Object.assign({}, o || {});
-    if (o.elder) {            // grandmother: white / light saree, grey bun, a little shorter
+    if (o.elder) {            // grandmother: blue saree, grey bun, a little shorter
       o.gender = o.gender || 'f';
-      if (o.gender === 'f') { o.top = o.top || 'blouse'; o.bottom = o.bottom || 'saree'; if (o.topColor === undefined) o.topColor = 0xe9e4d6; if (o.bottomColor === undefined) o.bottomColor = 0xf4f1ea; o.hair = o.hair || 'bun'; }
+      if (o.gender === 'f') { o.top = o.top || 'blouse'; o.bottom = o.bottom || 'saree'; if (o.topColor === undefined) o.topColor = 0x7a2632; if (o.bottomColor === undefined) o.bottomColor = 0x1f4c9c; o.hair = o.hair || 'bun'; }
       if (o.hairColor === undefined) o.hairColor = 0xb9b5ae;
       o.height = o.height || 0.97; if (!o.acc) o.acc = o.gender === 'f' ? { bindi: true, bangles: true, earrings: true } : {};
     }
@@ -230,11 +230,17 @@ const HumanModel = (function () {
     const f = gender ? gender === 'f' : Math.random() < 0.5;
     const top = f ? pick(['blouse', 'kameez', 'kameez', 'tshirt', 'kurta']) : pick(['shirt', 'tshirt', 'kurta', 'shirt', 'vest']);
     const bottom = top === 'blouse' ? 'saree' : top === 'kameez' ? 'salwar' : f ? pick(['jeans', 'salwar']) : pick(['trousers', 'jeans', 'lungi', 'dhoti']);
+    // village wardrobe by garment instead of any two random colours: bright saree with a contrasting blouse, muted
+    // working shirts, checked lungis, off-white dhotis, a kameez with pale salwar
+    const WR = { saree: [0xb3123f, 0x0f766e, 0x7c2d92, 0xd9730d, 0x1d4e9e, 0x2f7d32, 0xc2185b], blouse: [0xc98a10, 0x8a1538, 0x14532d, 0x1e3a8a, 0xe8dcc8],
+      lungi: [0x2b4a73, 0x4a5f3a, 0x6b2f2f, 0x3f3f55], dhoti: [0xece6d6, 0xe4dcc8], shirt: [0xd9d4c6, 0x8fa8c0, 0xa8a48e, 0x7c8a6a, 0xc7b79a, 0x5f7a96, 0xb7c4cc], trousers: [0x2f3640, 0x4a4438, 0x3a3f4a, 0x57503f] };
+    const topC = bottom === 'saree' ? pick(WR.blouse) : !f && top !== 'kurta' ? pick(WR.shirt) : pick(PALETTE);
+    const botC = bottom === 'saree' ? pick(WR.saree) : WR[bottom] ? pick(WR[bottom]) : bottom === 'salwar' ? 0xefe9dc : pick(PALETTE);
     return normalize({
       gender: f ? 'f' : 'm', height: 0.94 + Math.random() * 0.12, build: 0.88 + Math.random() * 0.28, skin: pick(SKINS),
       face: pick(OPTIONS.face), brows: f ? pick(['thin', 'arched']) : pick(['medium', 'thick']), eyes: pick(EYES),
       hair: f ? pick(['braid', 'bun', 'long']) : pick(['short', 'sidepart', 'curly', 'bald']), hairColor: pick(HAIR_COLORS.slice(0, 4)),
-      facial: f ? 'none' : pick(OPTIONS.facial), top, bottom, topColor: pick(PALETTE), bottomColor: pick(PALETTE), feet: pick(['chappals', 'shoes']),
+      facial: f ? 'none' : pick(OPTIONS.facial), top, bottom, topColor: topC, bottomColor: botC, feet: pick(['chappals', 'shoes']),
       acc: f ? { bindi: true, bangles: Math.random() < 0.7, earrings: Math.random() < 0.8, chain: Math.random() < 0.4 }
         : { watch: Math.random() < 0.5, chain: Math.random() < 0.3, sunglasses: Math.random() < 0.25, cap: Math.random() < 0.15 },
     });
@@ -293,8 +299,8 @@ const HumanModel = (function () {
     const torS = (female
       ? [[-0.07, 0.178, 0.112, 0], [0.04, 0.128, 0.088, 0], [0.13, 0.118, 0.084, 0.004], [0.22, 0.132, 0.09, 0.008], [0.3, 0.148, 0.098, 0.012], [0.38, 0.158, 0.1, 0.01],
          [0.44, 0.168, 0.092, 0], [0.48, 0.165, 0.08, -0.006], [0.515, 0.13, 0.066, -0.008], [0.545, 0.075, 0.056, -0.004], [0.565, 0.05, 0.048, 0]]
-      : [[-0.07, 0.164, 0.106, 0], [0.04, 0.142, 0.092, 0], [0.14, 0.142, 0.094, 0.004], [0.24, 0.156, 0.1, 0.01], [0.33, 0.172, 0.106, 0.014], [0.4, 0.184, 0.104, 0.012],
-         [0.45, 0.192, 0.096, 0], [0.49, 0.186, 0.082, -0.008], [0.525, 0.14, 0.068, -0.01], [0.553, 0.08, 0.058, -0.004], [0.575, 0.052, 0.05, 0]]).map(r => [r[0], r[1] * bw, r[2] * bw, r[3], r[0] > 0.42 ? 2.2 : 2.6]);
+      : [[-0.07, 0.16, 0.108, 0], [0.04, 0.15, 0.1, 0], [0.14, 0.152, 0.104, 0.004], [0.24, 0.164, 0.112, 0.01], [0.33, 0.178, 0.12, 0.014], [0.4, 0.188, 0.118, 0.012],
+         [0.45, 0.194, 0.104, 0], [0.49, 0.184, 0.086, -0.008], [0.525, 0.138, 0.068, -0.01], [0.553, 0.08, 0.058, -0.004], [0.575, 0.052, 0.05, 0]]).map(r => [r[0], r[1] * bw, r[2] * bw, r[3], r[0] > 0.42 ? 2.2 : 2.6]);
     void torPts; mesh(loft('tor' + female + bw.toFixed(3), torS, 18), torM, torso);
     if (top === 'blouse') {     // fitted short blouse over the chest, midriff bare
       mesh(loft('blouse' + female + bw.toFixed(3), torS.filter(r => r[0] >= 0.22).map(r => [r[0], r[1] * 1.03 + 0.002, r[2] * 1.04 + 0.002, r[3], r[4]]), 18), topM, torso);
@@ -337,7 +343,10 @@ const HumanModel = (function () {
     }
 
     // head
-    const head = joint(torso, 0, 0.58, 0.02); head.scale.setScalar(child ? 1.18 : 1.1);
+    // the sculpted heroes keep their own bind proportions; everyone else had a pin head (about 1/9 of the figure)
+    const sculptKind = o.sculpt || (low ? null : o.elder && female ? 'grandma'
+      : !api.player && !api.playerAppearance && !o.child && o.gender === 'm' && bot === 'lungi' && top === 'shirt' ? 'player' : null);
+    const head = joint(torso, 0, 0.575, 0.02); head.scale.setScalar(sculptKind ? 1.1 : child ? 1.38 : 1.27);
     const headY = 0.11;
     const hd = mesh(headGeo(o.face, low), skinM, head, 0, headY, 0);
     const fz = 0.091;  // approx face-plane depth at eye level
@@ -379,13 +388,13 @@ const HumanModel = (function () {
     buildFacial(o, head, headY, hm, low);
 
     // arms: shoulder -> upper arm -> elbow -> forearm -> hand
-    const shW = (female ? 0.178 : 0.205) * bw;
+    const shW = (female ? 0.164 : 0.186) * bw;       // lean shoulders: the arm sits at the end of the chest, not out on a stalk
     function arm(sx) {
       const sh = joint(torso, sx * shW, 0.455, 0); sh.rotation.z = sx * 0.06;
       // deltoid
-      mesh(sphere(0.052 * bw, SEG + 2, low ? 4 : 8), sleeveLong || sleeveShort ? topM : skinM, sh, 0, -0.012, 0).scale.set(1, 1.08, 1);
+      mesh(sphere(0.046 * bw, SEG + 2, low ? 4 : 8), sleeveLong || sleeveShort ? topM : skinM, sh, 0, -0.012, 0).scale.set(1, 1.08, 1);
       mesh(limb((sleeveShort ? 0.044 : 0.05) * bw, 0.038 * bw, 0.28, sleeveShort ? 0 : 0.008, 0.65), sleeveLong ? topM : skinM, sh);
-      if (sleeveShort) mesh(limb(0.054 * bw, (top === 'blouse' ? 0.05 : 0.052) * bw, top === 'blouse' ? 0.1 : 0.15, 0, 0.5), topM, sh, 0, -0.012, 0);
+      if (sleeveShort) mesh(limb(0.047 * bw, (top === 'blouse' ? 0.043 : 0.048) * bw, top === 'blouse' ? 0.1 : 0.17, 0, 0.5), topM, sh, 0, -0.012, 0);
       const el = joint(sh, 0, -0.285, 0);
       mesh(limb(0.038 * bw, 0.027 * bw, 0.24, 0.008, 0.75), sleeveLong ? topM : skinM, el);
       if (sleeveLong) mesh(limb(0.031 * bw, 0.03 * bw, 0.03, 0, 0.5, 8), skinM, el, 0, -0.215, 0);
@@ -403,7 +412,7 @@ const HumanModel = (function () {
     // legs: hip -> thigh -> knee -> shin -> foot
     const loose = bot === 'salwar', shorts = bot === 'shorts', dhoti = bot === 'dhoti';
     function leg(sx) {
-      const hp = joint(hips, sx * 0.088 * bw, -0.03, 0);
+      const hp = joint(hips, sx * 0.08 * bw, -0.03, 0);
       const thighM = fullLegs || shorts ? botM : skinM;
       mesh(limb((loose ? 0.09 : 0.078) * bw, (loose ? 0.07 : 0.052) * bw, 0.43, 0.012, 0.65), thighM, hp);
       if (shorts) mesh(limb(0.084 * bw, 0.072 * bw, 0.26, 0, 0.5), botM, hp);
@@ -488,8 +497,12 @@ const HumanModel = (function () {
     animateIdle(parts, Math.random() * 10);
     const res = { group, parts, hipHeight: hipH * s, scale: s, appearance: o };
     group.userData.humanRef = res;
+    // hero characters: one continuous sculpted skinned mesh (sculpt-people.js) instead of the part meshes
+    if (sculptKind && window.SculptPeople) {
+      try { SculptPeople.attach(res, sculptKind); animateIdle(parts, Math.random() * 10); } catch (e) { console.warn('sculpt failed', e); }
+    }
     if (!low && !api.player) api.player = res;
-    glbRegister(res);
+    if (!res.sculpt) glbRegister(res);
     return res;
   }
 
@@ -617,8 +630,8 @@ const HumanModel = (function () {
     p.legL.rotation.x = -wr * 0.06; p.legR.rotation.x = -wl * 0.06;
     p.torso.rotation.set(0.01 + b * 0.012, Math.sin(t * 0.4) * 0.04, -w * 0.04);
     p.torso.scale.set(1 + b * 0.008, 1, 1 + b * 0.012);
-    p.armL.rotation.set(0.04 + b * 0.02, 0, 0.09 + b * 0.01); p.armR.rotation.set(0.04 - b * 0.02, 0, -0.09 - b * 0.01);
-    p.foreL.rotation.x = -0.14; p.foreR.rotation.x = -0.14;
+    p.armL.rotation.set(0.07 + b * 0.02 + w * 0.05, 0, 0.1 + b * 0.01); p.armR.rotation.set(0.03 - b * 0.02 - w * 0.05, 0, -0.08 - b * 0.01);   // not symmetrical: a resting body never is
+    p.foreL.rotation.x = -0.3; p.foreR.rotation.x = -0.2;
     p.head.rotation.set(Math.sin(t * 0.23) * 0.05, Math.sin(t * 0.5) * 0.28 * Math.sin(t * 0.13), w * 0.03);
     if (p.skirt) { p.skirt.rotation.set(0, 0, 0); p.skirt.scale.set(1, 1, 1); }
     if (p.skirt2) { p.skirt2.rotation.set(0, 0, 0); p.skirt2.scale.set(1, 1, 1); }
@@ -628,6 +641,15 @@ const HumanModel = (function () {
   // 'bench' = sitting on a plank with hands on knees.
   function sit(p, pose) {
     glbDrive(p, 'sit', 0, pose);
+    if (pose === 'sideSaddle') {     // pillion, both legs to one side, knees together; one hand to the rider's shoulder, one in her lap
+      p.hips.position.set(0, 0.92, 0); p.hips.rotation.set(0, 0, 0); p.torso.rotation.set(0.04, -0.35, 0); p.torso.scale.set(1, 1, 1); p.head.rotation.set(0, -0.3, 0);
+      p.legL.rotation.set(-1.32, 0, 0.03); p.legR.rotation.set(-1.32, 0, -0.03); p.shinL.rotation.x = 1.4; p.shinR.rotation.x = 1.4;
+      p.armL.rotation.set(-0.55, 0, 0.1); p.foreL.rotation.x = -0.95;
+      p.armR.rotation.set(-1.15, 0, 0.45); p.foreR.rotation.x = -0.5;
+      if (p.skirt) { p.skirt.rotation.set(-1.15, 0, 0); p.skirt.scale.set(1, 0.6, 1); }
+      if (p.skirt2) { p.skirt2.rotation.set(-1.15, 0, 0); p.skirt2.scale.set(1, 0.6, 1); }
+      return;
+    }
     const bike = pose === 'bike';
     p.hips.position.set(0, 0.92, 0); p.hips.rotation.set(0, 0, 0); p.torso.rotation.set(bike ? 0.25 : 0.05, 0, 0); p.torso.scale.set(1, 1, 1); p.head.rotation.set(bike ? -0.2 : 0, 0, 0);
     p.legL.rotation.set(bike ? -1.1 : -1.45, 0, bike ? 0.25 : 0.08); p.legR.rotation.set(bike ? -1.1 : -1.45, 0, bike ? -0.25 : -0.08);

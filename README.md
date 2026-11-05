@@ -1,6 +1,6 @@
-# Spark Gaming — open-world village driving game (Telangana)
+# SparkV — open-world village driving game (Telangana)
 
-**Spark Gaming** is a browser open-world game set in a real-data recreation of a Telangana village (Lingala Ghanpur mandal, Jangaon district), built with three.js r128 and plain JavaScript (no build step).
+**SparkV** is a browser open-world game set in a real-data recreation of a Telangana village (Lingala Ghanpur mandal, Jangaon district), built with three.js r128 and plain JavaScript (no build step).
 
 ## Run it
 ```bash
@@ -20,13 +20,23 @@ python3 innova-nellutla/multiplayer/server.py      # listens on ws://0.0.0.0:809
 - Brief disconnects are silent: no "joined/left" spam, and you are put back in your squad.
 - Test locally by opening the game in two browser tabs (give each a different name on the start screen).
 
+### Chat, voice and sitting
+- **Chat**: Enter to type, Tab cycles ALL / NEARBY (60 m) / SQUAD, Up recalls, `/filter` toggles the language filter. Telugu works if the device has a Telugu font (all current phones, macOS and Windows do).
+- **Voice**: press `/` or the headphones button, then **Join voice**. Hold `` ` `` or `.` to talk, or switch to open mic. `;` mutes your mic; `,` (game mute) also mutes voices. You hear players within about 45 m, your squad at any distance on a radio, and the people in your vehicle clearly. Up to 6 connections, nearest first; Headphones avoid echo.
+- **Sit and emote**: `X` sits on a nearby chair, bench, sofa, porch edge or compound wall; moving stands up. `8` waves, `9` namaste.
+- **HTTPS**: browsers only give a page the microphone on `https://` or `localhost`. Over plain `http://<LAN-IP>` other players can listen but not speak until the game and the relay are served over HTTPS/WSS.
+- **Off a LAN**: voice is peer to peer and joining shows your IP address to those peers, which is why it is opt-in. A public STUN server (`stun.l.google.com`, no account) finds most routes. Strict or mobile networks also need a TURN server. Run your own (for example coturn) and set it before `multiplayer/mp-social.js` loads, with no third-party account:
+  ```html
+  <script>window.SPARK_ICE = [{ urls: 'stun:your.host:3478' }, { urls: 'turn:your.host:3478', username: 'u', credential: 'p' }];</script>
+  ```
+
 ## What's in it
 - **The map** (`nellutla-map/`): ~1,600 real building footprints (Overture Maps / OpenStreetMap), NH-365B, the Lingala Ghanpur road, village CC lanes and dirt tracks traced from satellite imagery, ~2,500 farm fields with bunds and crops, orchards, the lake and tanks, landmarks (Shivalayam, ZPSS school, Govt hospital, anganwadis, bus stop, water tank, petrol bunk, cotton factory, Kbr function hall).
 - **Driving**: Toyota Innova Crysta with procedural model, arcade-tuned physics (D↔R like big open-world games), every traffic vehicle drivable — autos, bikes, cars, SUVs, tractors, lorries, buses, bullock carts. Carjacking, auto-rickshaw rides and taxi fares.
 - **On foot**: walk, run, jump; character creator; villagers going about the village.
 - **Safe house**: a house cloned from Street View with working gates, garage shutter, vehicle storage and a walkable interior.
 - **Properties**: buy houses/shops, build on plots, garages and parking bays (saved locally).
-- **Multiplayer**: chat (ALL/SQUAD), quick chat, squads, map pings, coordinates, smooth interpolation.
+- **Multiplayer**: chat (ALL/NEARBY/SQUAD), proximity voice, sitting and emotes, quick chat, squads, map pings, coordinates, smooth interpolation.
 - **Everything else**: day/night cycle, street lights, layered engine and village ambience audio, touch controls on phones/tablets, Low/Medium/High graphics.
 
 ## Controls

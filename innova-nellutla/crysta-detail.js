@@ -108,14 +108,17 @@ function buildCrystaWheel(side, R, Wd) {
 
 // ---------------------------------------------------------------- interior
 function buildCrystaInterior(chassis) {
-  const leather = new THREE.MeshLambertMaterial({ color: 0x6a4325 });          // Hazel brown
-  const leatherDark = new THREE.MeshLambertMaterial({ color: 0x4a2e17 });
-  const black = new THREE.MeshLambertMaterial({ color: 0x1b1d21 });
-  const softBlack = new THREE.MeshLambertMaterial({ color: 0x2a2c30 });
-  const wood = new THREE.MeshPhongMaterial({ color: 0x6b3f22, specular: 0x553322, shininess: 60 });
-  const chrome = new THREE.MeshPhongMaterial({ color: 0xf1f5f9, specular: 0xffffff, shininess: 130 });
-  const beige = new THREE.MeshLambertMaterial({ color: 0xcfc4b2, side: THREE.DoubleSide });
-  const carpet = new THREE.MeshLambertMaterial({ color: 0x2f2a26 });
+  // cabin plastics carry a little emissive: under the sun shadow the shell would otherwise leave them black
+  const glow = 0x17140f;
+  const lam = (color, extra) => new THREE.MeshLambertMaterial(Object.assign({ color, emissive: glow }, extra));
+  const leather = lam(0x8a5a33);          // Hazel brown
+  const leatherDark = lam(0x5e3a1f);
+  const black = lam(0x2e3036);
+  const softBlack = lam(0x45484f);
+  const wood = new THREE.MeshPhongMaterial({ color: 0x7c4a28, specular: 0x553322, shininess: 60, emissive: glow });
+  const chrome = new THREE.MeshPhongMaterial({ color: 0xf1f5f9, specular: 0xffffff, shininess: 130, emissive: 0x222222 });
+  const beige = lam(0xd8cdbb, { side: THREE.DoubleSide });
+  const carpet = lam(0x3a342e);
   const add = (m, x, y, z) => { m.position.set(x, y, z); chassis.add(m); return m; };
 
   // floor, headliner, pillar trims
@@ -164,7 +167,7 @@ function buildCrystaInterior(chassis) {
   mid.position.set(-0.40, 1.11, 0.724); mid.rotation.y = Math.PI; chassis.add(mid);
 
   // 8" touchscreen with a live map texture
-  const sc = document.createElement('canvas'); sc.width = 320; sc.height = 192;
+  const sc = document.createElement('canvas'); sc.width = 512; sc.height = 256;
   const scg = sc.getContext('2d'); scg.fillStyle = '#0b1220'; scg.fillRect(0, 0, 320, 192);
   if (window.NellutlaWorldRef && window.NellutlaWorldRef.mapCanvas) { const mc = window.NellutlaWorldRef.mapCanvas; scg.drawImage(mc, mc.width / 2 - 200, mc.height / 2 - 120, 400, 240, 0, 0, 320, 192); }
   scg.fillStyle = '#e2e8f0'; scg.font = 'bold 16px sans-serif'; scg.fillText('NELLUTLA  ·  NH-365B', 12, 22);
@@ -172,7 +175,7 @@ function buildCrystaInterior(chassis) {
   add(crystaRoundedBox(0.30, 0.19, 0.04, 0.015, black), 0, 1.07, 0.665);
   const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.27, 0.16), new THREE.MeshBasicMaterial({ map: screenTex }));
   scr.position.set(0, 1.07, 0.643); scr.rotation.y = Math.PI; chassis.add(scr);
-  chassis.userData.screen = { canvas: sc, tex: screenTex };
+  chassis.userData.screen = { canvas: sc, tex: screenTex, mesh: scr }; window.CrystaScreen = chassis.userData.screen;
   // climate panel
   add(crystaRoundedBox(0.26, 0.08, 0.03, 0.01, black), 0, 0.90, 0.66);
   [-0.08, 0.08].forEach(x => { const k = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.02, 16), chrome); k.rotation.x = Math.PI / 2; add(k, x, 0.90, 0.64); });
@@ -215,6 +218,17 @@ function buildCrystaInterior(chassis) {
   // captain seat armrests
   [c1, c2].forEach(g => [-1, 1].forEach(sd => { const a = crystaRoundedBox(0.05, 0.05, 0.30, 0.02, leatherDark); a.position.set(sd * 0.29, 0.33, -0.05); g.add(a); }));
   const bench = seat(0, -1.55, 1.30);
-  // interior rear-view mirror
-  add(crystaRoundedBox(0.24, 0.07, 0.03, 0.02, black), 0, 1.52, 0.78);
+  // door cards, armrests, window switches, inner pillars and the screen header: the shell is one-sided from in here
+  [-1, 1].forEach(sd => {
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.62, 2.5), beige), sd * 0.86, 0.82, -0.6);
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 2.5), softBlack), sd * 0.85, 1.13, -0.6);
+    add(crystaRoundedBox(0.09, 0.05, 0.42, 0.02, leather), sd * 0.81, 0.92, 0.08);
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.3, 0.9), wood), sd * 0.835, 0.78, 0.35);
+    const pillar = add(new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.82, 0.05), beige), sd * 0.8, 1.38, 0.5); pillar.rotation.x = -0.92; pillar.rotation.z = sd * 0.09;
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.56, 0.1), beige), sd * 0.8, 1.38, -0.28);
+  });
+  add(new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.06, 0.1), beige), 0, 1.65, 0.26);
+  add(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 0.1), softBlack), -0.46, 0.62, 0.72);   // pedals
+  add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.03, 0.05), softBlack), -0.34, 0.6, 0.74);
+  // interior rear-view mirror housing
 }

@@ -22,3 +22,11 @@ Using the map in a game:
   // each frame: world.collide(carPos, 1.6); world.surfaceAt(x, z); world.update(camera);
 </script>
 ```
+
+## Jangaon (streamed town)
+
+`python3 tools/build_jangaon.py <dir> [outdir]` builds `jangaon-lite.js` (always loaded: sites, landmarks, arterial net), `jangaon-data.json`
+(fetched by `jangaon-worker.js` only near town) and the minimap PNGs. Inputs: Overture 2026-10-21 `buildings/segments/water/places.csv`
+and OSM Overpass `osm.json` for bbox 79.09-79.215 E, 17.68-17.77 N. `jangaon.js` streams 320 m tiles and wraps the world queries.
+
+`python3 tools/build_jangaon_net.py <dir> [outdir]` (after `build_jangaon.py`) builds `jangaon-net.json`: full road graph, height grid and inferred signals, lamps, humps. Needs `<dir>/segments.csv` and terrarium tiles at `<dir>/dem/z13_<x>_<y>.png`. `jangaon-life.js` runs the signals, lamps, traffic and people from it.

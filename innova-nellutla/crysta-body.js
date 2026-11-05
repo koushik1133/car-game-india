@@ -83,7 +83,7 @@ function buildCrystaShell(chassis, M, plateTex) {
     s.bezierCurveTo(-0.70, 1.775, -1.50, 1.765, -1.97, 1.745);            // crowned roof, dropping ~3 cm to the rear
     s.quadraticCurveTo(-2.26, 1.74, -2.29, 1.67); s.lineTo(-2.27, 1.63); s.lineTo(-1.95, 1.70);
     s.bezierCurveTo(-1.40, 1.715, -0.60, 1.72, 0.22, 1.625);
-  }, W - 0.20, M.paint, 0.05);
+  }, W - 0.20, new THREE.MeshPhongMaterial({ color: 0x0b0c0e, specular: 0x24262a, shininess: 10 }), 0.05);   // matte black roof
   chassis.add(roof);
   // black A/B/C/D pillars for the floating-roof look
   [-1, 1].forEach(sd => {

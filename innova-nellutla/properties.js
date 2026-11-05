@@ -415,7 +415,7 @@
     if (!o) foot = `<button class="go" data-a="buy" ${canAfford(p.price) ? '' : 'disabled title="Not enough cash"'}>${canAfford(p.price) ? 'Buy · ' + lakh(p.price) : 'Not enough cash · ' + lakh(p.price)}</button><button data-a="close">Close</button>`;
     else {
       const val = sellValue(p);
-      foot = (p.type === 'plot' && !b ? '<button class="go" data-a="builder">Build here…</button>' : '') + `<button class="warn" data-a="sell">Sell · ${lakh(val)}</button><button data-a="wp">Waypoint</button><button data-a="close">Close</button>`;
+      foot = (p.type === 'plot' && !b ? '<button class="go" data-a="builder">Build here…</button>' : '') + `${p.type === 'small' || p.type === 'big' || (b && b.done && o.build.design !== 'garage') ? '<button data-a="sleep">Sleep here</button>' : ''}<button class="warn" data-a="sell">Sell · ${lakh(val)}</button><button data-a="wp">Waypoint</button><button data-a="close">Close</button>`;
     }
     openPanel(`<div class="hd"><span class="tag ${o ? 'sold' : ''}">${o ? 'OWNED · మీ ఆస్తి' : 'FOR SALE · అమ్మకానికి'}</span><h2>${ti.en}</h2><div class="te">${ti.te}</div></div>
 <div class="bd"><table>${rows.map(r => `<tr><td>${r[0]}</td><td>${esc(r[1])}</td></tr>`).join('')}</table>
@@ -448,7 +448,7 @@
   const cashNow = () => { const c = G && G.cash; return typeof c === 'number' && isFinite(c) ? c : 0; };
   const canAfford = price => cashNow() >= price;
   function refuse(price) { G.showPopup('NOT ENOUGH CASH · NEED ' + fmt(price - cashNow()) + ' MORE'); return false; }
-  function pay(price) { if (!canAfford(price)) return refuse(price); G.cash = cashNow() - price; return true; }
+  function pay(price, reason) { if (!canAfford(price)) return refuse(price); if (!Economy.spend(price, reason || 'Property')) return refuse(price); return true; }
   const short = price => canAfford(price) ? '' : `<div class="muted" style="color:#f87171;margin-top:6px">Not enough cash: you have ${fmt(cashNow())}, need ${fmt(price - cashNow())} more.</div>`;
   function listPanel() {
     const mine = props.filter(isOwned), bays = Object.keys(save.bays);
@@ -474,6 +474,7 @@
     if (a === 'builder') return builderPanel(p);
     if (a === 'back') return propPanel(p);
     if (a === 'build') return startBuild(p);
+    if (a === 'sleep') { closePanel(); if (window.Actions) Actions.sleep(); return; }
     if (a === 'wp') { setWaypoint(p.x, p.z, p.id); return closePanel(); }
     if (a === 'wpid') { const q = byId[t.dataset.id]; setWaypoint(q.x, q.z, q.id); return closePanel(); }
     if (a === 'wpxy') { setWaypoint(+t.dataset.x, +t.dataset.z, t.dataset.l); return closePanel(); }
@@ -482,21 +483,21 @@
     const free = bid && !save.bays[bid] && L && !L.bays[+bid.split('#')[1]].taken;
     if (a === 'buybay' && free && pay(BAY_PRICE)) { save.bays[bid] = { rent: false }; G.showPopup('PARKING BAY BOUGHT'); }
     if (a === 'rentbay' && free) { if (canAfford(BAY_RENT)) { save.bays[bid] = { rent: true }; G.showPopup('BAY RENTED · ' + fmt(BAY_RENT) + '/DAY'); } else refuse(BAY_RENT); }
-    if (a === 'relbay' && save.bays[bid]) { if (!save.bays[bid].rent) G.cash = cashNow() + BAY_PRICE * SELL_BACK; delete save.bays[bid]; releaseStored(bid); }
+    if (a === 'relbay' && save.bays[bid]) { if (!save.bays[bid].rent) Economy.earn(BAY_PRICE * SELL_BACK, 'Sold parking bay'); delete save.bays[bid]; releaseStored(bid); }
     if (L) { rebuildSpots(); refreshBays(); persist(); lotPanel(L); }
   }
   // a stored vehicle stays where it is as an ordinary parked vehicle once its bay / garage is gone
   function releaseStored(id) { delete save.stored[id]; const v = spawned[id]; if (v) { delete v._propSlot; v._waiting = false; delete spawned[id]; } }
   function buy(p) {
     if (!p || isOwned(p)) return;
-    if (!pay(p.price)) { propPanel(p); return; }
+    if (!pay(p.price, 'Bought property ' + p.id)) { propPanel(p); return; }
     save.owned[p.id] = { t: Date.now() };
     refreshProp(p); rebuildSpots(); persist();
     G.showPopup('PROPERTY BOUGHT · ' + p.id + ' · ' + lakh(p.price)); propPanel(p);
   }
   function sell(p) {
     if (!isOwned(p)) return;
-    const v = sellValue(p); G.cash = cashNow() + v;
+    const v = sellValue(p); Economy.earn(v, 'Sold property ' + p.id);
     delete save.owned[p.id]; releaseStored(p.id);
     syncBuilt(p); refreshProp(p); rebuildSpots(); persist();
     G.showPopup('SOLD ' + p.id + ' FOR ' + lakh(v)); propPanel(p);
@@ -508,7 +509,7 @@
     save.owned[p.id].build = { design: bsel.design, paint: PAINTS[bsel.paint][1], wall: bsel.wall, left: d.time, done: false };
     syncBuilt(p); persist(); closePanel(); G.showPopup('CONSTRUCTION STARTED · ' + d.name.toUpperCase());
   }
-  function setWaypoint(x, z, label) { waypoint = { x, z, label }; G.showPopup('WAYPOINT SET · ' + label); }
+  function setWaypoint(x, z, label) { if (window.Nav) return Nav.setDest(x, z, label); waypoint = { x, z, label }; G.showPopup('WAYPOINT SET · ' + label); }
   const incomeOf = p => { const o = save.owned[p.id]; if (!o) return 0; return p.income + (o.build && o.build.done ? DESIGNS[o.build.design].income : 0); };
   const dailyIncome = () => props.reduce((s, p) => s + incomeOf(p), 0) - Object.values(save.bays).filter(b => b.rent).length * BAY_RENT;
 
@@ -619,7 +620,7 @@
     pickProperties(); load();
     props.forEach(p => { refreshProp(p); if (save.owned[p.id]) syncBuilt(p); });
     rebuildSpots(); initLots(); spawnStored(); lastTod = gTime(); updateHud();
-    window.Properties = { props, get save() { return save; }, markers: markerList, buy: id => buy(byId[id]), sell: id => sell(byId[id]), byId, garageSpots, spawned, persist, setWaypoint, lots };
+    window.Properties = { closePanel, props, get save() { return save; }, isOwned: id => !!save.owned[id], typeName: t => (TYPE_INFO[t] || {}).en || t, dailyIncome, get waypoint() { return waypoint; }, clearWaypoint() { waypoint = null; }, markers: markerList, buy: id => buy(byId[id]), sell: id => sell(byId[id]), byId, garageSpots, spawned, persist, setWaypoint, lots };
   });
 
   let t = 0;
@@ -647,8 +648,8 @@
         // can't pay the parking rent: the rented bays go back, cash never goes negative
         for (const id in save.bays) if (save.bays[id].rent) { delete save.bays[id]; releaseStored(id); }
         rebuildSpots(); refreshBays(); G.showPopup('RENT UNPAID · RENTED BAYS RETURNED');
-        const inc2 = dailyIncome(); if (inc2 > 0) G.cash = cashNow() + inc2;
-      } else if (inc) { G.cash = cashNow() + inc; G.showPopup((inc > 0 ? 'PROPERTY INCOME +' : 'PARKING RENT ') + fmt(Math.abs(inc))); }
+        const inc2 = dailyIncome(); if (inc2 > 0) Economy.earn(inc2, 'Property income');
+      } else if (inc) { if (inc > 0) Economy.earn(inc, 'Property income'); else Economy.spend(-inc, 'Parking rent'); G.showPopup((inc > 0 ? 'PROPERTY INCOME +' : 'PARKING RENT ') + fmt(Math.abs(inc))); }
       persist();
     }
     lastTod = tod;

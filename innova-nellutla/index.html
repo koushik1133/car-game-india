@@ -6,318 +6,148 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0a0f19">
-<title>Spark Gaming</title>
-<style>
-  /* ------------------------------------------------------------ layout tokens
-     --g gutter (respects notches), --rad radar size, --cs compass scale, --u touch button unit */
-  :root {
-    --sl: env(safe-area-inset-left, 0px); --sr: env(safe-area-inset-right, 0px);
-    --st: env(safe-area-inset-top, 0px);  --sb: env(safe-area-inset-bottom, 0px);
-    --g: 12px; --rad: clamp(120px, 20vmin, 220px); --cs: 1; --u: clamp(56px, 11vmin, 76px);
-    --bar: 40px;
-  }
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; background: #9cc3df; font-family: -apple-system, system-ui, sans-serif; color: #fff; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-  body { position: fixed; inset: 0; }
-  canvas#gl { display: block; position: fixed; inset: 0; touch-action: none; }
-  button { font-family: inherit; }
-  .panel { background: rgba(10,15,25,.78); border: 1px solid rgba(255,255,255,.14); border-radius: 12px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-
-  /* ------------------------------------------------------------ start screen */
-  #start { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: safe center; gap: clamp(8px, 2.4vh, 18px);
-    padding: calc(16px + var(--st)) calc(16px + var(--sr)) calc(16px + var(--sb)) calc(16px + var(--sl)); overflow-y: auto; touch-action: pan-y;
-    background: radial-gradient(circle, rgba(10,15,25,.35), rgba(5,8,14,.92)); z-index: 10; }
-  #start h1 { margin: 0; font-size: clamp(22px, 5.5vmin, 34px); letter-spacing: 2px; text-align: center; }
-  #start p { margin: 0; color: #cbd5e1; max-width: min(560px, 92vw); text-align: center; line-height: 1.5; font-size: clamp(13px, 2.2vmin, 16px); }
-  .plate { background: #fff; color: #111; font-weight: 900; letter-spacing: 3px; padding: 6px 16px; border: 2px solid #000; border-radius: 6px; font-size: clamp(13px, 2.4vmin, 16px); }
-  #pname { padding: 12px 14px; border-radius: 10px; border: 1px solid #475569; background: rgba(15,23,42,.85); color: #fff; font-size: 16px; text-align: center; width: min(300px, 86vw); user-select: text; -webkit-user-select: text; }
-  #go { font-size: clamp(17px, 3vmin, 20px); font-weight: 800; padding: 14px clamp(28px, 8vw, 56px); min-height: 52px; border-radius: 40px; border: 2px solid #60a5fa; color: #fff; background: linear-gradient(135deg,#0284c7,#2563eb); cursor: pointer; }
-  #ccOpenBtn { min-height: 48px; }
-  @media (max-height: 460px) { #start p { display: none; } #start { gap: 8px; } }
-
-  /* ------------------------------------------------------------ top HUD bar (Controls / Settings, + Map / More on touch) */
-  #hudBar { position: fixed; top: calc(var(--g) + var(--st)); right: calc(var(--g) + var(--sr)); z-index: 12; display: none; gap: 6px; }
-  body.playing #hudBar { display: flex; }
-  .hud-btn { height: var(--bar); min-width: var(--bar); padding: 0 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.18); background: rgba(10,15,25,.72); color: #e5e7eb;
-    font: 700 13px system-ui, sans-serif; letter-spacing: .04em; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; touch-action: manipulation; }
-  .hud-btn:hover { background: rgba(30,41,59,.9); }
-  .hud-btn.on { background: #1d4ed8; border-color: #60a5fa; }
-  .hud-btn kbd { font: 700 10px ui-monospace, monospace; color: #94a3b8; border: 1px solid #475569; border-radius: 4px; padding: 0 4px; }
-  .touch-only { display: none !important; }
-  html.touch .touch-only { display: inline-flex !important; }
-  html.touch .desk-only { display: none !important; }
-
-  /* ------------------------------------------------------------ mission / compass / heading (mp.js) */
-  #mission { position: fixed; top: calc(var(--st) + 62px); left: 50%; transform: translateX(-50%); padding: 6px 18px; text-align: center; max-width: min(440px, calc(100vw - 2 * var(--rad) - 60px)); z-index: 5; }
-  #mission .t { color: #fbbf24; font-size: clamp(10px, 1.6vmin, 11px); font-weight: 800; letter-spacing: 2px; }
-  #mission .d { font-size: clamp(12px, 2vmin, 14px); font-weight: 600; }
-  #where { display: block; font-size: 11px; color: #cbd5e1; margin-top: 2px; }
-  #where b { color: #ffd36b; }
-  #mpCompass { top: calc(var(--st) + 8px) !important; transform: translateX(-50%) scale(var(--cs)) !important; transform-origin: 50% 0; }
-  #mpHdg { top: calc(var(--st) + 8px + 32px * var(--cs)) !important; }
-  #mpCoords { top: calc(var(--st) + var(--g) + var(--bar) + 8px) !important; right: calc(var(--g) + var(--sr)) !important; }
-  #mpSquad { top: calc(var(--st) + var(--g)) !important; left: calc(var(--g) + var(--sl)) !important; min-width: 0 !important; max-width: 220px; }
-  #mpPanel { left: calc(var(--g) + var(--sl)) !important; bottom: calc(var(--g) + var(--sb)) !important; width: min(340px, 30vw) !important; }
-  #mpLog { max-height: min(230px, 30vh) !important; }
-  #mpBoard { min-width: 0 !important; width: min(520px, 94vw); max-height: 80vh; overflow: auto; }
-  #mpWheel { width: min(360px, 90vmin) !important; height: min(360px, 90vmin) !important; margin: calc(min(360px, 90vmin) / -2) 0 0 calc(min(360px, 90vmin) / -2) !important; }
-
-  /* ------------------------------------------------------------ dash + radar */
-  #dash { position: fixed; left: 50%; bottom: calc(14px + var(--sb)); transform: translateX(-50%); display: flex; gap: clamp(10px, 1.6vw, 22px); align-items: center; padding: 8px clamp(12px, 1.6vw, 22px); z-index: 5; white-space: nowrap; }
-  #spd { font-size: clamp(26px, 4.4vmin, 40px); font-weight: 900; min-width: 2.2em; text-align: center; }
-  .lbl { font-size: 10px; color: #94a3b8; letter-spacing: 1px; text-align: center; }
-  .val { font-size: clamp(14px, 2vmin, 18px); font-weight: 800; text-align: center; }
-  #radar { position: fixed; right: calc(14px + var(--sr)); bottom: calc(14px + var(--sb)); width: var(--rad); height: var(--rad); border-radius: 50%; border: 3px solid rgba(255,255,255,.75); background: #223; z-index: 4; }
-  #propRadar { width: calc(var(--rad) - 6px) !important; height: calc(var(--rad) - 6px) !important; }
-  #propHud { right: calc(14px + var(--sr)) !important; bottom: calc(var(--rad) + 26px + var(--sb)) !important; max-width: 46vw; }
-  #propHint { bottom: calc(var(--rad) * .5 + 90px) !important; max-width: 90vw; white-space: normal; text-align: center; }
-  @media (max-width: 1240px) { #dash .opt { display: none; } }
-
-  /* ------------------------------------------------------------ big map */
-  #bigmap { position: fixed; left: calc(3vw + var(--sl)); top: calc(3vh + var(--st)); width: calc(94vw - var(--sl) - var(--sr)); height: calc(94vh - var(--st) - var(--sb)); display: none; background: rgba(8,12,20,.94); border-radius: 12px; z-index: 30; touch-action: none; }
-  #mapClose { position: fixed; right: calc(3vw + 10px + var(--sr)); top: calc(3vh + 10px + var(--st)); z-index: 32; display: none; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255,255,255,.4); background: rgba(10,15,25,.9); color: #fff; font: 700 20px system-ui; cursor: pointer; }
-  html.touch #mapClose { width: 56px; height: 56px; font-size: 24px; }
-  #mapClose:hover { background: #b91c1c; }
-  #radar { cursor: pointer; }
-  #radar:hover { border-color: #fbbf24; }
-  body.map-open #mpPanel, body.map-open #mpSquad, body.map-open #mpCompass, body.map-open #mpHdg, body.map-open #mpCoords, body.map-open #mission, body.map-open #hudBar, body.map-open #tc, body.map-open #dash, body.map-open #propHud, body.map-open #rotateHint { visibility: hidden; }
-  #popup { position: fixed; top: 30%; left: 50%; transform: translateX(-50%); font-size: clamp(18px, 4vmin, 26px); font-weight: 900; color: #fbbf24; text-shadow: 0 3px 10px #000; opacity: 0; transition: opacity .3s; text-align: center; max-width: 90vw; pointer-events: none; z-index: 20; }
-  #cockpitWheel { display: none; }
-  #btn4wd { display: none; }
-
-  /* ------------------------------------------------------------ Controls help card (hidden until asked for) */
-  #info { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 40; width: min(720px, calc(100vw - 24px - var(--sl) - var(--sr))); max-height: calc(100vh - 24px - var(--st) - var(--sb));
-    overflow-y: auto; padding: 16px clamp(14px, 3vw, 24px) 18px; font-size: clamp(12.5px, 1.8vmin, 14px); line-height: 1.5; display: none; background: rgba(10,15,25,.94); touch-action: pan-y; overscroll-behavior: contain; }
-  #info.open { display: block; }
-  #info h2 { margin: 0 0 10px; font-size: clamp(16px, 2.6vmin, 20px); letter-spacing: .08em; }
-  #info h3 { margin: 0 0 6px; font-size: 12px; letter-spacing: .14em; color: #93c5fd; text-transform: uppercase; }
-  #info .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px 20px; }
-  #info dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 10px; margin: 0; }
-  #info dt { color: #ffd36b; font-weight: 700; white-space: nowrap; }
-  #info dd { margin: 0; color: #e2e8f0; }
-  #info .muted { color: #9aa4b2; font-size: 11.5px; margin-top: 10px; }
-  #info .x, #settings .x { position: absolute; top: 8px; right: 8px; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255,255,255,.25); background: rgba(30,41,59,.9); color: #fff; font: 700 18px system-ui; cursor: pointer; }
-  html.touch #info section.touchsec { order: -1; }
-
-  /* ------------------------------------------------------------ settings menu */
-  #settings { position: fixed; z-index: 41; top: calc(var(--st) + var(--g) + var(--bar) + 8px); right: calc(var(--g) + var(--sr)); width: min(300px, calc(100vw - 24px)); padding: 14px 16px 16px; display: none; font-size: 13px; }
-  #settings.open { display: block; }
-  #settings h2 { margin: 0 0 10px; font-size: 14px; letter-spacing: .12em; }
-  #settings .seg { display: flex; gap: 4px; margin: 6px 0 4px; }
-  #settings .seg button { flex: 1; min-height: 44px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; font-weight: 700; cursor: pointer; }
-  #settings .seg button.on { background: #1d4ed8; border-color: #60a5fa; }
-  #settings .muted { color: #94a3b8; font-size: 11.5px; line-height: 1.45; }
-  #qNotice { position: fixed; left: 50%; top: calc(var(--st) + 30%); transform: translateX(-50%); z-index: 45; padding: 8px 14px; border-radius: 18px; background: rgba(10,15,25,.86); font: 600 13px system-ui; opacity: 0; transition: opacity .3s; pointer-events: none; }
-  #qNotice.on { opacity: 1; }
-  #rotateHint { display: none; }
-  body:not(.playing) #mpPanel, body:not(.playing) #mpCoords, body:not(.playing) #mpCompass, body:not(.playing) #mpHdg, body:not(.playing) #mpSquad { visibility: hidden; }
-  body:not(.playing) #propHud, body:not(.playing) #rotateHint { display: none !important; }
-
-  /* ------------------------------------------------------------ touch controls */
-  #tc { display: none; position: fixed; inset: 0; pointer-events: none; z-index: 8; touch-action: none; }
-  html.touch #tc { display: block; }
-  #tc[data-mode="off"] { display: none !important; }
-  #tc > div { position: absolute; }
-  .tc-btn { pointer-events: auto; touch-action: none; width: var(--u); height: var(--u); border-radius: 50%; border: 2px solid rgba(255,255,255,.4); background: rgba(10,15,25,.38); color: rgba(255,255,255,.92);
-    font: 800 clamp(12px, 2.2vmin, 15px) system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0; line-height: 1.05; }
-  .tc-btn small { font-size: 9.5px; font-weight: 700; opacity: .8; letter-spacing: .04em; }
-  .tc-btn.on { background: rgba(96,165,250,.55); border-color: #bfdbfe; }
-  .tc-stick { pointer-events: auto; touch-action: none; left: calc(var(--g) + var(--sl)); bottom: calc(var(--g) + var(--sb)); width: calc(var(--u) * 2.2); height: calc(var(--u) * 2.2); border-radius: 50%;
-    background: radial-gradient(circle, rgba(10,15,25,.18), rgba(10,15,25,.38)); border: 2px solid rgba(255,255,255,.3); }
-  .tc-knob { position: absolute; left: 50%; top: 50%; width: calc(var(--u) * .9); height: calc(var(--u) * .9); margin: calc(var(--u) * -.45); border-radius: 50%; background: rgba(255,255,255,.45); border: 2px solid rgba(255,255,255,.7); pointer-events: none; }
-  .tc-stick.on .tc-knob { background: rgba(147,197,253,.7); }
-  #tcArrows { left: calc(var(--g) + var(--sl)); bottom: calc(var(--g) + var(--sb)); display: none; gap: 10px; }
-  .tc-arrow { width: calc(var(--u) * 1.15); height: calc(var(--u) * 1.4); border-radius: 16px; font-size: 22px; }
-  #tc[data-steer="arrows"][data-mode="drive"] #tcArrows { display: flex; }
-  #tc[data-steer="arrows"][data-mode="drive"] #tcStick { display: none; }
-  #tcQuick { left: calc(var(--g) + var(--sl)); bottom: calc(var(--g) + var(--sb) + var(--u) * 2.2 + 10px); display: flex; gap: 8px; }
-  #tc[data-mode="foot"] #tcQuick .tc-drive { display: none; }
-  #tc[data-mode="drive"] #tcQuick .tc-footonly { display: none; }
-  #tcDrive, #tcFoot { right: calc(var(--g) + var(--sr)); bottom: calc(var(--g) + var(--sb)); width: calc(var(--u) * 2.3 + 10px); height: calc(var(--u) * 3.3 + 16px); }
-  #tcDrive .tc-btn, #tcFoot .tc-btn { position: absolute; }
-  #tcGas { right: 0; bottom: 0; width: calc(var(--u) * 1.2); height: calc(var(--u) * 2); border-radius: 18px; background: rgba(22,101,52,.42); }
-  #tcBrake { right: calc(var(--u) * 1.2 + 8px); bottom: 0; width: calc(var(--u) * 1.1); height: calc(var(--u) * 1.3); border-radius: 16px; background: rgba(127,29,29,.42); }
-  #tcHand { right: calc(var(--u) * 1.2 + 8px); bottom: calc(var(--u) * 1.3 + 8px); }
-  #tcHorn { right: calc(var(--u) * 1.2 + 8px); bottom: calc(var(--u) * 2.3 + 16px); font-size: 20px; }
-  #tcNos { right: calc(var(--u) * .1); bottom: calc(var(--u) * 2 + 8px); background: rgba(30,64,175,.42); }
-  #tcJump { right: 0; bottom: 0; width: calc(var(--u) * 1.3); height: calc(var(--u) * 1.3); }
-  #tcRun { right: calc(var(--u) * 1.3 + 10px); bottom: 0; }
-  #tcUse { right: calc(var(--u) * .15); bottom: calc(var(--u) * 1.3 + 10px); }
-  #tcFoot, #tcDrive { display: none; }
-  #tc[data-mode="drive"] #tcDrive, #tc[data-mode="foot"] #tcFoot { display: block; }
-  #tcMore { pointer-events: auto; right: calc(var(--g) + var(--sr)); top: calc(var(--st) + var(--g) + var(--bar) + 8px); padding: 10px; display: none; grid-template-columns: repeat(4, var(--u)); gap: 8px; z-index: 13; }
-  #tc.more-open #tcMore { display: grid; }
-  #tcMore .tc-btn { border-radius: 14px; font-size: 18px; }
-
-  /* ------------------------------------------------------------ touch-device HUD layout: map top-left, buttons top-right, controls at the bottom */
-  html.touch { --g: 8px; --rad: clamp(96px, 20vmin, 160px); --bar: 56px; --cs: .62; }
-  html.touch .hud-btn { font-size: 18px; padding: 0 10px; }
-  html.touch #hudBar .hud-btn .lbl-txt { display: none; }
-  html.touch #radar { right: auto; bottom: auto; left: calc(var(--g) + var(--sl)); top: calc(var(--g) + var(--st)); }
-  html.touch #mpSquad { top: calc(var(--st) + var(--g) + var(--rad) + 8px) !important; max-width: min(200px, 40vw); font-size: 11px !important; }
-  html.touch #dash { bottom: calc(var(--g) + var(--sb)); gap: 10px; padding: 4px 12px; }
-  html.touch #dash .opt, html.touch #dash .opt2 { display: none; }
-  html.touch #spd { font-size: clamp(22px, 4.4vmin, 32px); }
-  html.touch #propHud { bottom: auto !important; top: calc(var(--st) + var(--g) + var(--bar) + 44px) !important; right: calc(var(--g) + var(--sr)) !important; font-size: 11px !important; }
-  html.touch #propHint { bottom: calc(var(--u) * 3.3 + 30px + var(--sb)) !important; }
-  html.touch #mpPanel { bottom: calc(var(--g) + var(--sb) + var(--u) * 3.3 + 24px) !important; width: min(300px, 44vw) !important; }
-  html.touch #mpLog { max-height: 18vh !important; }
-  html.touch #mpCoords { font-size: 10px !important; }
-  html.touch #mission { top: calc(var(--st) + var(--g) + var(--bar) + 6px); max-width: calc(100vw - 2 * var(--rad) - 2 * var(--g) - 24px); padding: 4px 12px; }
-  /* landscape phone: short screen, everything tighter; coordinates sit under the button bar */
-  @media (pointer: coarse) and (max-height: 500px) and (orientation: landscape) {
-    html.touch { --u: 56px; --rad: 96px; --cs: .6; --barw: calc(4 * var(--bar) + 18px);
-      --colL: calc(var(--sl) + var(--g) * 2 + var(--rad)); --colR: calc(var(--sr) + var(--g) * 2 + var(--barw)); }
-    /* compass, heading and mission share the column between the radar and the button bar */
-    html.touch #mpCompass { left: calc(var(--colL) + (100vw - var(--colL) - var(--colR)) / 2) !important; }
-    html.touch #mpHdg { left: calc(var(--colL) + (100vw - var(--colL) - var(--colR)) / 2) !important; }
-    html.touch #mission { left: calc(var(--colL) + (100vw - var(--colL) - var(--colR)) / 2); max-width: calc(100vw - var(--colL) - var(--colR)); top: calc(var(--st) + 8px + 50px * var(--cs) + 4px); }
-    html.touch #mpCoords { top: calc(var(--st) + var(--g) + var(--rad) + 6px) !important; right: auto !important; left: calc(var(--g) + var(--sl)); text-align: left !important; }
-    html.touch #mpSquad { top: calc(var(--st) + var(--g) + var(--rad) + 44px) !important; max-height: calc(100vh - var(--rad) - var(--u) * 3.3 - 70px); overflow: hidden; }
-    html.touch #propHud { top: calc(var(--st) + var(--g) + var(--bar) + 8px) !important; }
-    html.touch #dash { bottom: calc(var(--g) + var(--sb)); }
-    html.touch #mpPanel { left: calc(var(--g) * 2 + var(--sl) + var(--u) * 2.2) !important; bottom: calc(var(--g) + var(--sb) + 62px) !important; width: min(280px, calc(100vw - var(--u) * 4.6 - 60px)) !important; }
-    html.touch #mpLog { max-height: 22vh !important; }
-  }
-  /* portrait phone: stack top-down (buttons, compass, radar + mission, coords + properties), dash just above the pedals */
-  @media (orientation: portrait) and (max-width: 600px) {
-    :root { --rad: 104px; --cs: .7; --row: calc(var(--st) + var(--g) + var(--bar) + 50px); }
-    html.touch { --cs: .78; --u: 56px; --rad: 104px; }
-    #mpCompass { top: calc(var(--st) + var(--g) + var(--bar) + 4px) !important; }
-    #mpHdg { top: calc(var(--st) + var(--g) + var(--bar) + 6px + 30px * var(--cs)) !important; }
-    html.touch #radar { top: var(--row); }
-    #mission, html.touch #mission { top: var(--row); left: calc(var(--g) * 2 + var(--rad) + var(--sl)); right: calc(var(--g) + var(--sr)); transform: none; max-width: none; padding: 5px 10px; }
-    #mpCoords, html.touch #mpCoords { top: calc(var(--row) + var(--rad) + 8px) !important; right: auto !important; left: calc(var(--g) + var(--sl)); text-align: left !important; }
-    html.touch #propHud { top: calc(var(--row) + var(--rad) + 8px) !important; }
-    html.touch #mpSquad { top: calc(var(--row) + var(--rad) + 48px) !important; max-height: 20vh; overflow: hidden; }
-    html.touch #dash { bottom: calc(var(--g) + var(--sb) + var(--u) * 3.3 + 26px); }
-    html.touch #mpPanel { bottom: calc(var(--g) + var(--sb) + var(--u) * 3.3 + 84px) !important; width: calc(100vw - 2 * var(--g)) !important; }
-    html.touch #mpLog { max-height: 12vh !important; }
-    #dash .opt2 { display: none; }
-    #rotateHint { display: block; position: fixed; left: calc(var(--g) + var(--sl)); top: calc(var(--st) + var(--g)); width: calc(100vw - 4 * var(--bar) - 3 * 6px - 3 * var(--g)); max-width: 120px; z-index: 9;
-      padding: 6px 8px; border-radius: 10px; background: rgba(10,15,25,.6); font: 600 11px/1.3 system-ui; color: #e2e8f0; pointer-events: none; transition: opacity .6s; }
-    #rotateHint.gone { opacity: 0; }
-  }
-  /* small non-touch windows (e.g. a narrow desktop browser) */
-  @media (max-width: 900px) { #dash .opt2 { display: none; } }
-  @media (max-width: 1000px) { #hudBar .lbl-txt, #hudBar kbd { display: none; } .hud-btn { font-size: 17px; } :root { --cs: .85; } }
-  @media (max-width: 640px) { :root { --cs: .7; } }
-  @media (min-width: 2000px) { :root { --rad: 240px; } #dash { padding: 10px 26px; } }
-</style>
+<title>SparkV</title>
+<script>/* ?newgame=1: wipe this browser's saved progress and start clean */ if (/[?&]newgame=1/.test(location.search)) { try { Object.keys(localStorage).filter(k => /^(nellutla|sparkv)/i.test(k)).forEach(k => localStorage.removeItem(k)); sessionStorage.clear(); } catch (e) {} history.replaceState(null, '', location.pathname); }</script>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700;800&display=swap">
+<link rel="stylesheet" href="ui.css?v=6">
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="lgBg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b2c30"/><stop offset="1" stop-color="#151518"/></linearGradient><filter id="lgGlow" x="-10%" y="-20%" width="120%" height="140%"><feGaussianBlur stdDeviation="5"/></filter>
+<g id="lgS"><path d="M58 10H16L8 18v18l8 8h34l8 8v18l-8 8H4"/><path d="M78 92V10h42l10 10v20l-10 10H78"/><path d="M146 92l24-82h12l24 82M156 66h40"/><path d="M224 92V10h42l10 10v18l-10 10h-42M254 48l24 44"/><path d="M296 4v88M344 10l-40 40 40 42"/></g>
+<path id="lgV" d="M346 8h20l9 54 13-54h14l-25 84h-12z"/></defs>
+<symbol id="sparkLogo" viewBox="-14 -14 450 124"><rect x="-14" y="-14" width="450" height="124" rx="12" fill="url(#lgBg)"/><g transform="skewX(-9) translate(14 0)" stroke-linejoin="miter" stroke-miterlimit="6"><g fill="none" stroke="#f1f3f6" stroke-width="22" filter="url(#lgGlow)" opacity=".85"><use href="#lgS"/></g><g fill="none" stroke="#e4e7ec" stroke-width="20"><use href="#lgS"/></g><use href="#lgV" fill="#e4e7ec" stroke="#e4e7ec" stroke-width="7"/><g fill="none" stroke="#000000" stroke-width="13"><use href="#lgS"/></g><use href="#lgV" fill="#ff0000"/></g></symbol></svg>
 <canvas id="gl"></canvas>
+<div id="loader" role="status"><span style="color:#f4f8f2"><svg class="logo" viewBox="-14 -14 450 124" role="img" aria-label="SparkV"><use href="#sparkLogo"/></svg></span><div id="ldBar"><i></i></div><div id="ldText">Loading the map</div></div>
+<script>(function(){var n=0,T=46,b=document.querySelector('#ldBar i'),t=document.getElementById('ldText'),L=[[0,'Loading the map'],[.2,'Tuning the vehicles'],[.45,'Waking up the village'],[.7,'Setting out the roads'],[.92,'Building the world']];
+document.addEventListener('load',function(e){if(e.target.tagName!=='SCRIPT')return;n++;var p=Math.min(.98,n/T);b.style.transform='scaleX('+p+')';for(var i=L.length;i--;)if(p>=L[i][0]){t.textContent=L[i][1];break}},true);
+function done(){var l=document.getElementById('loader');b.style.transform='scaleX(1)';l.classList.add('done');setTimeout(function(){l.remove()},400);var i=document.getElementById('pname');}
+addEventListener('load',function(){requestAnimationFrame(done)});})();</script>
 <div id="start">
-  <h1>SPARK GAMING</h1>
+  <span style="color:#f4f8f2;display:block"><svg class="logo" viewBox="-14 -14 450 124" role="img" aria-label="SparkV"><use href="#sparkLogo"/></svg></span>
   <div class="plate">TS 08 HN 1111</div>
-  <p>Open-world Indian village driving: cars, bikes, autos and tractors on a real-geometry map with highway, village streets, dirt lanes, the river bed and 1,600 real house footprints.</p>
-  <input id="pname" maxlength="20" placeholder="Your name (for multiplayer)" autocomplete="nickname" enterkeyhint="go">
-  <button id="go">START DRIVING</button>
+  <p>Drive a real Telangana village. Cars, bikes, autos and tractors, on 1,600 mapped houses, the highway, the lanes and the river bed.</p>
+  <label>Your name in multiplayer<input id="pname" maxlength="20" autocomplete="nickname" enterkeyhint="go"></label>
+  <button id="go">Start driving</button>
 </div>
-<div id="mission" class="panel" style="display:none"><div class="t" id="mTitle"></div><div class="d" id="mTask"></div><span id="where"></span></div>
+<div id="uiLeft"><div id="mission" class="panel" style="display:none"><div class="t" id="mTitle"></div><div class="d" id="mTask"></div><span id="where"></span></div></div>
+<div id="uiRight"></div>
+<div id="uiPrompts"></div>
 <div id="hudBar">
-  <button class="hud-btn" id="btnHelp" title="Controls (I)" aria-label="Controls" aria-controls="info"><span>?</span><span class="lbl-txt">Controls</span> <kbd class="desk-only">I</kbd></button>
-  <button class="hud-btn" id="btnSettings" title="Settings" aria-label="Settings" aria-controls="settings"><span>⚙</span><span class="lbl-txt">Settings</span></button>
+  <button class="hud-btn" id="btnHelp" title="Controls (I)" aria-label="Controls" aria-controls="info"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 1 1 3.8 2.4c-.9.5-1.3 1-1.3 2"/><path d="M12 17h0"/></svg></span><span class="lbl-txt">Controls</span> <kbd class="desk-only">I</kbd></button>
+  <button class="hud-btn" id="btnSettings" title="Settings" aria-label="Settings" aria-controls="settings"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.100 2.100M18.4 5.6l-2.100 2.100M7.700 16.3l-2.100 2.100"/></svg></span><span class="lbl-txt">Settings</span></button>
+  <button class="hud-btn" id="btnPause" title="Pause (Esc)" aria-label="Pause menu"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
 </div>
 <div id="settings" class="panel" role="dialog" aria-label="Settings">
-  <button class="x" data-close aria-label="Close settings">✕</button>
-  <h2>SETTINGS</h2>
-  <div>Graphics quality</div>
+  <button class="x" data-close aria-label="Close settings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <h2>Settings</h2>
+  <div class="sf">Graphics quality</div>
   <div class="seg" id="qSeg"><button data-q="auto">Auto</button><button data-q="low">Low</button><button data-q="medium">Medium</button><button data-q="high">High</button></div>
   <div class="muted" id="qInfo"></div>
-  <label style="display:flex;gap:8px;align-items:center;margin-top:10px;cursor:pointer"><input type="checkbox" id="batterySaver"> Battery saver (30 fps, keeps the laptop cool)</label>
-  <div style="margin-top:12px">Controls <span class="muted" id="devInfo"></span></div>
+  <label class="ck"><input type="checkbox" id="rearHudOpt"> Rear-view strip in chase view</label>
+  <label class="ck"><input type="checkbox" id="batterySaver"> Battery saver (30 fps)</label>
+  <label style="display:block" class="sf">Master volume <span class="muted" id="volMv"></span><input type="range" id="volM" min="0" max="1" step="0.05"></label>
+  <label style="display:block" class="sf">Engine volume <span class="muted" id="volEv"></span><input type="range" id="volE" min="0" max="1" step="0.05"></label>
+  <div class="sf">Controls <span class="muted" id="devInfo"></span></div>
   <div class="seg" id="ctrlSeg"><button data-c="auto">Auto</button><button data-c="touch">Touch</button><button data-c="keyboard">Keyboard</button></div>
   <div class="touch-only" style="display:none;flex-direction:column;margin-top:12px">Touch steering
     <div class="seg" id="steerSeg"><button data-s="stick">Stick</button><button data-s="arrows">Arrows</button></div>
   </div>
 </div>
 <div id="info" class="panel" role="dialog" aria-label="Controls">
-  <button class="x" data-close aria-label="Close controls">✕</button>
-  <h2>CONTROLS</h2>
+  <button class="x" data-close aria-label="Close controls"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <h2>Controls</h2>
   <div class="cols">
-    <section>
-      <h3>Keyboard · driving</h3>
-      <dl>
-        <dt>W / ↑</dt><dd>Gas</dd><dt>S / ↓</dt><dd>Brake, hold to reverse</dd><dt>A D / ← →</dt><dd>Steer</dd>
-        <dt>Space</dt><dd>Handbrake</dd><dt>Shift</dt><dd>NOS</dd><dt>C</dt><dd>Look back</dd><dt>V</dt><dd>Camera</dd>
-        <dt>H · L · K</dt><dd>Horn · lights · 4WD</dd><dt>R</dt><dd>Reset car</dd><dt>1-4 · 5 · 6</dt><dd>Doors · boot · hood</dd><dt>O · Y</dt><dd>Sunroof · wipers</dd>
-      </dl>
-    </section>
-    <section>
-      <h3>Keyboard · general</h3>
-      <dl>
-        <dt>F</dt><dd>Get in / out · take a vehicle</dd><dt>WASD</dt><dd>Walk (on foot)</dd><dt>Space · Shift</dt><dd>Jump · run</dd><dt>E</dt><dd>Interact</dd>
-        <dt>P · U</dt><dd>Properties · character</dd><dt>M</dt><dd>Map</dd><dt>G</dt><dd>Ride an auto (passenger)</dd><dt>T · B · Shift+G</dt><dd>Time · sounds · car model</dd><dt>Drag · wheel</dt><dd>Free-look orbit · zoom</dd>
-        <dt>Enter</dt><dd>Chat</dd><dt>Q + 1-8</dt><dd>Quick chat</dd><dt>Tab · Z</dt><dd>Players · ping</dd><dt>I</dt><dd>This panel</dd>
-      </dl>
-    </section>
-    <section>
-      <h3>Gamepad</h3>
-      <dl>
-        <dt>Left stick</dt><dd>Steer</dd><dt>RT · LT</dt><dd>Gas · brake/reverse</dd><dt>A</dt><dd>Get in / out</dd><dt>B · X</dt><dd>Handbrake · NOS</dd>
-        <dt>Y</dt><dd>Camera</dd><dt>LB · RB</dt><dd>Horn · look back</dd><dt>Start · Back</dt><dd>Map · reset</dd>
-      </dl>
-    </section>
-    <section class="touchsec">
-      <h3>Touch</h3>
-      <dl>
-        <dt>Left stick</dt><dd>Steer (or ◀ ▶ pads, set in ⚙)</dd><dt>GAS · BRAKE</dt><dd>Right pedals, hold BRAKE to reverse</dd><dt>HAND · NOS</dt><dd>Handbrake · boost</dd>
-        <dt>F · 🎥 · 📯</dt><dd>In/out · camera · horn</dd><dt>🗺 · ⋯</dt><dd>Map · lights, chat, quick chat, ping</dd><dt>On foot</dt><dd>Stick moves, JUMP, RUN, E interact</dd>
-      </dl>
-    </section>
+    <section><h3>Driving</h3><dl><dt><kbd>W</kbd><kbd>↑</kbd></dt><dd>Accelerate</dd><dt><kbd>S</kbd><kbd>↓</kbd></dt><dd>Brake, hold to reverse</dd><dt><kbd>A</kbd><kbd>D</kbd></dt><dd>Steer (or ← →)</dd><dt><kbd>Space</kbd></dt><dd>Handbrake</dd><dt><kbd>Shift</kbd></dt><dd>Nitro</dd><dt><kbd>C</kbd></dt><dd>Look back</dd><dt><kbd>V</kbd></dt><dd>Change camera</dd><dt><kbd>N</kbd></dt><dd>Rear-view strip</dd><dt><kbd>H</kbd></dt><dd>Horn</dd><dt><kbd>L</kbd></dt><dd>Headlights</dd><dt><kbd>K</kbd></dt><dd>4WD lock</dd><dt><kbd>R</kbd></dt><dd>Reset vehicle</dd><dt><kbd>1</kbd><kbd>–</kbd><kbd>4</kbd></dt><dd>Doors</dd><dt><kbd>5</kbd></dt><dd>Boot</dd><dt><kbd>6</kbd></dt><dd>Hood</dd><dt><kbd>7</kbd></dt><dd>Convertible top</dd><dt><kbd>O</kbd></dt><dd>Taxi duty (sunroof in the Crysta)</dd></dl></section>
+    <section><h3>On foot</h3><dl><dt><kbd>F</kbd></dt><dd>Get in or out, take a vehicle</dd><dt><kbd>E</kbd></dt><dd>Interact</dd><dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Walk</dd><dt><kbd>Space</kbd></dt><dd>Jump</dd><dt><kbd>Shift</kbd></dt><dd>Run</dd><dt><kbd>G</kbd></dt><dd>Ride an auto as a passenger</dd><dt><kbd>X</kbd></dt><dd>Sit or stand</dd><dt><kbd>0</kbd></dt><dd>Eat</dd><dt><kbd>8</kbd></dt><dd>Wave</dd><dt><kbd>9</kbd></dt><dd>Namaste</dd></dl><h3 style="margin-top:14px">Together</h3><dl><dt><kbd>Enter</kbd></dt><dd>Chat</dd><dt><kbd>Q</kbd></dt><dd>Quick chat wheel, then 1–8</dd><dt><kbd>G</kbd></dt><dd>Change seat as a passenger</dd><dt><kbd>Tab</kbd></dt><dd>Players</dd><dt><kbd>Z</kbd></dt><dd>Ping</dd><dt><kbd>/</kbd></dt><dd>Voice chat panel</dd><dt><kbd>`</kbd><kbd>.</kbd></dt><dd>Hold to talk</dd><dt><kbd>;</kbd></dt><dd>Mute your mic</dd><dt><kbd>,</kbd></dt><dd>Mute all game sound</dd></dl></section>
+    <section><h3>Work and world</h3><dl><dt><kbd>J</kbd></dt><dd>Hitch or unhitch the trolley</dd><dt><kbd>U</kbd></dt><dd>Cultivator on a tractor (on foot: character)</dd><dt><kbd>Y</kbd></dt><dd>Farm</dd><dt><kbd>P</kbd></dt><dd>Properties</dd><dt><kbd>Backspace</kbd></dt><dd>Phone</dd><dt><kbd>M</kbd></dt><dd>Map and destinations</dd><dt><kbd>=</kbd><kbd>-</kbd><kbd>\</kbd></dt><dd>SparkPlay: next app, next item, select</dd><dt><kbd>1</kbd><kbd>–</kbd><kbd>5</kbd></dt><dd>Bus: door, ticket, bell, wiper, park brake</dd><dt><kbd>[</kbd><kbd>]</kbd></dt><dd>Bus indicators</dd><dt><kbd>T</kbd></dt><dd>Time +2 hours</dd><dt><kbd>B</kbd></dt><dd>Village sounds</dd><dt><kbd>Shift</kbd><kbd>G</kbd></dt><dd>Swap car model</dd><dt><kbd>Esc</kbd></dt><dd>Pause</dd><dt><kbd>I</kbd></dt><dd>This panel</dd></dl></section>
+    <section><h3>Gamepad</h3><dl><dt><kbd>Left stick</kbd></dt><dd>Steer</dd><dt><kbd>RT</kbd><kbd>LT</kbd></dt><dd>Accelerate, brake</dd><dt><kbd>A</kbd></dt><dd>Get in or out</dd><dt><kbd>B</kbd></dt><dd>Handbrake</dd><dt><kbd>X</kbd></dt><dd>Nitro</dd><dt><kbd>Y</kbd></dt><dd>Camera</dd><dt><kbd>LB</kbd></dt><dd>Horn</dd><dt><kbd>RB</kbd></dt><dd>Look back</dd><dt><kbd>Start</kbd></dt><dd>Map</dd><dt><kbd>Back</kbd></dt><dd>Reset</dd></dl></section>
+    <section class="touchsec"><h3>Touch</h3><dl><dt><kbd>Stick</kbd></dt><dd>Steer, or arrow pads (Settings)</dd><dt><kbd>GAS</kbd></dt><dd>Accelerate</dd><dt><kbd>BRAKE</kbd></dt><dd>Brake, hold to reverse</dd><dt><kbd>HAND</kbd></dt><dd>Handbrake</dd><dt><kbd>NOS</kbd></dt><dd>Nitro</dd><dt><kbd>F</kbd></dt><dd>Get in or out</dd><dt><kbd>Menu</kbd></dt><dd>Pause, settings, controls</dd></dl></section>
   </div>
-  <div class="muted">Steer and press gas at the same time: every control works with several fingers at once.</div>
+  <div class="muted">Drag to look around, scroll to zoom. On touch, every control works with several fingers at once.</div>
 </div>
+<div id="scrim"></div>
+<div id="pause" role="dialog" aria-label="Paused"><div class="box panel"><span style="color:#f4f8f2"><svg class="logo" viewBox="-14 -14 450 124" role="img" aria-label="SparkV"><use href="#sparkLogo"/></svg></span>
+  <button id="pResume" class="pri"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5l12 7-12 7z"/></svg>Resume<kbd>Esc</kbd></button>
+  <button id="pControls"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 1 1 3.8 2.4c-.9.5-1.3 1-1.3 2"/><path d="M12 17h0"/></svg>Controls</button>
+  <button id="pSettings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>Settings</button>
+  <button id="pMute"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h3l5 4V6L7 10z"/></svg><span>Turn sound off</span></button>
+  <button id="pReset"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.500-5.800L4 8.500V4"/></svg>Reset vehicle</button>
+</div></div>
 <div id="dash" class="panel" style="display:none">
-  <div><div class="lbl">GEAR</div><div class="val" id="gear">1</div></div>
-  <div><div id="spd">0</div><div class="lbl">KM/H</div></div>
-  <div class="opt"><div class="lbl">SURFACE</div><div class="val" id="surf">-</div></div>
-  <div><div class="lbl">NOS</div><div class="val" id="nos">100%</div></div>
-  <div class="opt"><div class="lbl">TIME</div><div class="val" id="clock">09:00</div></div>
-  <div class="opt"><div class="lbl">VEHICLE</div><div class="val" id="veh">CRYSTA</div></div>
-  <div class="opt2"><div class="lbl">CASH</div><div class="val" id="cash">₹0</div></div>
+  <div class="col">
+    <div class="gauge" id="nosRow"><span>Nitro</span><span class="tr"><i id="nosFill"></i></span><output id="nos">100%</output></div>
+    <div class="gauge none" id="fuelRow"><span>Fuel</span><span class="tr"><i id="fuelFill"></i></span><output id="fuel">100%</output></div>
+  </div>
+  <div id="stone"><div id="gear">1</div><div id="spd">0</div><small>km/h</small><div id="rpmBar" style="height:5px;background:#2a3038;border-radius:3px;overflow:hidden;margin-top:3px"><i id="rpmFill" style="display:block;height:100%;width:0;background:#58c8ff"></i></div><small><span id="rpmV">0</span> rpm</small></div>
+  <div class="col">
+    <div class="datum"><span>Cash</span><span class="val" id="cash">₹0</span></div>
+    <div class="datum opt"><span>Time</span><span class="val" id="clock">09:00</span></div>
+    <div class="datum opt"><span><span id="surf">-</span></span><span class="val" id="veh">Crysta</span></div>
+  </div>
 </div>
 <canvas id="radar" width="220" height="220" style="display:none"></canvas>
 <canvas id="bigmap"></canvas>
-<button id="mapClose" title="Close map (M or Esc)" aria-label="Close map">✕</button>
+<button id="mapClose" title="Close map (M or Esc)" aria-label="Close map"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
 <div id="popup"></div>
-<div id="rotateHint">↻ Rotate for the best view</div>
+<div id="rotateHint">Rotate for the best view</div>
 <div id="cockpitWheel"></div><button id="btn4wd"></button>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>window.NELLUTLA_EXCLUDE = window.NELLUTLA_EXCLUDE || [];   // [{x, z, r}]: buildings whose centre is inside are skipped (custom-modelled by a feature module)</script>
-<script src="../nellutla-map/map-data.js?v=1793665390"></script>
-<script src="../nellutla-map/nellutla-world.js?v=1793900001"></script>
+<script src="../nellutla-map/map-data.js?v=1794300001"></script>
+<script src="../nellutla-map/nellutla-world.js?v=1795600001"></script>
+<script src="../nellutla-map/jangaon-lite.js?v=1"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-<script src="crysta-body.js?v=1793665390"></script>
-<script src="crysta-detail.js?v=1793665390"></script>
-<script src="crysta.js?v=1793900002"></script>
+<script src="crysta-body.js?v=1794600011"></script>
+<script src="crysta-detail.js?v=1795200004"></script>
+<script src="crysta.js?v=1794600001"></script>
 <script src="device.js?v=1793665390"></script>
-<script src="quality.js?v=1793740001"></script>
-<script src="ambient.js?v=1794000101"></script>
-<script src="engine-audio.js?v=1794000101"></script>
-<script src="traffic-models.js?v=1793910001"></script>
+<script src="quality.js?v=1794100001"></script>
+<script src="ambient.js?v=1794500002"></script>
+<script src="engine-audio.js?v=1794600006"></script>
+<script src="vehicle-dynamics.js?v=1794600006"></script>
+<script src="traffic-models.js?v=1794600011"></script>
 <script src="glb-car.js?v=1793665390"></script>
-<script src="multiplayer/mp.js?v=1793750001"></script>
-<script src="people-models.js?v=1793671314"></script>
+<script src="multiplayer/mp.js?v=1795200002"></script>
+<script src="sculpt-people.js?v=1794500004"></script>
+<script src="people-models.js?v=1794500001"></script>
 <script src="assets.js?v=1793665390"></script>
-<script src="player.js?v=1793910001"></script>
+<script src="cockpit.js?v=1795400005"></script>
+<script src="player.js?v=1795400001"></script>
 <!-- Feature modules. Each registers itself on GameHooks (init/update/key) and owns its own file. -->
 <script>window.GameHooks = { init: [], update: [], key: [] };</script>
-<script src="parked.js?v=1793910001"></script>
+<script src="ui.js?v=3"></script>
+<script src="../nellutla-map/map-base.js?v=1"></script>
+<script src="nav.js?v=4"></script>
+<script src="sparkplay.js?v=2"></script>
+<script src="economy.js?v=1794800001"></script>
+<script src="parked.js?v=1795500001"></script>
+<script src="showroom.js?v=1794900001"></script>
+<script src="haul.js?v=1795200002"></script>
+<script src="knock.js?v=1795500001"></script>
+<script src="farm.js?v=1795100001"></script>
+<script src="jobs.js?v=1795100001"></script>
 <script src="character-creator.js?v=1793665390"></script>
-<script src="properties.js?v=1793900001"></script>
+<script src="properties.js?v=1795200002"></script>
 <script src="safehouse.js?v=1793665390"></script>
-<script src="safehouse2.js?v=1793740003"></script>
-<script src="visitors.js?v=1793671654"></script>
-<script src="streetscape.js?v=1793700300"></script>
-<script src="animals.js?v=1793800002"></script>
-<script src="sfx.js?v=1794000101"></script>
+<script src="safehouse2.js?v=1795900003"></script>
+<script src="voice.js?v=1794500001"></script>
+<script src="visitors.js?v=1795600001"></script>
+<script src="streetscape.js?v=1795800002"></script>
+<script src="animals.js?v=1795900001"></script>
+<script src="village-life.js?v=1795500001"></script>
+<script src="sfx.js?v=1794500001"></script>
 <script src="mud.js?v=1794000103"></script>
 <script src="touch-controls.js?v=1793665390"></script>
 <script src="auto-rides.js?v=1793665390"></script>
-<script src="lod.js?v=1793900002"></script>
+<script src="lod.js?v=1795300003"></script>
+<script src="vehicle-lights.js?v=1795400004"></script>
+<script src="../nellutla-map/jangaon-life.js?v=3"></script>
+<script src="../nellutla-map/jangaon.js?v=12"></script>
+<script src="multiplayer/mp-social.js?v=1795700001"></script>
+<script src="actions.js?v=1795600001"></script>
+<script src="phone.js?v=1795200002"></script>
 <script>
 // ---------------------------------------------------------------- scene
 // antialias and the pixel-ratio cap come from the performance tier (quality.js)
@@ -325,7 +155,7 @@ renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gl'), anti
 renderer.setPixelRatio(Quality.initial.pixelRatio);
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;      // PCF (4 taps) instead of PCFSoft: same look at 2048, far cheaper per pixel
 renderer.shadowMap.autoUpdate = false;     // re-rendered every Quality.shadowEvery frames by the main loop
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.85;
@@ -351,7 +181,7 @@ clock = new THREE.Clock();
 hemiLight = new THREE.HemisphereLight(0xdfeaff, 0x8a6a48, 0.75); scene.add(hemiLight);
 sunLight = new THREE.DirectionalLight(0xfff0d0, 1.35);
 sunLight.castShadow = true; sunLight.shadow.mapSize.set(2048, 2048);
-Object.assign(sunLight.shadow.camera, { left: -80, right: 80, top: 80, bottom: -80, near: 10, far: 500 });
+Object.assign(sunLight.shadow.camera, { left: -65, right: 65, top: 65, bottom: -65, near: 10, far: 500 });
 scene.add(sunLight); scene.add(sunLight.target);
 
 const world = NellutlaWorld.build(scene, window.NELLUTLA_MAP);
@@ -360,7 +190,8 @@ Quality.attach({ renderer, scene, camera, sunLight, sky, stars, world });
 const SURFACE_Y = { highway: 0.115, tar: 0.095, cc: 0.075, lane: 0.065, dirt: 0.055, river: 0.0, field: 0.0 };
 // field bunds (earth ridges between fields) lift whatever drives over them
 function bundY(x, z) { return world.bundAt ? world.bundAt(x, z) : 0; }
-function groundY(x, z) { return (SURFACE_Y[world.surfaceAt(x, z)] || 0) + bundY(x, z); }
+// + speed breakers, the raised land opposite the safe house and the rolling land (all in nellutla-world.js)
+function groundY(x, z) { return (SURFACE_Y[world.surfaceAt(x, z)] || 0) + bundY(x, z) + world.humpAt(x, z) + world.dipAt(x, z) + world.landAt(x, z) + world.undAt(x, z); }
 
 // ---------------------------------------------------------------- day / night (1 game day = 16 real minutes)
 let timeOfDay = 9.0;                   // hours
@@ -475,8 +306,8 @@ const TRAFFIC_KIND = {
 };
 const TRAFFIC_ROUTES = {};
 const TRAFFIC_POOL = {
-  hatch: ['hatch', 'swift', 'swift', 'dzire', 'dzire', 'alto', 'alto'],
-  suv: ['suv', 'mpv', 'mpv', 'fortuner', 'fortunerBlack', 'bolero', 'bolero', 'scorpio', 'scorpio', 'ace'],
+  hatch: ['hatch', 'swift', 'swiftNew', 'dzire', 'dzire', 'alto', 'alto'],
+  suv: ['suv', 'mpv', 'mpv', 'fortuner', 'fortunerBlack', 'bolero', 'safari', 'sumo', 'scorpio', 'scorpioN', 'ace'],
 };
 const trafficRouteLen = r => r.p.reduce((sum, p, i) => i ? sum + Math.hypot(p[0] - r.p[i-1][0], p[1] - r.p[i-1][1]) : 0, 0);
 (function spawnTraffic() {
@@ -647,6 +478,9 @@ function updateTraffic(dt) {
       latT = t.bypassLat; cruise = Math.min(t.speed, 4);
       if (t.modeT > 8 || Math.abs(t.s - t.bypassS) > t.L + 12) t.mode = 'drive';
     }
+    // pull off, stop, unhitch / unload, rejoin (haul.js): tractors, lorries, autos
+    let shoulder = null;
+    if (t.mode === 'drive' && !t.ut && window.Haul && Haul.STOPPERS[t.model]) { shoulder = Haul.plan(t, dt, off, farAway); if (shoulder) { latT = shoulder.lat; cruise = shoulder.cruise; } }
     // ---- want speed: cruise, then obstacles ahead in our corridor (OBB gap, speed based headway)
     let want = cruise, leader = null, minGap = Infinity, blockedBy = null;
     const shift = latT - t.lat;
@@ -674,7 +508,7 @@ function updateTraffic(dt) {
     // walls / buildings: sweep probes (spaced under the half width, so thin walls can't slip between) from the
     // nose out to the stopping distance, drifting toward the lateral target; brake to stop short of the first hit
     let wallHit = false;
-    if (!farAway && world.collide) {
+    if (!farAway && world.collide && !shoulder) {
       const r = Math.max(0.3, B.hw * 0.9), body = Math.max(0, B.hl - r), reach = 1.5 + t.cur * t.cur / (1.6 * K.brk) + t.cur * 0.4;
       const n = Math.min(28, Math.ceil((reach + body) / r) + 1);
       for (let k = 0; k < n; k++) {
@@ -689,7 +523,7 @@ function updateTraffic(dt) {
     }
     t.leaderRef = leader; t.blockedBy = blockedBy; t.gapAheadM = minGap;
     // ---- automatic overtake of slow traffic when the other half is clear of oncoming vehicles
-    if (t.mode === 'drive' && leader && leader !== 'player' && typeof leader === 'object' && leader.dir === t.dir && leader.r === t.r
+    if (t.mode === 'drive' && !shoulder && leader && leader !== 'player' && typeof leader === 'object' && leader.dir === t.dir && leader.r === t.r
         && minGap < 18 && leader.cur < t.speed * 0.6 && t.r.w >= 5.5) {
       t.followT += dt;
       if (t.followT > 2.5) {
@@ -712,7 +546,7 @@ function updateTraffic(dt) {
       want = 0; t.cur = 0;
       const k = Math.max(0, 1 - t.modeT / 0.6); t.g.scale.setScalar(Math.max(0.01, k));
       if ((k === 0 || !trafficOnScreen(t)) && trafficRespawn(t)) { /* placed */ }
-    } else {
+    } else if (!shoulder) {
       // a stopped vehicle ahead only counts as "stuck" if it is itself stuck, faces us (head-on on a narrow lane)
       // or is waiting on us (a deadlock), otherwise we just queue behind it
       const lt = leader && typeof leader === 'object' ? leader : null;
@@ -732,29 +566,51 @@ function updateTraffic(dt) {
     const dv = want - t.cur;
     t.cur += Math.max(-K.brk * dt * (want === 0 || want < t.cur * 0.7 ? 1.6 : 1), Math.min(K.acc * dt, dv));   // hard braking when it's urgent
     if (t.cur < 0) t.cur = 0;
-    t.s += t.dir * t.cur * dt;
-    if (t.s > t.len || t.s < 0) {
+    if (t.ut && t.aiRoute) { t.cur = 3; t.mode = 'drive'; t.stuckT = 0; }   // a route bus always finishes its turn at the terminus
+    if (t.ut) t.cur = Math.min(t.cur, 3); else t.s += t.dir * t.cur * dt;
+    if (!t.ut && (t.s > t.len || t.s < 0)) {
       // end of the road: out of sight it carries on elsewhere; in view it turns round (lateral offset mirrored so the
       // body doesn't jump across the road, then it eases over to its new left side)
-      if (!trafficOnScreen(t) && trafficRespawn(t)) continue;
-      t.s = t.s > t.len ? t.len : 0; t.dir = -t.dir; t.mode = 'drive'; t.lat = -t.lat; t.latV = 0;
+      if (!t.aiRoute && !trafficOnScreen(t) && trafficRespawn(t)) continue;   // route buses turn round at the terminus
+      // in view: a real U-turn on the vehicle's own turning circle (never a spin on the spot); no room, it fades out
+      t.s = t.s > t.len ? t.len : 0;
+      { const h = t.g.rotation.y, fx = Math.sin(h), fz = Math.cos(h), lx = Math.cos(h), lz = -Math.sin(h), sg = t.lat > 0 ? -1 : 1;
+        const R = ((VehicleDynamics.SPEC[t.model] || VehicleDynamics.SPEC.hatch).R) * 0.95 + 0.5, x0 = t.g.position.x, z0 = t.g.position.z, cx = x0 + lx * sg * R, cz = z0 + lz * sg * R;
+        let clear = true;
+        for (let a = 0.5; a <= Math.PI + 0.01 && clear; a += 0.5) { const q = { x: cx - lx * sg * R * Math.cos(a) + fx * R * Math.sin(a), z: cz - lz * sg * R * Math.cos(a) + fz * R * Math.sin(a) }, c = world.collide(q, t.W / 2); if ((c && c.hit) || world.insideBuilding(q.x, q.z, 0.3)) clear = false; }
+        if (clear) t.ut = { cx, cz, lx, lz, fx, fz, sg, R, a: 0, h }; else { t.mode = 'respawn'; t.modeT = 0; } }
     }
     // ---- lateral: smooth, speed-dependent steering into the target offset (no jumps)
-    t.latT = Math.max(-maxLat, Math.min(maxLat, latT));
+    t.latT = shoulder ? latT : Math.max(-maxLat, Math.min(maxLat, latT));
     const latRate = 0.6 + Math.min(1.4, t.cur * 0.18);
     const latErr = t.latT - t.lat, latVt = Math.max(-latRate, Math.min(latRate, latErr * 1.2));
     t.latV += (latVt - t.latV) * Math.min(1, dt * 3);
     t.lat += t.latV * dt;
-    const [x, z, h] = pointAt(t.r, t.s), rot = t.dir > 0 ? h : h + Math.PI;
-    { const gx = x + Math.cos(rot) * t.lat, gz = z - Math.sin(rot) * t.lat; t.g.position.set(gx, groundY(gx, gz), gz); }
-    const steer = Math.atan2(t.latV, Math.max(1.5, t.cur)) * (t.mode === 'reverse' ? -1 : 1);   // nose points where it's drifting
-    const rotW = rot - steer;
-    t.g.rotation.y += Math.atan2(Math.sin(rotW - t.g.rotation.y), Math.cos(rotW - t.g.rotation.y)) * Math.min(1, dt * 6);
+    const [x, z, h] = pointAt(t.r, t.s), rot = t.dir > 0 ? h : h + Math.PI, ry0 = t.g.rotation.y;
+    if (t.ut) {
+      const U = t.ut; U.a = Math.min(Math.PI, U.a + t.cur * dt / U.R);
+      const gx = U.cx - U.lx * U.sg * U.R * Math.cos(U.a) + U.fx * U.R * Math.sin(U.a), gz = U.cz - U.lz * U.sg * U.R * Math.cos(U.a) + U.fz * U.R * Math.sin(U.a);
+      t.g.position.set(gx, groundY(gx, gz), gz); t.g.rotation.y = U.h + U.sg * U.a;
+      if (U.a >= Math.PI) {          // back on the rail, heading the other way, wherever the arc ended
+        t.dir = -t.dir; const r2 = t.dir > 0 ? h : h + Math.PI; t.lat = (gx - x) * Math.cos(r2) - (gz - z) * Math.sin(r2); t.latV = 0; t.ut = null;
+      }
+    } else {
+      { const gx = x + Math.cos(rot) * t.lat, gz = z - Math.sin(rot) * t.lat; t.g.position.set(gx, groundY(gx, gz), gz); }
+      const steer = Math.atan2(t.latV, Math.max(1.5, t.cur)) * (t.mode === 'reverse' ? -1 : 1);   // nose points where it's drifting
+      const rotW = rot - steer;
+      t.g.rotation.y += Math.atan2(Math.sin(rotW - t.g.rotation.y), Math.cos(rotW - t.g.rotation.y)) * Math.min(1, dt * 6);
+    }
+    if (t.trailer && !farAway) VehicleDynamics.trail(t, t.g.position.x, t.g.position.z, t.g.rotation.y);
     t.box = trafficBox(t);
     t.g.visible = !farAway;                                                   // far traffic isn't drawn (or shadowed)
     const near = !farAway && Math.abs(t.g.position.x - camera.position.x) + Math.abs(t.g.position.z - camera.position.z) < 160;
     if (t._peopleShown !== near) { t._peopleShown = near; t.g.children.forEach(c => { if (c.userData && c.userData.human) c.visible = near; }); }   // drivers/passengers only up close
     if (!farAway) for (const w of t.wheels) w.rotation.x += (t.mode === 'reverse' ? -1.5 : t.cur) * dt / t.wheelR;
+    // front wheels steer with the path: kinematic angle from the actual yaw rate (cars and trucks, close up only)
+    if (near && t.steer && t.steer.length > 1) {
+      const dy = Math.atan2(Math.sin(t.g.rotation.y - ry0), Math.cos(t.g.rotation.y - ry0)), lb = t.L * 0.58, d = Math.max(-0.6, Math.min(0.6, Math.atan(lb * dy / Math.max(0.5, t.cur * dt))));
+      t.stv = (t.stv || 0) + (d - (t.stv || 0)) * Math.min(1, dt * 8); for (const o of t.steer) o.rotation.y = t.stv;
+    }
     if (t.night !== night) {
       t.night = night;
       t.head.forEach(m => m.material.color.setHex(night ? 0xfff2c0 : 0x777766));
@@ -808,6 +664,7 @@ const CRR = { highway: 0.012, tar: 0.014, cc: 0.016, lane: 0.02, dirt: 0.035, ri
 let surface = 'highway';
 const vel = { x: 0, z: 0 };              // world-space velocity, m/s
 const crystaSusp = {};
+const crystaVD = VehicleDynamics.make(VehicleDynamics.SPEC.crysta, 1.37);   // model origin to rear axle
 let brakingNow = false, throttleIn = 0, yawRate = 0, lastSpeed = 0, gearIdx = 0, shiftTimer = 0, pitchVis = 0, rollVis = 0, slipVis = 0, longAcc = 0, latAcc = 0;
 function torqueAt(rpm) {                 // Nm, full throttle
   if (rpm < 1000) return 210 + (rpm - 800) * 0.4;
@@ -845,11 +702,10 @@ function physicsStep(dt) {
   let vF = vel.x * fwd.x + vel.z * fwd.z, vL = vel.x * left.x + vel.z * left.z;
   const speed = Math.hypot(vel.x, vel.z);
 
-  // steering: rack is slower at speed, lock reduces with speed
+  // steering rack (vehicle-dynamics.js): smooth ramp, slower at speed, lock limited to what the tyres can use
   const target = Math.abs(padIn.steer) > 0.12 ? padIn.steer : (inputState.left ? 1 : 0) - (inputState.right ? 1 : 0);
-  // quick at parking speed, calmer at highway speed; returns to centre faster than it turns in (self-centring)
-  const centring = !target || Math.sign(target) !== Math.sign(steerAngle);
-  steerAngle += (target - steerAngle) * Math.min(1, dt * (centring ? 9 : 5.5) * ARCADE.steer / (1 + speed / 32));
+  crystaVD.limG = crystaVD.limG || 8;
+  const delta = VehicleDynamics.steer(crystaVD, target, vF, dt); steerAngle = crystaVD.s;
 
   // reverse gear: hold brake at standstill
   // D <-> R like big driving games: the pedal against the direction of travel brakes, and the box flips to the
@@ -907,26 +763,21 @@ function physicsStep(dt) {
   if (!isReversing && vF < 0 && !throttle) vF = Math.min(0, vF + 3 * dt);
   if (isReversing && vF < -8.5) vF += (-8.5 - vF) * Math.min(1, dt * 3);        // reverse tops out near 30 km/h
 
-  // lateral: bicycle model with grip limit; handbrake lets the rear step out
-  const lock = 0.62 / (1 + (speed * speed) / (900 * ARCADE.steer * ARCADE.steer));
-  const delta = steerAngle * lock;
-  let targetYaw = vF * Math.tan(delta) / C.wheelbase;
-  const maxYaw = (mu * g * 1.05 * ARCADE.steer) / Math.max(3, Math.abs(vF));                     // understeer at the limit
+  // lateral: bicycle model + tyre curve + weight transfer (vehicle-dynamics.js); handbrake lets the rear step out
   const rearGrip = inputState.drift ? 0.3 : 1;
-  if (inputState.drift && speed > 8) targetYaw *= 1.9 * ARCADE.drift;
-  targetYaw = THREE.MathUtils.clamp(targetYaw, -maxYaw / (rearGrip < 1 ? 1.1 : 1), maxYaw / (rearGrip < 1 ? 1.1 : 1));
-  yawRate += (targetYaw - yawRate) * Math.min(1, dt * (6 * mu * ARCADE.steer));
+  crystaVD.r = yawRate;
+  yawRate = VehicleDynamics.cornering(crystaVD, vF, Math.min(1.25, mu), aF, dt, inputState.drift && speed > 8 ? 1.9 * ARCADE.drift : 0);
   carRot += yawRate * dt;
-  // tyres pull the sideways velocity back towards zero, limited by friction
+  // tyres pull the sideways velocity towards the kinematic / slip value, limited by friction
   const latGrip = mu * g * rearGrip * (wheelspin ? 0.7 : 1);
-  // stability assist snaps slides straight once you let go of the handbrake
   const assist = inputState.drift ? 1 : ARCADE.stability;
-  const dvL = THREE.MathUtils.clamp(-vL, -latGrip * dt * 1.4 * assist, latGrip * dt * 1.4 * assist);
-  vL += dvL;
+  const vLt = inputState.drift ? 0 : crystaVD.vL;
+  // momentum stays with the body: what the turn itself needs is free (the velocity vector rotates with the car below)
+  vL += THREE.MathUtils.clamp(vLt - vL, -latGrip * dt * 1.4 * assist, latGrip * dt * 1.4 * assist);
   // counter-steer assist: in a slide (not on the handbrake) gently yaw the nose toward the direction of travel
-  if (!inputState.drift && speed > 6 && Math.abs(vL) > 1.2) yawRate += THREE.MathUtils.clamp(-vL / Math.max(4, Math.abs(vF)), -1, 1) * Math.sign(vF || 1) * dt * 2.5;
+  if (!inputState.drift && speed > 6 && Math.abs(vL - vLt) > 1.2) yawRate += THREE.MathUtils.clamp(-(vL - vLt) / Math.max(4, Math.abs(vF)), -1, 1) * Math.sign(vF || 1) * dt * 2.5;
   latAcc = yawRate * vF; longAcc = aF;
-  slipVis = Math.abs(vL) + (wheelspin && speed < 12 ? 3 : 0) + (inputState.brake && speed > 15 && Fbrake >= mu * C.mass * g * 0.8 ? 1.5 : 0);
+  slipVis = Math.abs(vL - vLt) + Math.max(0, crystaVD.slip - 1.15) * 3 + (wheelspin && speed < 12 ? 3 : 0) + (inputState.brake && speed > 15 && Fbrake >= mu * C.mass * g * 0.8 ? 1.5 : 0);
 
   // rebuild world velocity in the new heading
   const nf = { x: Math.sin(carRot), z: Math.cos(carRot) }, nl = { x: Math.cos(carRot), z: -Math.sin(carRot) };
@@ -977,8 +828,8 @@ function physicsStep(dt) {
     VehicleSuspension.step(crystaSusp, playerCarGroup, suspBody, suspWheels, { dt, speed, longAcc, latAcc, ground: groundY, rough: VehicleSuspension.roughAt });
   } else playerCarGroup.rotation.set(THREE.MathUtils.clamp(pitchVis, -0.05, 0.05), carRot, THREE.MathUtils.clamp(rollVis, -0.06, 0.06), 'YXZ');
   const spin = ((wheelspin && throttle ? Math.max(Math.abs(vF), 12) * Math.sign(Fdrive || 1) : vF) / wheelRadius) * dt;
-  if (steeringWheelMesh) steeringWheelMesh.rotation.z = steerAngle * 2.2;
-  wheelMeshes.forEach(w => { w.tire.rotation.x += spin; if (w.isFront) w.anchor.rotation.y = delta; });
+  if (steeringWheelMesh) steeringWheelMesh.rotation.z = -steerAngle * 3;   // left lock turns the rim anticlockwise as the driver sees it
+  wheelMeshes.forEach(w => { w.tire.rotation.x += spin; if (w.isFront) w.anchor.rotation.y = VehicleDynamics.wheelAngle(crystaVD, w.x); });
   rearBrakeLights.forEach(tl => tl.material.color.setHex(brakingNow ? 0xff0000 : 0xb91c1c));
 
   // tyre squeal and skid marks when sliding
@@ -1018,17 +869,17 @@ function addSkid() {
 
 function toggleHeadlights() {
   headlightsOn = !headlightsOn;
-  frontHeadlights.forEach(hl => { hl.material.color.setHex(headlightsOn ? 0xffffff : 0x555555); if (hl.userData.spot) hl.userData.spot.intensity = headlightsOn ? 1.8 : 0; });
+  frontHeadlights.forEach(hl => { hl.material.color.setHex(headlightsOn ? 0xffffff : 0x555555); });   // the beam itself is vehicle-lights.js
 }
 
 // ---------------------------------------------------------------- input
 let showMap = false;
-function setMap(on) {
+var setMap = function (on) {
   showMap = on;
   document.getElementById('bigmap').style.display = on ? 'block' : 'none';
   document.getElementById('mapClose').style.display = on ? 'block' : 'none';
   document.body.classList.toggle('map-open', on);
-}
+};
 // one toggle for every input (M key, gamepad Start, HUD button, touch button); debounced so a synthetic key
 // plus a click from the same tap can't open and instantly close it again
 function toggleMap() { const now = performance.now(); if (now - (toggleMap.t || 0) < 250) return; toggleMap.t = now; setMap(!showMap); }
@@ -1039,7 +890,7 @@ document.getElementById('radar').addEventListener('click', e => { e.stopPropagat
 addEventListener('pointerdown', e => {
   if (!showMap) return;
   const id = e.target && e.target.id;
-  if (id !== 'bigmap' && id !== 'mapClose' && !(e.target.closest && e.target.closest('#mpPanel,#mpChatIn,input,textarea'))) setMap(false);
+  if (id !== 'bigmap' && id !== 'mapClose' && !(e.target.closest && e.target.closest('#mapSide,#mpPanel,#mpChatIn,input,textarea'))) setMap(false);
 }, true);
 function cycleCamera() {
   cameraIndex = (cameraIndex + 1) % CAMERA_MODES.length;
@@ -1105,8 +956,9 @@ addEventListener('keydown', e => {
   if (k === 'KeyI') toggleHelp();
   if (k === 'Escape' && (document.getElementById('info').classList.contains('open') || document.getElementById('settings').classList.contains('open'))) { toggleHelp(false); toggleSettings(false); }
   if (k === 'KeyH') triggerHorn();
-  if (k === 'KeyL') toggleHeadlights();
+  if (k === 'KeyL') { if (e.shiftKey) VehicleLights.flash = true; else showComboPopup(['LIGHTS OFF', 'LOW BEAM', 'HIGH BEAM'][VehicleLights.cycle()]); }
   if (k === 'KeyV') cycleCamera();
+  if (k === 'KeyN') showComboPopup('REAR-VIEW STRIP ' + (Cockpit.toggleHud() ? 'ON' : 'OFF'));
   if (k === 'KeyR') { Player.resetToCrysta(); respawnCar(); }
   if (k === 'KeyF') Player.toggle();
   if (k === 'KeyB' && ambience) showComboPopup(ambience.toggle() ? 'VILLAGE SOUNDS ON' : 'VILLAGE SOUNDS OFF');
@@ -1115,12 +967,13 @@ addEventListener('keydown', e => {
   if (k === 'KeyK') { fourWheelDriveLock = !fourWheelDriveLock; showComboPopup(fourWheelDriveLock ? '4WD LOCKED' : '4WD HIGH'); }
   if (k === 'Digit1') toggleDoor('FL'); if (k === 'Digit2') toggleDoor('FR');
   if (k === 'Digit3') toggleDoor('RL'); if (k === 'Digit4') toggleDoor('RR');
-  if (k === 'Digit5') toggleTrunk(); if (k === 'Digit6') toggleHood();
+  if (k === 'Digit5') toggleTrunk(); if (k === 'Digit6') toggleHood(); if (k === 'Digit7' && typeof Player !== 'undefined') Player.vehiclePart('top');
   if (k === 'KeyO') toggleSunroof(); if (k === 'KeyY') toggleWipers();   // P belongs to properties.js
   if (k === 'KeyM') toggleMap();
   if (k === 'Escape' && showMap) setMap(false);
 });
 addEventListener('keyup', e => {
+  if (e.code === 'KeyL' && window.VehicleLights) VehicleLights.flash = false;
   if (KEYMAP[e.code]) { keyState[KEYMAP[e.code]] = false; syncInput(); }
   if (e.code === 'KeyC') { keyState.look = false; lookBack = false; }
   if (e.key === 'Meta') releaseAllInput();                  // macOS swallows keyups while Cmd is held
@@ -1152,6 +1005,7 @@ function toggleSettings(on) {
 function renderSettings() {
   setEl.querySelectorAll('#qSeg button').forEach(b => b.classList.toggle('on', b.dataset.q === Quality.mode));
   document.getElementById('batterySaver').checked = Quality.battery;
+  for (const [id, k] of [['volM', 'master'], ['volE', 'engine']]) { document.getElementById(id).value = GameAudio[k]; document.getElementById(id + 'v').textContent = Math.round(GameAudio[k] * 100) + '%'; }
   setEl.querySelectorAll('#steerSeg button').forEach(b => b.classList.toggle('on', b.dataset.s === TouchControls.steerMode));
   let cm = 'auto'; try { cm = localStorage.getItem('nellutla.controls') || 'auto'; } catch (e) {}
   setEl.querySelectorAll('#ctrlSeg button').forEach(b => b.classList.toggle('on', b.dataset.c === cm));
@@ -1163,6 +1017,8 @@ function renderSettings() {
 document.getElementById('btnHelp').addEventListener('click', e => { e.stopPropagation(); toggleHelp(); e.currentTarget.blur(); });
 document.getElementById('btnSettings').addEventListener('click', e => { e.stopPropagation(); toggleSettings(); e.currentTarget.blur(); });
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => { toggleHelp(false); toggleSettings(false); }));
+for (const [id, k] of [['volM', 'master'], ['volE', 'engine']]) document.getElementById(id).addEventListener('input', e => { GameAudio.set(k, +e.target.value); document.getElementById(id + 'v').textContent = Math.round(GameAudio[k] * 100) + '%'; });
+document.getElementById('rearHudOpt').checked = Cockpit.hud; document.getElementById('rearHudOpt').addEventListener('change', e => { if (e.target.checked !== Cockpit.hud) Cockpit.toggleHud(); e.target.blur(); });
 document.getElementById('batterySaver').addEventListener('change', e => { Quality.setBattery(e.target.checked); renderSettings(); });
 document.getElementById('qSeg').addEventListener('click', e => { const q = e.target.closest('button'); if (q) { Quality.set(q.dataset.q); renderSettings(); } });
 document.getElementById('ctrlSeg').addEventListener('click', e => { const q = e.target.closest('button'); if (q) Device.setControls(q.dataset.c === 'auto' ? null : q.dataset.c); });
@@ -1175,7 +1031,8 @@ const radar = document.getElementById('radar').getContext('2d'), big = document.
 function drawRadar() {
   radar.clearRect(0, 0, 220, 220); radar.save();
   radar.beginPath(); radar.arc(110, 110, 110, 0, 7); radar.clip();
-  world.drawMap(radar, carPos.x, carPos.z, 0.9, 220, 220, Math.PI + carRot);
+  if (window.Nav) Nav.base(radar, carPos.x, carPos.z, 0.9, 220, 220, Math.PI + carRot); else world.drawMap(radar, carPos.x, carPos.z, 0.9, 220, 220, Math.PI + carRot);
+  if (window.Nav) Nav.radar(radar, 0.9, Math.PI + carRot);
   const m = MISSIONS[mIdx], dx = m.l.x - carPos.x, dz = m.l.z - carPos.z;
   const a = Math.PI + carRot, rx = (dx * Math.cos(a) - dz * Math.sin(a)) * 0.9, rz = (dx * Math.sin(a) + dz * Math.cos(a)) * 0.9;
   const dist = Math.hypot(rx, rz), k = Math.min(1, 100 / (dist || 1));
@@ -1197,15 +1054,22 @@ function drawBigMap() {
   const [px, py] = P(carPos.x, carPos.z); g.fillStyle = '#38bdf8'; g.beginPath(); g.arc(px, py, 6, 0, 7); g.fill();
 }
 let hudT = 0;
+const hudEls = {}, hudVals = {}, hudEl = id => hudEls[id] || (hudEls[id] = document.getElementById(id));
+function hudText(id, v, keyOnly) { if (hudVals[id] === v) return false; hudVals[id] = v; if (!keyOnly) hudEl(id).textContent = v; return true; }
 function updateHUD(dt) {
-  document.getElementById('spd').textContent = Math.round(Math.abs(carSpeed));
-  document.getElementById('gear').textContent = isReversing ? 'R' : currentGear;
-  document.getElementById('surf').textContent = surface.toUpperCase();
-  document.getElementById('nos').textContent = Math.round(nosTank) + '%';
-  document.getElementById('cash').textContent = '₹' + cash.toLocaleString('en-IN');
+  { const fill = hudEl('rpmFill'), pc = Drive.red ? Math.min(100, Drive.rpm / (Drive.red * 1.08) * 100) : 0; fill.style.width = pc.toFixed(1) + '%'; fill.style.background = Drive.rpm > Drive.red * 0.92 ? '#ff3b30' : '#58c8ff'; }
   const tNow = performance.now();
+  if (tNow - (updateHUD.tT || 0) > 100) {   // 10 Hz, and a node is only touched when its value changed
+    updateHUD.tT = tNow;
+    const nosPc = Math.round(nosTank), pt = Player.mode === 'vehicle' && Player.active && Player.active._pt, fuelPc = pt ? Math.round(pt.fuel * 100) : -1;
+    hudText('spd', Math.round(Drive.rawSpeed)); hudText('gear', Drive.gear); hudText('rpmV', Drive.red ? Math.round(Drive.rpm / 50) * 50 : 0); hudText('surf', surface); hudText('nos', nosPc + '%');
+    hudText('cash', '₹' + cash.toLocaleString('en-IN'));
+    if (hudText('nosFill', nosPc, 1)) hudEl('nosFill').style.transform = 'scaleX(' + nosPc / 100 + ')';
+    if (hudText('fuelRow', fuelPc, 1)) { const r = hudEl('fuelRow'); r.classList.toggle('none', fuelPc < 0); r.classList.toggle('low', fuelPc >= 0 && fuelPc < 15); hudEl('fuelFill').style.transform = 'scaleX(' + Math.max(fuelPc, 0) / 100 + ')'; hudEl('fuel').textContent = fuelPc + '%'; }
+    const boost = !!inputState.nos && nosPc > 0; if (hudText('stone', boost, 1)) hudEl('stone').classList.toggle('boost', boost);
+  }
   if (tNow - (updateHUD.rT || 0) > 50) { updateHUD.rT = tNow; drawRadar(); }
-  if (showMap && tNow - (updateHUD.bT || 0) > 33) { updateHUD.bT = tNow; (MP.bigMap ? MP.bigMap(big) : drawBigMap()); }
+  if (showMap && tNow - (updateHUD.bT || 0) > 33) { updateHUD.bT = tNow; (window.Nav ? Nav.draw(big) : MP.bigMap(big)); }
   if ((hudT += dt) > 0.4) {
     hudT = 0; let b = null;
     for (const l of world.landmarks) { const d = Math.hypot(l.x - carPos.x, l.z - carPos.z); if (!b || d < b.d) b = { d, l }; }
@@ -1214,14 +1078,16 @@ function updateHUD(dt) {
 }
 
 // ---------------------------------------------------------------- loop
-try { document.getElementById('pname').value = localStorage.getItem('nellutla.name') || ''; } catch (e) {}
+try { document.getElementById('pname').value = MP.myName(); } catch (e) {}   // a chosen name, or this tab's random default
 document.getElementById('pname').addEventListener('keydown', e => e.stopPropagation());
 document.getElementById('go').onclick = () => {
-  const nm = document.getElementById('pname').value.trim(); if (nm) MP.setName(nm);
+  const nm = document.getElementById('pname').value.trim(); if (nm && nm !== MP.myName()) MP.setName(nm);   // only an edited name is saved for future tabs
   MP.connect();
   try { initAudio(); } catch (e) {}
   try { if (audioCtx && !ambience) ambience = VillageAmbience(audioCtx, world); } catch (e) { console.warn('ambience', e); }
   try { if (audioCtx && !engineSound) engineSound = EngineSound(audioCtx); } catch (e) { console.warn('engine sound', e); }
+  // the legacy two-oscillator diesel + turbo whistle are muted every frame (EngineSound replaced them): stop them so they stop rendering
+  try { if (engineSound) [dieselOsc1, dieselOsc2, turboOsc].forEach(o => { if (o && !o._stopped) { o.stop(); o._stopped = true; } }); } catch (e) {}
   document.getElementById('start').style.display = 'none';
   ['mission', 'dash', 'radar'].forEach(id => document.getElementById(id).style.display = '');
   document.body.classList.add('playing');
@@ -1238,15 +1104,17 @@ window.GAME = GAME;
 GameHooks.init.forEach(f => { try { f(GAME); } catch (e) { console.error('feature init failed', e); } });
 let lastFrameAt = 0, frameNo = 0, lastInputAt = 0, lastShadowPos = new THREE.Vector3(1e9, 0, 0);
 ['keydown', 'pointerdown', 'pointermove', 'wheel', 'touchstart'].forEach(ev => addEventListener(ev, () => { lastInputAt = performance.now(); }, { passive: true, capture: true }));
-// other vehicles have no gearbox model: fake a 4-speed rpm sweep from road speed (hoisted: no per-frame closures)
-const FAKE_TOP = { bike: 90, auto: 60, hatch: 150, suv: 140, tractor: 30, lorry: 80, bus: 80 };
-function fakeRpm(spd, top, idle, red) { const g = Math.min(3, Math.floor(spd / (top / 4))); const f = (spd - g * top / 4) / (top / 4); return idle + (red - idle) * (0.25 + 0.7 * f); }
 const engineFrame = { on: true, rpm: 0, throttle: 0, speedKmh: 0, surface: '', shifting: false };
 // no rendering at all while the tab is hidden (rAF already stops; this also drops the catch-up frame on return)
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { clock.getDelta(); lastFrameAt = 0; } });
+const dynRes = window.dynRes = { ema: 16.7, slow: 0, fast: 0 };
+// hidden tab: no rendering, and the AudioContext is suspended so ~40 oscillator / buffer voices stop costing CPU
+document.addEventListener('visibilitychange', () => {
+  try { if (audioCtx) { if (document.hidden) audioCtx.suspend(); else if (isPlaying) audioCtx.resume(); } } catch (e) {}
+  if (!document.hidden) { clock.getDelta(); lastFrameAt = 0; }
+});
 (function loop(now) {
   requestAnimationFrame(loop);
-  if (document.hidden) return;
+  if (document.hidden || window.GamePaused) return;
   // frame-rate cap (60, or 30 on Low / Battery saver): 120 Hz screens and laptops don't render twice as much for nothing.
   // Idle (start screen, parked with no input, standing on foot) drops to Quality.idleFps; walking caps at 45.
   let cap = (window.Quality && Quality.fpsCap) || 60;
@@ -1254,6 +1122,17 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { cl
   const idle = !isPlaying || (Math.abs(carSpeed) < 0.3 && t - lastInputAt > 2500 && !Object.values(keyState).some(Boolean));
   if (idle) cap = Math.min(cap, Quality.idleFps || 30); else if (isPlaying && Player.mode === 'foot') cap = Math.min(cap, 45);
   if (now && now - lastFrameAt < 1000 / cap - 2) return;
+  // dynamic resolution: when rendered frames arrive late vs the cap (GPU-bound), drop the pixel ratio in 0.125 steps
+  // (never below 1); climb back when there is headroom. Keeps the High look while stopping the GPU from pegging.
+  if (lastFrameAt && !idle && cap >= 45) {
+    const iv = t - lastFrameAt, tgt = 1000 / cap;
+    if (iv < 250) { dynRes.ema += (iv - dynRes.ema) * 0.1; }
+    const maxPr = Math.min(devicePixelRatio || 1, (Quality.TIERS[Quality.tier] || {}).pixelRatio || 1);
+    if (dynRes.ema > tgt * 1.3) { dynRes.slow += iv; dynRes.fast = 0; } else if (dynRes.ema < tgt * 1.08) { dynRes.fast += iv; dynRes.slow = 0; } else { dynRes.slow = dynRes.fast = 0; }
+    const pr = renderer.getPixelRatio();
+    if (dynRes.slow > 1500 && pr > 1) { renderer.setPixelRatio(Math.max(1, pr - 0.125)); renderer.setSize(innerWidth, innerHeight); dynRes.slow = 0; dynRes.ema = tgt; }
+    else if (dynRes.fast > 5000 && pr < maxPr) { renderer.setPixelRatio(Math.min(maxPr, pr + 0.125)); renderer.setSize(innerWidth, innerHeight); dynRes.fast = 0; }
+  }
   lastFrameAt = t; frameNo++;
   const dt = Math.min(0.05, clock.getDelta());
   if (isPlaying) {
@@ -1263,6 +1142,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { cl
       // the old two-oscillator engine is replaced by the layered EngineSound; keep its squeal/turbo blow-off parts
       if (engineGain && audioCtx) engineGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
       if (turboGain && audioCtx) turboGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+      VehicleDynamics.readout(dt, Player.mode, Player.active, { rpm: engineRPM, idle: CRYSTA.idle, red: CRYSTA.redline, gear: gearIdx + 1, shifting: shiftTimer > 0 }, carSpeed, isReversing);
       if (engineSound) {
         const crysta = Player.mode === 'crysta', foot = Player.mode === 'foot';
         const kind = crysta ? 'crysta' : foot ? 'crysta' : ((Player.active && Player.active.model) || 'hatch');
@@ -1270,9 +1150,10 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { cl
         const spd = Math.abs(carSpeed);
         const ef = engineFrame;
         ef.on = !foot;
-        ef.rpm = crysta ? engineRPM : fakeRpm(spd, FAKE_TOP[kind] || 100, 800, kind === 'bike' ? 7500 : kind === 'auto' ? 5000 : 3500);
+        const VP = !crysta && !foot && Player.active && Player.active.p, gas = !!inputState.gas;
+        ef.rpm = Drive.rawRpm; ef.range = Drive.range;
         ef.throttle = crysta ? throttleIn : (inputState.gas ? 1 : 0);
-        ef.speedKmh = spd; ef.surface = world.surfaceAt(carPos.x, carPos.z); ef.shifting = crysta && shiftTimer > 0;
+        ef.speedKmh = spd; ef.surface = world.surfaceAt(carPos.x, carPos.z); ef.shifting = Drive.shifting;
         engineSound.update(ef);
       }
       if (Player.mode !== 'crysta' && squealGain && audioCtx) squealGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
@@ -1294,10 +1175,13 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { cl
   // shadow map: refresh every Nth rendered frame, or at once after a big jump (respawn / teleport)
   if (sunLight.castShadow) {
     const jumped = lastShadowPos.distanceToSquared(sunLight.target.position) > 400;
-    if (jumped || frameNo % Quality.shadowEvery === 0) { renderer.shadowMap.needsUpdate = true; lastShadowPos.copy(sunLight.target.position); }
+    const still = Player.mode === 'crysta' || Player.mode === 'vehicle' ? Math.abs(carSpeed) < 1 : false;   // parked: nothing near the player moves much, the map can wait
+    if (jumped || frameNo % (still ? 8 : Quality.shadowEvery) === 0) { renderer.shadowMap.needsUpdate = true; lastShadowPos.copy(sunLight.target.position); }
   }
   renderer.render(scene, camera);
+  if (window.Cockpit) Cockpit.afterRender(renderer, scene, frameNo);
 })();
 </script>
+<script src="mute.js?v=1795100001"></script>
 </body>
 </html>

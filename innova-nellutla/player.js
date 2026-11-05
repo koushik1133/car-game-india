@@ -36,8 +36,29 @@ const Player = (function () {
     muscle:      { name: 'MUSCLE V8',     top: 250, accel: 12.9, brake: 10.5, rev: 4.5, turn: 2.2, steerRate: 6.5, turnFade: 26, offroad: 0.1, hw: 0.97, gears: 6 },   // 0-100 4.3 s, 1.75 t
     wedge:       { name: 'WEDGE V10',     top: 330, accel: 19,  brake: 12,  rev: 4.5, turn: 2.5, steerRate: 7.5, turnFade: 30, offroad: 0.05, hw: 0.99, gears: 7 },   // 0-100 2.9 s, 1.45 t
     coupe911:    { name: 'FLAT-SIX COUPE', top: 300, accel: 15.9, brake: 12.5, rev: 4.5, turn: 2.7, steerRate: 8, turnFade: 30, offroad: 0.08, hw: 0.93, gears: 8 },  // 0-100 3.5 s, 1.5 t
+    // Indian additions, published figures: accel = 2 x real 0-100 average, as above
+    safari:      { name: 'TATA SAFARI',   top: 165, accel: 4.2, brake: 8, rev: 4, turn: 1.7, steerRate: 4.5, turnFade: 18, offroad: 0.75, hw: 0.98, gears: 5 },   // 2.2 DICOR 156 PS, ~13 s
+    sumo:        { name: 'TATA SUMO',     top: 125, accel: 2.6, brake: 7.5, rev: 4, turn: 1.7, steerRate: 4.5, turnFade: 16, offroad: 0.6, hw: 0.85, gears: 5 },    // 3.0 CR4 85 PS, 1820 kg, ~21 s
+    scorpioN:    { name: 'SCORPIO-N',     top: 185, accel: 5.3, brake: 9, rev: 4.5, turn: 1.8, steerRate: 5, turnFade: 19, offroad: 0.75, hw: 0.96, gears: 6 },    // 2.2 mHawk 175 PS, ~10.5 s
+    swiftNew:    { name: 'SWIFT (2024)',  top: 165, accel: 4.6, brake: 9.5, rev: 4, turn: 2.2, steerRate: 6.5, turnFade: 18, offroad: 0.1, hw: 0.87, gears: 5 },     // Z12E 82 PS, ~12 s
+    activa:      { name: 'HONDA ACTIVA',  top: 85,  accel: 5.2, brake: 8.5, rev: 2.5, turn: 3.0, steerRate: 9, turnFade: 12, offroad: 0.25, hw: 0.35, gears: 1, lean: true },   // 109.5 cc 7.8 PS, 105 kg
+    starCity:    { name: 'TVS STAR CITY+', top: 90, accel: 5.4, brake: 8.5, rev: 2.5, turn: 2.6, steerRate: 7, turnFade: 14, offroad: 0.35, hw: 0.38, gears: 4, lean: true },  // 109.7 cc 8.1 PS, 115 kg
+    // accel = 2 x real 0-100 average, as above. Power, torque, weight published; 0-100 and top speed are magazine / recalled figures
+    wagonR:      { name: 'WAGON R',       top: 150, accel: 4.1, brake: 8.5, rev: 4, turn: 2.2, steerRate: 6.5, turnFade: 17, offroad: 0.1, hw: 0.8, gears: 5 },       // 1.2, ~830 kg, ~13.5 s
+    innova:      { name: 'INNOVA (2005)', top: 155, accel: 3.5, brake: 8.5, rev: 4, turn: 1.95, steerRate: 5.5, turnFade: 18, offroad: 0.3, hw: 0.88, gears: 5 },    // 2KD-FTV 102 hp, ~16 s
+    defender:    { name: 'OVERLANDER 110', top: 191, accel: 7.6, brake: 9, rev: 4.5, turn: 1.75, steerRate: 4.8, turnFade: 20, offroad: 0.95, hw: 1.0, gears: 8 },
+    gclass:      { name: 'G WAGON V8',    top: 220, accel: 12.5, brake: 10, rev: 4.5, turn: 1.75, steerRate: 4.8, turnFade: 20, offroad: 0.9, hw: 0.99, gears: 9 },
+    landCruiser: { name: 'LAND CRUISER',  top: 210, accel: 8.3, brake: 9, rev: 4.5, turn: 1.8, steerRate: 4.8, turnFade: 20, offroad: 0.9, hw: 0.99, gears: 8 },       // 3.3 V6 diesel 305 bhp 700 Nm, ~6.7 s
+    thar:        { name: 'THAR',          top: 155, accel: 5.0, brake: 8.5, rev: 4.5, turn: 2.0, steerRate: 5.2, turnFade: 17, offroad: 0.95, hw: 0.91, gears: 6 },   // 3-door convertible, 2.2 diesel 130 hp
+    hector:      { name: 'MG HECTOR',     top: 190, accel: 5.2, brake: 9, rev: 4.5, turn: 1.95, steerRate: 5.2, turnFade: 19, offroad: 0.35, hw: 0.92, gears: 6 },   // 1.5 turbo petrol 143 ps
+    tharRoxx:    { name: 'THAR ROXX',     top: 165, accel: 5.3, brake: 8.5, rev: 4.5, turn: 1.75, steerRate: 4.8, turnFade: 18, offroad: 0.9, hw: 0.94, gears: 6 },   // 2.2 diesel 175 hp, ~10.5 s
+    hayabusa:    { name: 'HAYABUSA',      top: 299, accel: 17.4, brake: 12, rev: 2.5, turn: 2.3, steerRate: 7, turnFade: 30, offroad: 0.15, hw: 0.42, gears: 6, lean: true },   // 1340 cc 190 hp, 264 kg, ~3.2 s
+    s1000rr:     { name: 'S 1000 RR',     top: 300, accel: 17.9, brake: 13, rev: 2.5, turn: 2.6, steerRate: 8, turnFade: 30, offroad: 0.12, hw: 0.42, gears: 6, lean: true },   // 999 cc 210 hp, 197 kg, ~3.1 s
+    r1250gsa:    { name: 'R 1250 GS ADV', top: 200, accel: 13.5, brake: 10.5, rev: 2.5, turn: 2.4, steerRate: 6.5, turnFade: 22, offroad: 0.85, hw: 0.5, gears: 6, lean: true },   // 1254 cc 136 hp, 268 kg, ~4 s
+    r1300gsa:    { name: 'R 1300 GS ADV', top: 220, accel: 15, brake: 10.5, rev: 2.5, turn: 2.4, steerRate: 6.5, turnFade: 24, offroad: 0.85, hw: 0.5, gears: 8, lean: true },     // 1300 cc 145 hp, 269 kg, ~3.7 s
     bullockCart: { name: 'BULLOCK CART',  top: 8,   accel: 0.8, brake: 3,   rev: 0.8, turn: 1.0, steerRate: 3,  turnFade: 4,  offroad: 0.9,  hw: 0.9,  gears: 1 },
   };
+  VehicleDynamics.applySpecs(PARAMS);   // top speed and ratio count come from the published-data table in vehicle-dynamics.js
   const CRYSTA_HW = 0.95, CRYSTA_LEN = 4.7;
   // vehicle feel per kind (driving agent): body roll gain, pitch gain, max front-wheel steer (rad), tippy = lifts
   // the inside wheel in fast corners (auto rickshaw), spring rate (heavy = slow, wallowy)
@@ -53,9 +74,15 @@ const Player = (function () {
     fortuner: { rollK: 0.0125, pitchK: 0.006, maxSteer: 0.55, w: 8 },   // tall body-on-frame: a bit more roll than the Crysta
     swift: { rollK: 0.008, pitchK: 0.005, maxSteer: 0.6, w: 10.5 }, dzire: { rollK: 0.008, pitchK: 0.005, maxSteer: 0.6, w: 10 },
     alto: { rollK: 0.009, pitchK: 0.006, maxSteer: 0.62, w: 10 }, ace: { rollK: 0.015, pitchK: 0.007, maxSteer: 0.6, w: 8 },
-    bolero: { rollK: 0.017, pitchK: 0.007, maxSteer: 0.55, w: 7.5 }, scorpio: { rollK: 0.016, pitchK: 0.007, maxSteer: 0.55, w: 7.5 },   // soft ladder-frame utilities
+    bolero: { rollK: 0.011, pitchK: 0.007, maxSteer: 0.55, w: 7.5 }, scorpio: { rollK: 0.011, pitchK: 0.007, maxSteer: 0.55, w: 7.5 },   // soft ladder-frame utilities
     faired: { rollK: 0, pitchK: 0.004, maxSteer: 0.38, w: 12 },
+    safari: { rollK: 0.011, pitchK: 0.007, maxSteer: 0.55, w: 7.5 }, sumo: { rollK: 0.012, pitchK: 0.008, maxSteer: 0.55, w: 7 }, scorpioN: { rollK: 0.012, pitchK: 0.006, maxSteer: 0.55, w: 8.5 },
+    swiftNew: { rollK: 0.008, pitchK: 0.005, maxSteer: 0.6, w: 10.5 }, activa: { rollK: 0, pitchK: 0.004, maxSteer: 0.5, w: 11 }, starCity: { rollK: 0, pitchK: 0.003, maxSteer: 0.45, w: 10 },
+    defender: { rollK: 0.012, pitchK: 0.005, maxSteer: 0.55, w: 8.5 }, gclass: { rollK: 0.012, pitchK: 0.006, maxSteer: 0.55, w: 8.5 },
+    thar: { rollK: 0.016, pitchK: 0.007, maxSteer: 0.58, w: 8 }, hector: { rollK: 0.011, pitchK: 0.005, maxSteer: 0.55, w: 9 },
     crysta: { rollK: 0.01, pitchK: 0.005, maxSteer: 0.55, w: 9 },
+    wagonR: { rollK: 0.011, pitchK: 0.006, maxSteer: 0.6, w: 9.5 }, innova: { rollK: 0.011, pitchK: 0.005, maxSteer: 0.55, w: 8.5 }, landCruiser: { rollK: 0.011, pitchK: 0.005, maxSteer: 0.55, w: 8.5 }, tharRoxx: { rollK: 0.015, pitchK: 0.007, maxSteer: 0.55, w: 8 },
+    hayabusa: { rollK: 0, pitchK: 0.004, maxSteer: 0.36, w: 12 }, s1000rr: { rollK: 0, pitchK: 0.004, maxSteer: 0.36, w: 13 }, r1250gsa: { rollK: 0, pitchK: 0.004, maxSteer: 0.42, w: 9 }, r1300gsa: { rollK: 0, pitchK: 0.004, maxSteer: 0.42, w: 9 },
     berlinetta: { rollK: 0.003, pitchK: 0.003, maxSteer: 0.55, w: 14 }, muscle: { rollK: 0.006, pitchK: 0.004, maxSteer: 0.55, w: 11 },
     wedge: { rollK: 0.003, pitchK: 0.003, maxSteer: 0.52, w: 14 }, coupe911: { rollK: 0.004, pitchK: 0.004, maxSteer: 0.58, w: 13 },
   };
@@ -63,8 +90,8 @@ const Player = (function () {
   const typeOf = v => { const t = (v.userData && v.userData.type) || (v.g && v.g.userData && v.g.userData.type) || v.type; return t && PARAMS[t] ? t : v.model; };
   const feelOf = v => FEEL[v._ty || v.model] || FEEL.hatch;
   // engine-audio.js voices for the player's two-wheeler (it reads Player.active._snd.type for model 'bike')
-  const SND = { splendor: 'bike', scooter: 'scooter', classic: 'bullet', classic2: 'jawa', sport: 'ktm', faired: 'sportbike',
-    berlinetta: 'v8flat', muscle: 'v8', wedge: 'v10', coupe911: 'flat6' };
+  const SND = { activa: 'scooter', starCity: 'bike', splendor: 'bike', scooter: 'scooter', classic: 'bullet', classic2: 'jawa', sport: 'ktm', faired: 'sportbike', hayabusa: 'i4sport', s1000rr: 'i4sport', r1250gsa: 'boxer', r1300gsa: 'boxer',
+    berlinetta: 'v8flat', muscle: 'v8', wedge: 'v10', coupe911: 'flat6', thar: 'scorpioN', hector: 'innova', gclass: 'v8' };
 
   // where the driver sits in each TrafficModels vehicle (local x, seat height, local z, HumanModel.sit pose);
   // the same numbers traffic-models.js uses for its AI drivers
@@ -114,9 +141,11 @@ const Player = (function () {
     return { d: Math.hypot(x - cx, z - cz), cx, cz };
   }
   // push a point {x,z} of radius r out of every parked vehicle; returns the push normal or null
-  function pushOutParked(p, r) {
+  // veh: the pusher is a vehicle. A knocked-over bike doesn't stop a vehicle: checkBikeHits shoves it along instead.
+  function pushOutParked(p, r, veh) {
     let hit = null;
     for (const v of parked) {
+      if (veh && v._down) continue;
       const a = axisDist(p.x, p.z, v), min = v.hw + r;
       if (a.d < min) {
         const nx = a.d > 0.001 ? (p.x - a.cx) / a.d : 1, nz = a.d > 0.001 ? (p.z - a.cz) / a.d : 0;
@@ -142,6 +171,7 @@ const Player = (function () {
     body.userData.pose = s[3];
     HumanModel.sit(hp, s[3]);
     body.visible = true;
+    if (s[3] === 'car' && !(v.userData && v.userData.twoWheeler) && TrafficModels.headLift) body.position.y += TrafficModels.headLift(v.g, body, s[0], s[2]);   // keeps the head under this car's roof
   }
   function unseatBody() {
     if (body.parent && body.parent !== scene) { body.parent.remove(body); }
@@ -212,17 +242,7 @@ const Player = (function () {
     L.tail.forEach(m => m.material.color.setHex(on ? 0xff1a1a : lights ? 0xb01818 : 0x661111));
     L.head.forEach(m => m.material.color.setHex(lights ? 0xfff6d8 : 0x777766));
   }
-  function syncSpot(v) {
-    const on = !!v && typeof headlightsOn !== 'undefined' && headlightsOn;
-    if (!pSpot) {
-      if (!on) return;
-      pSpot = new THREE.SpotLight(0xfff2d0, 0, 45, 0.55, 0.5, 1.2); pSpot.castShadow = false;
-      pSpot.target = new THREE.Object3D();
-    }
-    if (on && pSpot.parent !== v.g) { const L = lampsOf(v); v.g.add(pSpot); v.g.add(pSpot.target); pSpot.position.set(0, L.y + 0.2, L.front); pSpot.target.position.set(0, 0, L.front + 14); }
-    pSpot.intensity = on ? 1.8 : 0;
-    if (!on && pSpot.parent) { pSpot.parent.remove(pSpot.target); pSpot.parent.remove(pSpot); }
-  }
+  function syncSpot() {}                                     // beams are decals now: vehicle-lights.js
 
   // ---------------------------------------------------------------- get in / out
   // a spot where the walker (radius WALK_R) can stand: no wall within reach, not in a building footprint, not
@@ -373,15 +393,18 @@ const Player = (function () {
     }
     return out;
   }
-  function takePropBike(b) {
-    const L = world.props[b.kind];
+  function hideProp(kind, i) {        // also called by multiplayer when another player takes this bike
+    const L = world.props[kind], q = L && L[i]; if (!q) return;
     // hide that one instance (the world's InstancedMesh for this kind has exactly L.length instances)
     world.group.children.forEach(o => {
       if (!o.isInstancedMesh || o.count !== L.length) return;
-      o.getMatrixAt(b.i, _pm); _pv.setFromMatrixPosition(_pm);
-      if (Math.abs(_pv.x - b.x) < 0.01 && Math.abs(_pv.z - b.z) < 0.01) { o.setMatrixAt(b.i, _m0); o.instanceMatrix.needsUpdate = true; }
+      o.getMatrixAt(i, _pm); _pv.setFromMatrixPosition(_pm);
+      if (Math.abs(_pv.x - q[0]) < 0.01 && Math.abs(_pv.z - q[1]) < 0.01) { o.setMatrixAt(i, _m0); o.instanceMatrix.needsUpdate = true; }
     });
-    propTaken.add(b.kind + b.i);
+    propTaken.add(kind + i);
+  }
+  function takePropBike(b) {
+    hideProp(b.kind, b.i);
     if (typeof TrafficModels === 'undefined') return null;
     const m = TrafficModels.splendor ? TrafficModels.splendor() : TrafficModels.bike('splendor');
     if (b.kind === 'bike') m.g.traverse(o => { if (o.isMesh && o.material && o.material.isMeshPhongMaterial && o.material.shininess === 85) o.material = new THREE.MeshPhongMaterial({ color: 0xb71c1c, specular: 0x8a8a8a, shininess: 85 }); });
@@ -454,8 +477,8 @@ const Player = (function () {
   const kindOf = v => { if (!v) return 'foot'; if (v.crysta || v === 'crysta') return 'crysta'; const t = v._ty || typeOf(v) || v.model || 'car'; return SND[t] || t; };
   function engineOff(v) { try { window.SFX && SFX.engineOff && SFX.engineOff(kindOf(v)); } catch (e) {} }
   function engineStart(v) { try { window.SFX && SFX.engineStart && SFX.engineStart(kindOf(v)); } catch (e) {} }
-  const NICE = { fortuner: 'Fortuner 4x4', mpv: 'Crysta-style MPV', suv: 'SUV', hatch: 'Hatchback', swift: 'Swift', dzire: 'Dzire', alto: 'Alto 800',
-    bolero: 'Bolero', scorpio: 'Scorpio', ace: 'Tata Ace Mini Truck', tractor: 'Tractor', lorry: 'Lorry', bus: 'RTC Bus', auto: 'Auto Rickshaw',
+  const NICE = { defender: 'Overlander 110', gclass: 'G Wagon V8', thar: 'Mahindra Thar', hector: 'MG Hector', safari: 'Tata Safari', sumo: 'Tata Sumo Gold', scorpioN: 'Mahindra Scorpio-N', swiftNew: 'Swift (2024)', activa: 'Honda Activa', starCity: 'TVS Star City+', fortuner: 'Fortuner 4x4', mpv: 'Crysta-style MPV', suv: 'SUV', hatch: 'Hatchback', swift: 'Swift (2010)', dzire: 'Dzire', alto: 'Alto 800',
+    bolero: 'Bolero', scorpio: 'Scorpio Classic', ace: 'Tata Ace Mini Truck', tractor: 'Tractor', lorry: 'Lorry', bus: 'RTC Bus', auto: 'Auto Rickshaw',
     bike: 'Motorbike', splendor: 'Splendor', scooter: 'Scooter', classic: 'Classic 350', classic2: 'Jawa Classic', sport: 'Sport / Adventure Bike',
     faired: 'Faired Sport 155', cycle: 'Bicycle', bullockCart: 'Bullock Cart' };
   const COLS = [[0x111111, 'Black'], [0xf2f2f2, 'White'], [0xb8bcc2, 'Silver'], [0x6b6f75, 'Grey'], [0xb01c1c, 'Red'], [0x7a1420, 'Maroon'], [0x1c4fb0, 'Blue'],
@@ -525,31 +548,34 @@ const Player = (function () {
     if (typeof bundY === 'function' && bundY(carPos.x, carPos.z) > 0.05) v.vF *= 1 - 1.5 * dt;   // bump and scrub speed crossing a field bund
     const mu = MU[surface] + (1 - MU[surface]) * P.offroad;
     const top = P.top / 3.6 * (0.45 + 0.55 * mu);
+    const PT = VehicleDynamics.ptFor(v, v._ty);
     const steerIn = (typeof padIn !== 'undefined' && Math.abs(padIn.steer) > 0.12) ? padIn.steer : (inputState.left ? 1 : 0) - (inputState.right ? 1 : 0);
-    const centring = !steerIn || Math.sign(steerIn) !== Math.sign(v.steer);
-    v.steer += (steerIn - v.steer) * Math.min(1, dt * P.steerRate * (centring ? 1.6 : 1));
+    const VD = v._vd || (v._vd = VehicleDynamics.forVehicle(v, v._ty)); VD.limG = VD.limG || 8;
+    if (!P.lean) { VehicleDynamics.steer(VD, steerIn, v.vF, dt); v.steer = VD.s; } else if (VD.phi === undefined) VD.phi = -v.g.rotation.z;
+    const vF0 = v.vF;
 
     let braking = false;
     if (inputState.gas) {
       if (v.vF < -0.3) { v.vF = Math.min(0, v.vF + P.brake * dt); braking = true; }
+      else if (PT) v.vF = Math.min(top, Math.max(0, v.vF) + VehicleDynamics.ptStep(PT, Math.max(0, v.vF), 1, mu, CRR[surface], v.trailer ? 2500 : 0, dt) * dt);
       else v.vF = Math.min(top, v.vF + P.accel * mu * Math.max(0.15, 1 - v.vF / top) * dt);
     } else if (inputState.brake) {
       if (v.vF > 0.3) { v.vF = Math.max(0, v.vF - P.brake * mu * dt); braking = true; }
       else v.vF = Math.max(-P.rev, v.vF - P.accel * 0.6 * dt);
     } else {
-      const coast = (0.8 + CRR[surface] * 20) * dt + v.vF * v.vF * 0.0008 * dt;
-      v.vF -= Math.sign(v.vF) * Math.min(Math.abs(v.vF), coast);
+      const coast = PT && v.vF > 0 ? -VehicleDynamics.ptStep(PT, v.vF, 0, mu, CRR[surface], v.trailer ? 2500 : 0, dt) * dt : (0.8 + CRR[surface] * 20) * dt + v.vF * v.vF * 0.0008 * dt;
+      v.vF -= Math.sign(v.vF) * Math.min(Math.abs(v.vF), Math.max(0, coast));
     }
     if (v.vF > top) v.vF -= (v.vF - top) * Math.min(1, dt * 2);       // too fast for this surface
     if (inputState.drift) { v.vF -= Math.sign(v.vF) * Math.min(Math.abs(v.vF), P.brake * 0.5 * dt); braking = true; }
 
-    // yaw: steering bites with speed, fades at high speed; handbrake swings the tail
-    let targetYaw = v.steer * P.turn * THREE.MathUtils.clamp(v.vF / 5, -1, 1) / (1 + Math.abs(v.vF) / P.turnFade);
-    if (inputState.drift && Math.abs(v.vF) > 6) targetYaw *= 1.6;
-    v.yawRate += (targetYaw - v.yawRate) * Math.min(1, dt * 8 * mu);
+    // yaw: kinematic bicycle + understeer + tyre curve + weight transfer (vehicle-dynamics.js); zero at standstill
+    VD.r = v.yawRate;
+    if (P.lean) { v.yawRate = VehicleDynamics.bike(VD, steerIn, v.vF, mu, (v.vF - vF0) / Math.max(dt, 1e-4), dt); v.steer = VD.delta / VD.deltaMax; }
+    else v.yawRate = VehicleDynamics.cornering(VD, v.vF, mu, (v.vF - vF0) / Math.max(dt, 1e-4), dt, inputState.drift && Math.abs(v.vF) > 6 ? 1.6 : 0);
     carRot += v.yawRate * dt;
-    // sideways slip from collisions dies off with grip
-    v.vL -= THREE.MathUtils.clamp(v.vL, -mu * 9.81 * dt, mu * 9.81 * dt);
+    // the body follows the kinematic / tyre-slip side velocity; collision shoves die off with grip
+    { const lim = mu * 9.81 * dt * 1.5; v.vL += THREE.MathUtils.clamp(VD.vL - v.vL, -lim, lim); }
 
     const f = fwdOf(carRot), l = { x: Math.cos(carRot), z: -Math.sin(carRot) };
     let vx = f.x * v.vF + l.x * v.vL, vz = f.z * v.vF + l.z * v.vL;
@@ -562,13 +588,14 @@ const Player = (function () {
     for (const s of v._fp.probes) {
       const cx = v._fp.cx || 0, p = { x: carPos.x + f.x * s + l.x * cx, z: carPos.z + f.z * s + l.z * cx }, px = p.x, pz = p.z;
       let c = typeof wallProbeRadius === 'function' ? (wallProbeRadius(p.x, p.z, v.hw + 0.1) ? world.collide(p, wallProbeRadius(p.x, p.z, v.hw + 0.1)) : { hit: false }) : world.collide(p, v.hw + 0.1);
-      const pc = pushOutParked(p, v.hw * 0.8);
+      const pc = pushOutParked(p, v.hw * 0.8, true);
       if (!c.hit && pc) c = { hit: true, nx: pc.nx, nz: pc.nz };
       if (c.hit) {
         carPos.x += p.x - px; carPos.z += p.z - pz;
         if (c.nx !== undefined) hitN = { nx: c.nx, nz: c.nz }; else { const d = Math.hypot(p.x - px, p.z - pz); if (d > 1e-5) hitN = { nx: (p.x - px) / d, nz: (p.z - pz) / d }; }
         const vn = vx * c.nx + vz * c.nz;
         if (vn < 0) {
+          if (-vn > 5) v._hit = { nx: c.nx, nz: c.nz, sp: -vn };   // showroom.js: visible damage
           // remove only the push into the wall; keep sliding along it, nose follows the wall on glancing hits.
           // Two-wheelers never throw the rider: a hard hit just bounces the bike back a little and kills its speed.
           const hard = P.lean && -vn > 4;
@@ -587,25 +614,31 @@ const Player = (function () {
       }
     }
     unstickVehicle(v, dt, hitN);
+    // towed trolley: tractrix behind the hitch. Reversing folds it unless steered; at the stop the drawbar locks up
+    if (v.trailer) {
+      const T = VehicleDynamics.trail(v, carPos.x, carPos.z, carRot);
+      if (T.jack && v.vF < 0) { if (v.vF < -0.4) showComboPopup('JACK-KNIFED'); v.vF = Math.max(v.vF, -0.2); }
+      const c = v.vF < 0 ? world.collide({ x: T.ax - Math.sin(carRot + T.rel) * 1.5, z: T.az - Math.cos(carRot + T.rel) * 1.5 }, 1.0) : null;
+      if (c && c.hit) v.vF = 0;
+    }
     carSpeed = v.vF * 3.6; v.lastSpeed = carSpeed;
 
     // visuals: wheels, brake lights, bike lean
     v.g.position.set(carPos.x, typeof groundY === 'function' ? groundY(carPos.x, carPos.z) : 0, carPos.z);
     v.g.rotation.y = carRot;
     // bikes lean the whole machine about the tyre contact line (both wheels stay down); cars roll on springs
-    // countersteer: a fresh steer input first flicks the bike the other way, then it falls into the turn
     const Fe = feelOf(v);
-    v._csV = (v._csV || 0) + ((v.steer - (v._csPrev || 0)) / Math.max(dt, 1e-4) - (v._csV || 0)) * Math.min(1, dt * 12); v._csPrev = v.steer;
-    let lean = P.lean ? THREE.MathUtils.clamp(-v.yawRate * v.vF * 0.05 + v._csV * 0.02 * Math.min(1, Math.abs(v.vF) / 8), -0.6, 0.6) : 0;
+    let lean = P.lean ? -VD.phi : 0;
     // auto rickshaw: three wheels and a high roof, it lifts a rear wheel in quick corners
     if (Fe.tippy) { const la = v.yawRate * v.vF; lean = Math.abs(la) > 4.5 ? -Math.sign(la) * Math.min(0.22, (Math.abs(la) - 4.5) * 0.05) : 0; }
-    v.g.rotation.z += (lean - v.g.rotation.z) * Math.min(1, dt * 6);
+    v.g.rotation.z = P.lean ? lean : v.g.rotation.z + (lean - v.g.rotation.z) * Math.min(1, dt * 6);
     suspend(v, dt, !!P.lean);
     spinWheels(v, dt);
     setTail(v, braking || v.vF < -0.1); syncSpot(v);
     isReversing = v.vF < -0.1;
-    currentGear = 1 + Math.floor(Math.min(0.99, Math.abs(v.vF) / (P.top / 3.6)) * P.gears);
-    engineRPM = 800 + (Math.abs(v.vF) / (P.top / 3.6) * P.gears % 1) * 2600 + (inputState.gas ? 400 : 0);
+    if (PT) { if (!inputState.gas && (inputState.brake || v.vF <= 0)) VehicleDynamics.ptStep(PT, Math.max(0, v.vF), 0, mu, CRR[surface], 0, dt); else if (v.vF < 0) PT.gear = 0; currentGear = PT.gear + 1; engineRPM = PT.rpm; window.engineRpmNorm = PT.rpm / PT.s.red; }
+    else { currentGear = 1 + Math.floor(Math.min(0.99, Math.abs(v.vF) / (P.top / 3.6)) * P.gears);
+    engineRPM = 800 + (Math.abs(v.vF) / (P.top / 3.6) * P.gears % 1) * 2600 + (inputState.gas ? 400 : 0); }
   }
 
   // ---------------------------------------------------------------- driving agent: footprint, wheels, unstick, bikes falling
@@ -615,10 +648,11 @@ const Player = (function () {
   function isHumanPart(o) { for (let p = o; p; p = p.parent) if (p.userData && p.userData.human) return true; return false; }
   function initFootprint(v) {
     const ud = (v.userData && v.userData.dims) || (v.g.userData && v.g.userData.dims);
-    const uc = (v.userData && v.userData.center) || (v.g.userData && v.g.userData.center);
+    const uc = (v.userData && v.userData.center) || (v.g.userData && v.g.userData.center), solo = v.g.userData && v.g.userData.solo;
     let len, w, cz = 0, cx = 0;
     // models are not all centred on their origin (tractor+trolley z -1.77, cart +0.8): box = position + rot * center
-    if (ud && ud.length && ud.width) { len = ud.length; w = ud.width; if (uc) { cz = uc.z || 0; cx = uc.x || 0; } v._fpSrc = 'userData'; }
+    if (solo) { len = solo.length; w = solo.width; cz = solo.cz; v._fpSrc = 'solo'; }      // tractor alone: the trolley is hinged
+    else if (ud && ud.length && ud.width) { len = ud.length; w = ud.width; if (uc) { cz = uc.z || 0; cx = uc.x || 0; } v._fpSrc = 'userData'; }
     else {
       const ry = v.g.rotation.y, rz = v.g.rotation.z, px = v.g.position.x, py = v.g.position.y, pz = v.g.position.z;
       v.g.rotation.set(0, 0, 0); v.g.position.set(0, 0, 0); v.g.updateMatrixWorld(true);
@@ -663,13 +697,12 @@ const Player = (function () {
   function spinWheels(v, dt) {
     if (!v._wh) initWheels(v);
     const Fe = feelOf(v);
-    // steered angle grows less at speed (like a real steering ratio feel)
-    const ang = v.steer * Fe.maxSteer / (1 + Math.abs(v.vF) / 25);
+    const VD = v._vd, ang = VD ? VD.delta : 0;
     for (const w of v._wh) {
       w.obj.rotation.x += v.vF * dt / w.r;
-      if (w.front && !v._steerPiv.length) w.obj.rotation.y = w.ry0 + ang;
+      if (w.front && !v._steerPiv.length) w.obj.rotation.y = w.ry0 + (VD ? VehicleDynamics.wheelAngle(VD, w.obj.position.x) : ang);
     }
-    for (const o of v._steerPiv) o.rotation.y = o.userData._ry0 + ang;          // wheel pivots / raked fork + bars
+    for (const o of v._steerPiv) o.rotation.y = o.userData._ry0 + (VD ? VehicleDynamics.wheelAngle(VD, o.position.x) : ang);          // wheel pivots / raked fork + bars
   }
   // never stuck: pressing throttle/brake while pinned against something for 1.5 s pushes the vehicle out along
   // the contact normal; a centre that ends up inside a building footprint goes back to the last clear spot
@@ -690,7 +723,7 @@ const Player = (function () {
 
   // ---- bikes fall over
   const downed = [];          // { v, ang, angV, target, riders: [{h, parent, pos, rot, t}], t, perm }
-  function knockBike(v, dirx, dirz, perm) {
+  function knockBike(v, dirx, dirz, perm, kmh) {
     if (!v || !v.g || v._down) return;
     const r = v.g.rotation.y, lx = Math.cos(r), lz = -Math.sin(r);
     const s = dirx * lx + dirz * lz || (Math.random() - 0.5);
@@ -705,7 +738,9 @@ const Player = (function () {
       h.rotation.set(0, Math.atan2(dirx, dirz), 0); h.userData._fall = 0;
     });
     if (v.speed !== undefined && !perm) { v._spd = v.speed; v.speed = 0; v.cur = 0; }
-    v._down = { ang: v.g.rotation.z, angV: 0, target, riders, t: 0, perm };
+    // shoved along the impact: ~1.2x the hitter's speed for a light bike, then ground friction (sliding on its side)
+    const sv = Math.min(9, (kmh || 10) / 3.6 * 1.2), dl = Math.hypot(dirx, dirz) || 1;
+    v._down = { ang: v.g.rotation.z, angV: 0, target, riders, t: 0, perm, vx: dirx / dl * sv, vz: dirz / dl * sv, yawV: (Math.random() - 0.5) * 2.5 };
     downed.push(v);
     showComboPopup(riders.length ? 'RIDER DOWN!' : 'BIKE KNOCKED OVER');
   }
@@ -722,6 +757,7 @@ const Player = (function () {
       else D.ang += (0 - D.ang) * Math.min(1, dt * 2.5);
       v.g.rotation.z = D.ang;
       if (v.speed !== undefined && !D.perm) { v.speed = 0; v.cur = 0; }
+      slideDowned(v, D, dt);
       for (const R of D.riders) {
         const h = R.h; h.userData._fall += dt;
         const ft = h.userData._fall;
@@ -737,6 +773,17 @@ const Player = (function () {
         delete v._down; downed.splice(i, 1);
       }
     }
+  }
+  // slide a knocked bike: friction (on its side ~0.7 g, still upright ~0.35 g), a little spin, stops at world colliders
+  function slideDowned(v, D, dt) {
+    const sp = Math.hypot(D.vx || 0, D.vz || 0);
+    if (sp < 0.02) { D.vx = D.vz = 0; D.yawV = 0; return; }
+    const mu = Math.abs(D.ang) > 0.8 ? 0.7 : 0.35, k = Math.max(0, sp - mu * 9.81 * dt) / sp;
+    D.vx *= k; D.vz *= k; D.yawV *= Math.max(0, 1 - 3 * dt);
+    const p = v.g.position, q = { x: p.x + D.vx * dt, z: p.z + D.vz * dt };
+    if (world.collide) { const c = world.collide(q, 0.4); if (c && c.hit) { D.vx *= 0.3; D.vz *= 0.3; } }
+    if (world.insideBuilding && world.insideBuilding(q.x, q.z, 0.2) && !world.insideBuilding(p.x, p.z, 0.2)) { q.x = p.x; q.z = p.z; D.vx *= -0.2; D.vz *= -0.2; }
+    p.x = q.x; p.z = q.z; v.g.rotation.y += D.yawV * dt;
   }
   // parked.js instanced bike: let parked.js hand it over as a real model (its own F hook, as if on foot beside it)
   function claimParkedBike(it) {
@@ -758,7 +805,7 @@ const Player = (function () {
   function checkBikeHits(dt) {
     if (mode !== 'crysta' && mode !== 'vehicle') { recentKmh = 0; return; }
     recentKmh = Math.max(Math.abs(carSpeed), recentKmh - dt * 40);
-    if (recentKmh < 8) return;
+    if (recentKmh < 5) return;
     const len = mode === 'crysta' ? CRYSTA_LEN : (active.len || 4), hw = mode === 'crysta' ? CRYSTA_HW : active.hw;
     const me = { g: { position: carPos, rotation: { y: carRot } }, len, hw };
     const f = fwdOf(carRot), sg = Math.sign(carSpeed) || 1;
@@ -767,16 +814,33 @@ const Player = (function () {
     // traffic bikes: index.html's updateTraffic pushes the player off at 1.7 + len2, so contact is that circle
     for (const t of traffic) if (t.model === 'bike' && t.g && !t._down && t !== active &&
       (hit(t.g.position.x, t.g.position.z, 0.6) || Math.hypot(t.g.position.x - carPos.x, t.g.position.z - carPos.z) < 1.85 + Math.min(t.len2 || 1, 2.5))) {
-      const [dx, dz] = dirTo(t.g.position.x, t.g.position.z); knockBike(t, dx, dz, !!t.parked);
+      const [dx, dz] = dirTo(t.g.position.x, t.g.position.z); knockBike(t, dx, dz, !!t.parked, recentKmh);
     }
     for (const t of parked) if (t.model === 'bike' && !t._down && t !== active && hit(t.g.position.x, t.g.position.z, (t.hw || 0.4) + 0.4)) {
-      const [dx, dz] = dirTo(t.g.position.x, t.g.position.z); knockBike(t, dx, dz, true);
+      const [dx, dz] = dirTo(t.g.position.x, t.g.position.z); knockBike(t, dx, dz, true, recentKmh);
+    }
+    // already down (or a claimed parked car): driving into it shoves it along the bumper instead of stopping the vehicle
+    const vF = carSpeed / 3.6;
+    for (const t of parked) if (t.g && t !== active && (t._down || t.model !== 'bike')) {
+      const a = axisDist(t.g.position.x, t.g.position.z, me), r = t._down ? 0.5 : (t.hw || 0.8);
+      if (a.d >= hw + r) continue;
+      const d = a.d || 0.01, nx = (t.g.position.x - a.cx) / d, nz = (t.g.position.z - a.cz) / d;
+      if (t._down) {
+        const D = t._down, push = hw + r - a.d;
+        t.g.position.x += nx * push; t.g.position.z += nz * push;
+        const want = Math.max(0, f.x * vF * nx + f.z * vF * nz) * 1.1 + 0.4, cur = D.vx * nx + D.vz * nz;
+        if (cur < want) { D.vx += nx * (want - cur) + f.x * vF * 0.1; D.vz += nz * (want - cur) + f.z * vF * 0.1; }
+      } else if (recentKmh > 8) {   // a car (~1 t) only gets nudged a few cm; pushOutParked still stops the hitter
+        const k = Math.min(0.06, recentKmh * 0.002);
+        t.g.position.x += nx * k; t.g.position.z += nz * k;
+      }
     }
     const PV = window.Parked && Parked.vehicles;
     if (PV) for (const it of PV) {
       if (it.claimed || it.kind !== 'bike' || Math.abs(it.x - carPos.x) > 8 || Math.abs(it.z - carPos.z) > 8) continue;
       if (!hit(it.x, it.z, (it.hw || 0.4) + 0.9)) continue;     // its static collider stops us a little short
-      const t = claimParkedBike(it); if (t) { const [dx, dz] = dirTo(it.x, it.z); knockBike(t, dx, dz, true); }
+      const key = api.onKnock ? api.onKnock(it) : null;     // multiplayer: everyone sees this bike go down
+      const t = claimParkedBike(it); if (t) { const [dx, dz] = dirTo(it.x, it.z); knockBike(t, dx, dz, true, recentKmh); if (key) key(dx, dz); }
       break;
     }
   }
@@ -900,9 +964,11 @@ const Player = (function () {
   function suspend(v, dt, bike) {
     if (typeof VehicleSuspension === 'undefined' || typeof groundY !== 'function') return;
     if (!v.susp) {
-      const ws = (v.wheels || []).filter(w => w.parent === v.g);
+      // a steered wheel hangs from a pivot (steer_N): it is the pivot that must stay unsprung, or the front axle rides
+      // inside the body, is never sampled, and the car can't pitch
+      const ws = []; for (const w of v.wheels || []) { let q = w; while (q && q.parent && q.parent !== v.g) q = q.parent; if (q && q.parent === v.g && !ws.includes(q)) ws.push(q); }
       const sb = new THREE.Group(); sb.name = 'sprung';
-      [...v.g.children].forEach(ch => { if (!ws.includes(ch)) sb.add(ch); });
+      [...v.g.children].forEach(ch => { if (!ws.includes(ch) && ch !== v.trailer) sb.add(ch); });
       v.g.add(sb);
       v.susp = { body: sb, st: {}, lastV: v.vF || 0, acc: 0, wheels: ws.map(w => ({ obj: w, x: w.position.x, z: w.position.z, baseY: w.position.y })) };
     }
@@ -911,12 +977,62 @@ const Player = (function () {
     if (!S.wheels.length) return;
     const Fe = feelOf(v);
     VehicleSuspension.step(S.st, v.g, S.body, S.wheels, { dt, speed: v.vF || 0, longAcc: S.acc, latAcc: (v.yawRate || 0) * (v.vF || 0),
-      ground: groundY, rough: VehicleSuspension.roughAt, bike, pitchK: Fe.pitchK, rollK: Fe.rollK, w: Fe.w });
+      ground: groundY, rough: VehicleSuspension.roughAt, bike, pitchK: Fe.pitchK, rollK: Fe.rollK, w: Fe.w, zeta: Fe.zeta, travel: Fe.travel });
+  }
+  // ---------------------------------------------------------------- doors, hood, boot, sunroof, top of the driven vehicle
+  // Parts are traffic-models.js plain data ({ mesh, axis, open } etc.) moved by TrafficModels.setPart(part, t). A car whose
+  // model has none (or a clone that lost them) gets plain hinged panels of the same form, sized from its box, hidden until opened.
+  const NO_PANELS = { auto: 1, tractor: 1, bullockCart: 1, cart: 1 }, moving = new Set(), usable = q => (q && q.mesh ? q : null);
+  function panel(par, paint, px, py, pz, w, h, d, oz, axis, open) {
+    const pv = new THREE.Group(); pv.position.set(px, py, pz);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshPhongMaterial({ color: paint, shininess: 85 })); m.position.z = oz; m.castShadow = true; m.userData.noLOD = true;
+    pv.add(m); pv.visible = false; par.add(pv); return { mesh: pv, axis, open, gen: true };
+  }
+  function bodyColour(v) {                                   // the commonest paint material, as colourName() reads it
+    const cnt = new Map(); v.g.traverse(o => { const m = o.isMesh && o.material; if (m && m.isMeshPhongMaterial && !m.transparent && m.shininess === 85) cnt.set(m, (cnt.get(m) || 0) + 1); });
+    let best = null, n = 0; cnt.forEach((k, m) => { if (k > n) { n = k; best = m; } });
+    return best ? best.color.getHex() : window.Cockpit ? Cockpit.paintOf(v) : 0x888888;
+  }
+  function partsOf(v) {
+    if (v._prt) return v._prt;
+    const ud = v.userData || {}, P = v.g._parts || {}, pick = k => usable(ud[k]) || usable(P[k]) || usable(v.g.userData && v.g.userData[k]);
+    const R = v._prt = { doors: {}, hood: pick('hood'), boot: pick('boot'), sunroof: pick('sunroof'), top: pick('top') };
+    // FL/FR are the front doors on the -x / +x side (keys 1/2, the Crysta's convention); the rear pair follows
+    const D = ((ud.doors && ud.doors.length ? ud.doors : P.doors) || []).filter(usable);
+    [[-1, 'FL', 'RL'], [1, 'FR', 'RR']].forEach(([sd, f, r]) => {
+      const on = D.filter(q => (q.side || Math.sign(q.mesh.position.x)) === sd).sort((a, b) => b.mesh.position.z - a.mesh.position.z);
+      if (on[0]) R.doors[f] = on[0]; if (on[1]) R.doors[r] = on[1];
+    });
+    if (v.p.lean || NO_PANELS[v.model]) return R;
+    const B = boxOf(v), par = (v.susp && v.susp.body) || v.g, paint = bodyColour(v), e = seatEye(v), hw = Math.min(B.max.x, -B.min.x) * 0.9, y0 = B.max.y * 0.27, h = B.max.y * 0.42, big = v.model === 'lorry' || v.model === 'bus', ids = ['FL', 'FR', 'RL', 'RR'];
+    if (!D.length) (big ? ids.slice(0, 2) : ids).forEach((id, i) => {
+      const sd = i % 2 ? 1 : -1; R.doors[id] = panel(par, paint, sd * hw, y0 + h / 2, e.z + 0.55 - (i > 1 ? 1 : 0), 0.05, h, 0.95, -0.475, 'y', sd < 0 ? 0.95 : -0.95);
+    });
+    if (!R.hood && !big) { const L = Math.max(0.5, B.max.z * 0.5); R.hood = panel(par, paint, 0, B.max.y * 0.6, B.max.z - L, hw * 1.8, 0.04, L, L / 2, 'x', -0.85); }
+    if (!R.boot && !big) R.boot = panel(par, paint, 0, B.max.y * 0.8, B.min.z + 0.5, hw * 1.7, 0.04, 0.6, -0.3, 'x', 1.1);
+    return R;
+  }
+  function vehiclePart(kind, id) {
+    if (mode !== 'vehicle' || !active) return false;
+    const R = partsOf(active), q = kind === 'door' ? R.doors[id] : R[kind];
+    if (!q) { showComboPopup(active.p.lean ? 'NOT ON A TWO-WHEELER' : 'NOT ON THIS VEHICLE'); return true; }
+    q._to = q._to ? 0 : 1; q._t = q._t || 0; if (q.gen) q.mesh.visible = true; moving.add(q);
+    if (!partsOf._hook && window.GameHooks) { partsOf._hook = true; GameHooks.update.push(animParts); }
+    if (typeof playMechanicalClick === 'function') playMechanicalClick();
+    return true;
+  }
+  function animParts(dt) {
+    const k = Math.min(1, dt * 7);
+    moving.forEach(q => {
+      q._t += (q._to - q._t) * k; if (Math.abs(q._to - q._t) < 0.004) { q._t = q._to; moving.delete(q); if (q.gen && !q._to) q.mesh.visible = false; }
+      TrafficModels.setPart(q, q._t);
+    });
   }
   function walk(dt) {
     surface = world.surfaceAt(carPos.x, carPos.z);
-    const turn = (typeof padIn !== 'undefined' && Math.abs(padIn.steer) > 0.12) ? padIn.steer : (inputState.left ? 1 : 0) - (inputState.right ? 1 : 0);
-    const move = (inputState.gas ? 1 : 0) - (inputState.brake ? 1 : 0);
+    const held = !!(ped.act && ped.act.lock);       // eating, picking up, sleeping: stands still until it's done
+    const turn = held ? 0 : (typeof padIn !== 'undefined' && Math.abs(padIn.steer) > 0.12) ? padIn.steer : (inputState.left ? 1 : 0) - (inputState.right ? 1 : 0);
+    const move = held ? 0 : (inputState.gas ? 1 : 0) - (inputState.brake ? 1 : 0);
     let want, f;
     if (rigView()) {
       // PUBG: W/A/S/D relative to the camera; the body turns smoothly to face where it's going
@@ -969,6 +1085,9 @@ const Player = (function () {
       // in the air above a low wall / step (or standing on it): the 2-D collider doesn't apply
       if (c.hit && ped.y > 0.1 && overObstacle(ox, oz, tx, tz)) { p.x = tx; p.z = tz; }
       pushOutParked(p, WALK_R);
+      // people (visitors.js Crowd: grandma, visitors, friends, villagers, procession walkers): the walker can't pass
+      // through anyone; movable NPCs are nudged aside a little, then re-checked against walls on their side
+      if (window.Crowd && Crowd.pushPlayer) { try { Crowd.pushPlayer(p, WALK_R, dt / n); world.collide(p, WALK_R); } catch (e) {} }
     }
     unstick(p);
     if (!world.insideBuilding || !world.insideBuilding(p.x, p.z, 0)) { lastSafe.x = p.x; lastSafe.z = p.z; }
@@ -1032,9 +1151,32 @@ const Player = (function () {
       if (hp.head) hp.head.rotation.y += ped.look * 0.55;
       if (hp.torso) hp.torso.rotation.y += ped.look * 0.25;
     }
+    if (ped.act) actPose(dt);
     body.position.set(carPos.x, ped.y + (ped.air ? 0 : Math.abs(Math.sin(ped.phase)) * 0.04 * Math.min(1, Math.abs(ped.speed))), carPos.z);
     body.rotation.order = 'YXZ'; body.rotation.set(ped.pitch || 0, carRot, ped.roll || 0);
     engineRPM = 800; currentGear = '-'; isReversing = false;
+  }
+  // upper-body actions over the gait (actions.js, phone.js): Player.act(kind, { dur, lock, onEnd }), Player.act(null) ends
+  // phone: hand at the ear (call) · text: phone held in front · carry: both arms under a load · eat: hand to mouth, repeated
+  // pickup / putdown: bend down and back up · sleep: lying flat
+  const ACT_KINDS = ['phone', 'text', 'carry', 'eat', 'pickup', 'putdown', 'sleep'];
+  function act(kind, o) {
+    o = o || {};
+    if (!kind) { const a = ped.act; ped.act = null; if (hp.torso) hp.torso.rotation.x = 0; if (a && a.onEnd) a.onEnd(); return true; }
+    if (mode !== 'foot' || !ACT_KINDS.includes(kind)) return false;
+    ped.act = { kind, t: 0, dur: o.dur || 0, lock: !!o.lock, onEnd: o.onEnd || null };
+    return true;
+  }
+  function actPose(dt) {
+    const a = ped.act, P = hp; a.t += dt;
+    if (a.dur && a.t >= a.dur) { act(null); return; }
+    const k = Math.min(1, a.t * 6) * (a.dur ? Math.min(1, (a.dur - a.t) * 6) : 1), t = a.t;
+    if (a.kind === 'phone') { P.armR.rotation.set(-0.75 * k, 0, -0.5 * k); P.foreR.rotation.x = -2.35 * k; P.head.rotation.z += -0.12 * k; }
+    else if (a.kind === 'text') { P.armR.rotation.set(-0.45 * k, 0, 0.12 * k); P.foreR.rotation.x = -1.35 * k; P.head.rotation.x += 0.28 * k; }
+    else if (a.kind === 'carry') { P.armL.rotation.set(-1.05 * k, 0, 0.1 * k); P.armR.rotation.set(-1.05 * k, 0, -0.1 * k); P.foreL.rotation.x = P.foreR.rotation.x = -0.75 * k; }
+    else if (a.kind === 'eat') { P.armR.rotation.set(-0.7 * k, 0, 0.18 * k); P.foreR.rotation.x = (-1.85 - 0.45 * Math.sin(t * 6)) * k; P.head.rotation.x += 0.05 * Math.sin(t * 6) * k; }
+    else if (a.kind === 'pickup' || a.kind === 'putdown') { const b = Math.sin(Math.PI * Math.min(1, t / a.dur)); P.torso.rotation.x = 1.05 * b; P.armL.rotation.set(-1.2 * b, 0, 0); P.armR.rotation.set(-1.2 * b, 0, 0); }
+    else if (a.kind === 'sleep') { P.armL.rotation.set(0, 0, 0.1); P.armR.rotation.set(0, 0, -0.1); ped.pitch = -1.5; ped.air = false; }
   }
   // airborne: knees tucked on the way up, legs reaching for the ground on the way down, arms out for balance
   function jumpPose(vy) {
@@ -1061,19 +1203,20 @@ const Player = (function () {
   let camSnap = false, lastCamIdx = -1;
   const camT = new THREE.Vector3(), look = new THREE.Vector3();
   function seatEye(v) {
-    const s = body.userData.pose && body.parent === v.g ? [body.position.x, body.position.y + human.hipHeight, body.position.z] : (SEATS[v.model] || SEATS.hatch);
+    const s = body.userData.pose && (body.parent === v.g || (v.susp && body.parent === v.susp.body)) ? [body.position.x, body.position.y + human.hipHeight, body.position.z] : (SEATS[v.model] || SEATS.hatch);
     return { x: s[0], y: s[1] + (s[3] === 'bike' ? 0.72 : 0.68), z: s[2] };
   }
   // local bounding box of a vehicle (without the player's body), cached
   const _bx = new THREE.Box3();
   function boxOf(v) {
     if (v._box) return v._box;
-    const g = v.g, pos = g.position.clone(), rot = g.rotation.clone(), vis = body.visible, par = body.parent === g;
-    if (par) g.remove(body);
+    const g = v.g, pos = g.position.clone(), rot = g.rotation.clone(), vis = body.visible;
+    let par = null; for (let q = body.parent; q; q = q.parent) if (q === g) { par = body.parent; break; }   // may sit in the sprung group
+    if (par) par.remove(body);
     g.position.set(0, 0, 0); g.rotation.set(0, 0, 0); g.updateMatrixWorld(true);
     _bx.setFromObject(g); v._box = _bx.clone();
     g.position.copy(pos); g.rotation.copy(rot); g.updateMatrixWorld(true);
-    if (par) g.add(body); body.visible = vis;
+    if (par) par.add(body); body.visible = vis;
     if (!isFinite(v._box.max.z)) v._box = new THREE.Box3(new THREE.Vector3(-1, 0, -2), new THREE.Vector3(1, 1.5, 2));
     return v._box;
   }
@@ -1096,7 +1239,8 @@ const Player = (function () {
         const d = 2.2 + L * 0.6, h = 1.2 + L * 0.2;
         camT.set(carPos.x - f.x * d, gy + h, carPos.z - f.z * d); look.set(carPos.x, gy + 1.0 + L * 0.07, carPos.z);
       } else if (idx === 2) {
-        // driver's eye; passengers look out of their own seat
+        // the driver gets the full cockpit (cockpit.js); passengers look out of their own seat
+        if (mode === 'vehicle' && window.Cockpit && Cockpit.camera(dt)) { body.visible = false; return; }
         const e = seatEye(active); firstPerson = true; smooth = 40;
         camT.set(carPos.x + r.x * e.x + f.x * (e.z + 0.12), gy + e.y, carPos.z + r.z * e.x + f.z * (e.z + 0.12));
         look.set(camT.x + f.x * 30, camT.y - 1.2, camT.z + f.z * 30);
@@ -1270,7 +1414,8 @@ const Player = (function () {
     const back = typeof lookBack !== 'undefined' && !!lookBack;
     const yaw = R.yaw + (back ? Math.PI : 0), pitch = back ? 0.2 : R.pitch;
     // only the vertical (jumps, kerbs) is smoothed; horizontal follows exactly
-    [R.py, R.pyv] = spring(R.py, R.pyv, gy + h, mode === 'foot' ? 14 : 10, dt);
+    const sus = mode === 'crysta' ? (typeof crystaSusp !== 'undefined' ? crystaSusp : null) : (active && active.susp && active.susp.st);   // the chase view rides the body a little
+    [R.py, R.pyv] = spring(R.py, R.pyv, gy + h + (sus && sus.dh ? sus.dh * 0.8 : 0), mode === 'foot' ? 14 : 10, dt);
     [R.dist, R.dv] = spring(R.dist, R.dv, dist * R.zoom, 6, dt);
     const fwd = { x: Math.sin(yaw) * Math.cos(pitch), y: -Math.sin(pitch), z: Math.cos(yaw) * Math.cos(pitch) };
     const rt = { x: -Math.cos(yaw), z: Math.sin(yaw) };                       // camera right
@@ -1281,7 +1426,8 @@ const Player = (function () {
     // never inside the vehicle body: pulled in closer than its half length -> go over the roof
     if (mode !== 'foot') { const dh = Math.hypot(cam.x - px.x, cam.z - px.z); if (dh < cr + 0.4) cam.y = Math.max(cam.y, gy + roof + 0.5); }
     camera.position.copy(cam);
-    camera.lookAt(cam.x + fwd.x * 10, cam.y + fwd.y * 10, cam.z + fwd.z * 10);
+    const nod = sus && sus.p ? sus.p * 0.6 : 0;
+    camera.lookAt(cam.x + fwd.x * 10, cam.y + fwd.y * 10 - nod, cam.z + fwd.z * 10);
     // FOV: a little wider with speed / sprint
     const kmh = Math.abs(carSpeed), fovT = 65 + (mode === 'foot' ? (sprint ? 5 : 0) : Math.min(12, kmh * 0.07)) + (typeof isNosActive !== 'undefined' && isNosActive && mode === 'crysta' ? 6 : 0);
     R.fov += (fovT - R.fov) * (1 - Math.exp(-dt * 3));
@@ -1298,6 +1444,7 @@ const Player = (function () {
   function crystaRig(dt) { if (mode !== 'crysta' || !rigView()) return false; rig(dt, ((typeof cameraIndex === 'number' ? cameraIndex : 0) % 5) === 1); return true; }
 
   function update(dt) {
+    if (ped.act && mode !== 'foot') act(null);
     const n = Math.max(1, Math.ceil(dt / (1 / 120) - 1e-6)), h = dt / n;   // sub-steps: frame-rate independent, no tunnelling
     for (let i = 0; i < n; i++) { if (mode === 'foot') walk(h); else if (mode === 'vehicle') driveVehicle(h, active); }
     if (mode === 'passenger' && active) {
@@ -1321,6 +1468,7 @@ const Player = (function () {
   // every frame, whatever the mode: carjacked drivers keep running
   let hintT = 0, hintEl = null;
   function tick(dt) {
+    if (active && active.g && !active.g.visible) active.g.visible = true;   // last word before the render: distance culling never hides what the player drives
     if (fleeing.length) updateFleeing(dt);
     try { checkBikeHits(dt); if (downed.length) updateDowned(dt); } catch (e) { console.error(e); }
     // on foot: say which vehicle F will take
@@ -1345,7 +1493,7 @@ const Player = (function () {
   // the Crysta also bumps into parked vehicles
   function crystaCollide() {
     const p = { x: carPos.x, z: carPos.z };
-    const h = pushOutParked(p, 1.1);
+    const h = pushOutParked(p, 1.1, true);
     if (h) {
       carPos.x = p.x; carPos.z = p.z;
       // remove only the velocity into the parked vehicle (old code halved carSpeed every frame = stuck)
@@ -1365,6 +1513,10 @@ const Player = (function () {
     if (!v.tail) v.tail = [];
     parked.push(v);
   }
-  return { _pick: () => pickVehicle(), addParked, toggle, crystaRig, update, updateCam, resetToCrysta, crystaCollide, setHud, tick, freeLook, cameraName, enterPassenger, leavePassenger, PARAMS, SEATS,
+  // multiplayer: seat change while riding, and another player's knock arriving here
+  function moveSeat(seat) { if (mode === 'passenger' && active) { seatBody(active, seat); return true; } return false; }
+  function knockItem(it, dx, dz) { const t = claimParkedBike(it); if (t) knockBike(t, dx, dz, true, 20); }
+  const api = { act, get action() { return ped.act; }, bodyColour, hideProp, moveSeat, knockItem, onKnock: null, get ped() { return ped; }, vehiclePart, partsOf, boxOf, seatEye, get bodyRef() { return body; }, _pick: () => pickVehicle(), addParked, pushOutParked, get parkedList() { return parked; }, toggle, crystaRig, update, updateCam, resetToCrysta, crystaCollide, setHud, tick, freeLook, cameraName, enterPassenger, leavePassenger, PARAMS, SEATS,
     set onPassengerExit(f) { passengerExit = f; }, get freeLookOn() { return FL.on; }, get fleeing() { return fleeing; }, get body() { return human; }, get mode() { return mode; }, get active() { return active; } };
+  return api;
 })();

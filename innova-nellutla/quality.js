@@ -10,7 +10,7 @@
     // map-wide instanced trees/houses); world-space shadows stay put, only moving objects' shadows lag by a frame or two.
     low:    { name: 'Low',    pixelRatio: 1,   shadows: false, shadowSize: 512,  fogNear: 120, fogFar: 520,  camFar: 600,  peopleFrac: 0.35, antialias: false, fps: 30, shadowEvery: 4 },
     medium: { name: 'Medium', pixelRatio: 1,   shadows: true,  shadowSize: 1024, fogNear: 200, fogFar: 1000, camFar: 1100, peopleFrac: 0.6,  antialias: true,  fps: 60, shadowEvery: 3 },
-    high:   { name: 'High',   pixelRatio: 1.5, shadows: true,  shadowSize: 2048, fogNear: 250, fogFar: 1500, camFar: 1600, peopleFrac: 1,    antialias: true,  fps: 60, shadowEvery: 2 },
+    high:   { name: 'High',   pixelRatio: 1.5, shadows: true,  shadowSize: 2048, fogNear: 250, fogFar: 1500, camFar: 1600, peopleFrac: 1,    antialias: true,  fps: 60, shadowEvery: 3 },
   };
   const ORDER = ['low', 'medium', 'high'];
   const isTouch = window.Device ? Device.isMobile : ((matchMedia && matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0);
