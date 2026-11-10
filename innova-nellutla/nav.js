@@ -83,6 +83,23 @@
     return { pts, cum, steps, secs, len: cum[cum.length - 1], vs };
   }
 
+  // the Hyderabad arterials keep their own junctions (a flyover shares no vertex with the road under it, so nothing here goes through vert()'s merge grid).
+  // A one-way carriageway stays in the graph backwards at six times the cost: never chosen while a legal way exists, and it keeps a wrong-side start routable.
+  function rawVert(x, z) { const i = X.length; X.push(x); Z.push(z); adj.push([]); const h = hk(x, z, HC); (vHash.get(h) || vHash.set(h, []).get(h)).push(i); return i; }
+  function rawLink(a, b, t, name, id, one, pref) { const len = Math.hypot(X[a] - X[b], Z[a] - Z[b]), cost = len / (KMH[t] / 3.6) * (pref === 2 ? 3 : pref ? .55 : 1); adj[a].push({ to: b, len, cost, t, name, id }); adj[b].push({ to: a, len, cost: one ? cost * 6 : cost, t, name, id });
+    const n = Math.max(1, Math.ceil(len / 30)); for (let i = 0; i <= n; i++) { const h = hk(X[a] + (X[b] - X[a]) * i / n, Z[a] + (Z[b] - Z[a]) * i / n, HC), L = segHash.get(h) || segHash.set(h, []).get(h); L.push({ a, b, id }); } }
+  let hydIn = false;
+  function addHyd(n) { if (hydIn) return; hydIn = true; const t0 = performance.now();
+    const jm = n.jnames || {}; polys.forEach(o => { if (o.id[0] === 'j' && jm[o.id.slice(1)]) { o.name = jm[o.id.slice(1)]; } });      // the Jangaon net's own highway ids name NH-163 correctly too
+    for (let v = 0; v < X.length; v++) for (const e of adj[v]) if (e.id && e.id[0] === 'j' && jm[e.id.slice(1)]) e.name = jm[e.id.slice(1)];
+    const NV = n.nodes.map(q => rawVert(q[0], q[1]));
+    n.edges.forEach((e, i) => { const t = e[3], nm = n.names[e[6]] || (t === 'highway' ? 'Highway link' : ''), o = { p: e[4], t, name: nm, id: 'h' + i }; let prev = NV[e[0]]; const m = e[4].length; for (let k = 1; k < m; k++) { const v = k === m - 1 ? NV[e[1]] : rawVert(e[4][k][0], e[4][k][1]); rawLink(prev, v, t, nm, o.id, e[5], e[7]); tileAdd(t, e[4][k - 1][0], e[4][k - 1][1], e[4][k][0], e[4][k][1]); prev = v; } polys.push(o); });
+    for (const j of n.joins) { const v = NV[j[0]], u = nearestOld(j[1], j[2]); if (u >= 0) rawLink(v, u, 'highway', '', 'hj', 0); }
+    const addPath = (P, l) => l.forEach((q, i) => i ? P.lineTo(q[0], q[1]) : P.moveTo(q[0], q[1])); (n.water || []).forEach(l => addPath(water, l)); (n.rail || []).forEach(l => addPath(rail, l)); (n.metro || []).forEach(l => addPath(rail, l));
+    Nav.hydMs = performance.now() - t0; placeList = null; hydWait.splice(0).forEach(f => f()); draw.dirty = true; }
+  const hydWait = [];
+  function nearestOld(x, z) { let b = -1, bd = 1e12; const a = Math.floor(x / HC), c = Math.floor(z / HC); for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) for (const v of vHash.get((a + i) + ',' + (c + j)) || []) { if (!adj[v].length) continue; const d = (X[v] - x) ** 2 + (Z[v] - z) ** 2; if (d < bd) { bd = d; b = v; } } return b; }
+
   // ---- basemap: world-space Path2D per tile and class, so a frame only strokes what is on screen
   const TS = 900, tiles = new Map(); let water = null, rail = null;
   function tileAdd(cls, x0, z0, x1, z1) { const k = Math.floor((x0 + x1) / 2 / TS) + ',' + Math.floor((z0 + z1) / 2 / TS); let t = tiles.get(k); if (!t) { t = { k, i: Math.floor((x0 + x1) / 2 / TS), j: Math.floor((z0 + z1) / 2 / TS) }; tiles.set(k, t); } const p = t[cls] || (t[cls] = new Path2D()); p.moveTo(x0, z0); p.lineTo(x1, z1); }
@@ -124,6 +141,7 @@
     LL.forEach(p => { if (!/^lm\d+$/.test(p.id)) add(p.name, p.x, p.z, p.kind); });
     (G.world.landmarks || []).forEach(p => { if (p.k !== 'sign') add(p.name, p.x, p.z, p.k); });
     ((window.JANGAON_LITE || {}).landmarks || []).forEach(p => add(p.name, p.x, p.z, p.k));
+    ((window.HYD_LITE || {}).landmarks || []).forEach(p => add(p.name, p.x, p.z, p.k));
     if (window.Properties) Properties.props.forEach(p => { if (Properties.isOwned(p.id)) add('My ' + Properties.typeName(p.type) + ' ' + p.id, p.x, p.z, 'home'); else if (p.type === 'shop') add('Shop ' + p.id, p.x, p.z, 'shop'); else { add(Properties.typeName(p.type) + ' ' + p.id, p.x, p.z, 'x'); l[l.length - 1].cat = 'property'; } });
     placeList = { at: performance.now(), l }; return l;
   }
@@ -135,7 +153,7 @@
     if (!ready) { readyWait.push(() => state.dest && recalc()); toast('Loading roads'); } else recalc();
     draw.dirty = true; syncSide(); tick(1);
   }
-  function recalc() { const c = G.carPos, d = state.dest; state.r = route(c.x, c.z, d.x, d.z); state.i = 0; state.off = 0; state.re = performance.now(); if (!state.r) toast('No road route to ' + d.name); }
+  function recalc() { const c = G.carPos, d = state.dest; if (window.Hyd && !hydIn && (d.x < Hyd.lite.bounds[2] || c.x < Hyd.lite.bounds[2])) { hydWait.push(() => state.dest && recalc()); Hyd.loadNet().then(addHyd); return; } state.r = route(c.x, c.z, d.x, d.z); state.i = 0; state.off = 0; state.re = performance.now(); if (!state.r) toast('No road route to ' + d.name); }
   function stop(quiet) { state.dest = null; state.r = null; card(); draw.dirty = true; syncSide(); if (!quiet) toast('Route cancelled'); }
   const toast = t => { try { G.showPopup(t); } catch (e) {} };
   function tick() {
@@ -187,7 +205,7 @@
     // towns first, so nothing sits over them
     const town = (n, x, z, a) => { if (s > a) return; const [px, py] = P(x, z); g.font = '700 ' + (s < .1 ? 15 : 18) + 'px Barlow, system-ui'; const w = g.measureText(n).width; if (free(px - w / 2 - 4, py - 13, w + 8, 26)) { g.lineWidth = 4; g.strokeStyle = COL.bg; g.strokeText(n, px - w / 2, py); g.fillStyle = '#fbf6e8'; g.fillText(n, px - w / 2, py); } };
     // highway shields
-    if (s > .05) { const seen = []; for (const r of polys) { if (r.t !== 'highway') continue; const m = r.p[r.p.length >> 1], [px, py] = P(m[0], m[1]); if (px < 40 || py < 20 || px > W - 40 || py > H - 20 || seen.some(q => Math.hypot(q[0] - px, q[1] - py) < 240)) continue; seen.push([px, py]); g.font = '700 11px "Barlow Condensed", system-ui'; const t = 'NH-365B', w = g.measureText(t).width + 10; if (free(px - w / 2, py - 9, w, 18)) { g.fillStyle = '#fbf6e8'; g.fillRect(px - w / 2, py - 9, w, 18); g.fillStyle = '#0c2a2e'; g.fillText(t, px - w / 2 + 5, py + 1); } } }
+    if (s > .05) { const seen = []; for (const r of polys) { if (r.t !== 'highway') continue; const m = r.p[r.p.length >> 1], [px, py] = P(m[0], m[1]); if (px < 40 || py < 20 || px > W - 40 || py > H - 20 || seen.some(q => Math.hypot(q[0] - px, q[1] - py) < 240)) continue; seen.push([px, py]); g.font = '700 11px "Barlow Condensed", system-ui'; const t = r.name && /^(NH|SH)/.test(r.name) ? r.name : 'NH-365B', w = g.measureText(t).width + 10; if (free(px - w / 2, py - 9, w, 18)) { g.fillStyle = '#fbf6e8'; g.fillRect(px - w / 2, py - 9, w, 18); g.fillStyle = '#0c2a2e'; g.fillText(t, px - w / 2 + 5, py + 1); } } }
     // places: cluster on a screen grid, then label by importance
     const q = v.query, cell = 48, cells = new Map(); const L = places();
     for (const p of L) { if (v.filter[p.cat] === false) continue; if (q && !p.name.toLowerCase().includes(q)) continue; if (p.cat === 'property' && s < .5 && !q) continue; const [px, py] = P(p.x, p.z); if (px < -20 || py < -20 || px > W + 20 || py > H + 20) continue; if (p.cat === 'home' || s > 3) { cells.set('u' + cells.size, [[p, px, py]]); continue; } const k = Math.floor(px / cell) + ',' + Math.floor(py / cell); (cells.get(k) || cells.set(k, []).get(k)).push([p, px, py]); }
@@ -198,14 +216,14 @@
     singles.sort((a, b) => CAT[a[0].cat].rank - CAT[b[0].cat].rank);
     singles.forEach(o => { const r = 10; free(o[1] - r, o[2] - r, 2 * r, 2 * r); });
     singles.forEach(o => { const [p, x, y] = o, cat = CAT[p.cat]; icon(g, x, y, cat, 10); v.hits.push({ x, y, r: 12, p }); if ((s < .32 && cat.rank > 4 || cat.id === 'property' && s < 1.4) && !q) return; g.font = '600 12px Barlow, system-ui'; const w = g.measureText(p.name).width; let lx = x + 14; if (!free(lx, y - 8, w, 16)) { lx = x - 14 - w; if (!free(lx, y - 8, w, 16)) return; } g.lineWidth = 3; g.strokeStyle = COL.bg; g.strokeText(p.name, lx, y); g.fillStyle = '#eaf3ee'; g.fillText(p.name, lx, y); });
-    boxes.length = 0; town('Jangaon', -3900, -2050, .5); town('Nellutla', 0, -60, .7);
+    boxes.length = 0; town('Jangaon', -3900, -2050, .5); town('Nellutla', 0, -60, .7); ((window.HYD_LITE || {}).towns || []).forEach(t => town(t[0], t[1], t[2], s < .05 ? .03 : .5));
     try { MP.drawBigMap(g, P); } catch (e) {}
     if (state.dest) { const [x, y] = P(state.dest.x, state.dest.z); destPin(g, x, y); }
     try { const m = MISSIONS[mIdx], [x, y] = P(m.l.x, m.l.z); g.strokeStyle = '#f6b21b'; g.lineWidth = 2.5; g.beginPath(); g.arc(x, y, 9, 0, 7); g.stroke(); } catch (e) {}
     const [px, py] = P(G.carPos.x, G.carPos.z); g.save(); g.translate(px, py); g.rotate(-(Math.PI + carRot)); g.fillStyle = '#fff'; g.strokeStyle = '#0a1d22'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, -12); g.lineTo(8, 9); g.lineTo(0, 5); g.lineTo(-8, 9); g.closePath(); g.fill(); g.stroke(); g.restore();
   }
-  const clampV = () => { const b = G.world.bounds; v.s = Math.max(.05, Math.min(6, v.s)); v.cx = Math.max(b[0], Math.min(b[2], v.cx)); v.cz = Math.max(b[1], Math.min(b[3], v.cz)); draw.dirty = true; };
-  function zoomAt(mx, my, k) { const [wx, wz] = toWorld(mx, my); v.s *= k; v.s = Math.max(.06, Math.min(6, v.s)); v.cx = wx - (mx - v.W / 2) / v.s; v.cz = wz - (my - v.H / 2) / v.s; clampV(); }
+  const clampV = () => { const b = G.world.bounds; v.s = Math.max(.0055, Math.min(6, v.s)); v.cx = Math.max(b[0], Math.min(b[2], v.cx)); v.cz = Math.max(b[1], Math.min(b[3], v.cz)); draw.dirty = true; };
+  function zoomAt(mx, my, k) { const [wx, wz] = toWorld(mx, my); v.s *= k; v.s = Math.max(.0055, Math.min(6, v.s)); v.cx = wx - (mx - v.W / 2) / v.s; v.cz = wz - (my - v.H / 2) / v.s; clampV(); }
   function clickMap(mx, my) {
     for (const h of v.hits) if (Math.hypot(h.x - mx, h.y - my) <= h.r) { if (h.cluster) return zoomAt(mx, my, 2.2); return setDest(h.p.x, h.p.z, h.p.name); }
     const [x, z] = toWorld(mx, my), n = nearest(x, z); if (n >= 0) setDest(X[n], Z[n], 'Pinned spot');
@@ -239,7 +257,7 @@
       e.stopPropagation(); const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.z) zoomAt(v.W / 2, v.H / 2, +b.dataset.z);
       if (b.dataset.me) { v.cx = G.carPos.x; v.cz = G.carPos.z; v.s = Math.max(v.s, .6); clampV(); }
-      if (b.dataset.all) { v.cx = -2350; v.cz = -1250; v.s = Math.min(v.W / 7800, v.H / 5400); clampV(); }
+      if (b.dataset.all) { const c = document.getElementById('bigmap').getBoundingClientRect(), vis = Math.min(c.right, side.getBoundingClientRect().left) - c.left, x0 = -77000, x1 = 2500, z0 = -6000, z1 = 38000; v.s = Math.min((vis - 40) / (x1 - x0), (v.H - 40) / (z1 - z0)); v.cx = (x0 + x1) / 2 + (v.W - vis) / 2 / v.s; v.cz = (z0 + z1) / 2; clampV(); }
       if (b.dataset.stop) stop();
       if (b.dataset.cat) { openCat[b.dataset.cat] = !openCat[b.dataset.cat]; renderList(); }
       if (b.dataset.eye) { const k = b.dataset.eye; v.filter[k] = v.filter[k] === false; draw.dirty = true; renderList(); }
@@ -258,7 +276,7 @@
   function syncSide() { if (!sum) return; const d = state.dest; sum.innerHTML = d ? `<b>${esc(d.name)}</b><span>${state.r ? fmtD(state.r.len) + ', ' + fmtT(state.r.secs) : 'No road route'}</span><button data-stop="1">Stop route</button>` : '<span>Pick a place or click the map to set a route.</span>'; }
 
   const Nav = window.Nav = { tick, route, setDest, stop, places, base, draw, radar, drawRoute, state, instr: () => state.dest && state.r ? instr() : null, ARROW, fmtD, fmtT, reroutes: 0, cats: CAT,
-    get ready() { return ready; }, get stats() { return { verts: X.length, comps: components().size.sort((a, b) => b - a).slice(0, 6), tiles: tiles.size }; }, opened() { renderList(); syncSide(); draw.dirty = true; } };
+    hydIn: () => hydIn, get ready() { return ready; }, get stats() { return { verts: X.length, comps: components().size.sort((a, b) => b - a).slice(0, 6), tiles: tiles.size }; }, opened() { renderList(); syncSide(); draw.dirty = true; } };
 
   GameHooks.init.push(g => {
     G = g; buildBase(); buildSide(); hookMap();
@@ -267,6 +285,8 @@
     fetch('../nellutla-map/jangaon-net.json?v=1').then(r => r.json()).then(n => {
       net = n; n.edges.forEach((e, i) => { const t = PX[e[3]] ? e[3] : 'tar', o = { p: e[4], t, name: t === 'highway' ? 'NH-365B' : '', id: 'j' + i }; polys.push(o); addPoly(o.p, o.t, o.name, o.id); });
       stitch(16); joinIslands(60); joinIslands(120); buildTiles(); ready = true; readyWait.splice(0).forEach(f => f()); draw.dirty = true;
+      // the corridor to Secunderabad joins in once the page has settled: nothing about it runs during load
+      if (window.Hyd) { const go = () => Hyd.loadNet().then(addHyd); const idle = window.requestIdleCallback || (f => setTimeout(f, 200)); setTimeout(() => idle(go, { timeout: 3000 }), 2500); }
     });
     if (window.Properties) { Properties.setWaypoint = (x, z, l) => setDest(x, z, l); }
     const old = window.setMap; if (typeof setMap === 'function') { const o = setMap; setMap = on => { o(on); if (on) { Nav.opened(); try { document.getElementById('mapSearch').value = ''; v.query = ''; } catch (e) {} } }; }

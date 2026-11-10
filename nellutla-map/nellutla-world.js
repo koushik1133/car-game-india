@@ -715,7 +715,7 @@
     K = new Kit();
     ell(K, 0.16, 0.175, 0.8, 1.38, 0.62, 0xffffff, 16);
     K.ball([0, 1.375, 0], [0.19, 0.06, 0.11], 0xffffff, 12);
-    for (const sx of [-1, 1]) K.tube([sx * 0.19, 1.43, 0], [sx * 0.215, 1.2, 0.0], 0.064, 0.058, 0xffffff, 10);
+    for (const sx of [-1, 1]) { K.ball([sx * 0.187, 1.372, 0], [0.06, 0.058, 0.064], 0xffffff, 10); K.tube([sx * 0.187, 1.372, 0], [sx * 0.212, 1.2, 0.0], 0.06, 0.056, 0xffffff, 10); }   // rounded sleeve cap under the shoulder line, not a tube standing above it
     K.add(new THREE.TorusGeometry(0.055, 0.016, 5, 14), 0xf4f4f4, { p: [0, 1.435, 0.0], r: [Math.PI / 2 - 0.25, 0, 0] });
     K.box([0.075, 1.25, 0.108], [0.08, 0.09, 0.006], 0xd8d8d8);
     for (let i = 0; i < 4; i++) K.ball([0, 1.36 - i * 0.12, 0.11], [0.008, 0.008, 0.005], 0xcccccc, 4);
@@ -724,7 +724,7 @@
     K = new Kit();
     ell(K, 0.14, 0.16, 1.14, 1.37, 0.66, 0xffffff, 16);
     K.ball([0, 1.37, 0], [0.19, 0.07, 0.11], 0xffffff, 12);
-    for (const sx of [-1, 1]) { K.tube([sx * 0.18, 1.42, 0], [sx * 0.2, 1.27, 0.0], 0.058, 0.054, 0xffffff, 10); K.ball([sx * 0.06, 1.27, 0.07], [0.068, 0.062, 0.055], 0xffffff, 10); }
+    for (const sx of [-1, 1]) { K.ball([sx * 0.18, 1.368, 0], [0.056, 0.054, 0.058], 0xffffff, 10); K.tube([sx * 0.18, 1.368, 0], [sx * 0.2, 1.27, 0.0], 0.056, 0.052, 0xffffff, 10); K.ball([sx * 0.06, 1.27, 0.07], [0.068, 0.062, 0.055], 0xffffff, 10); }
     P.blouse = K.geo();
     // saree: pleated flared skirt (border at hem) + waist tuck + pallu over the left shoulder
     K = new Kit();
@@ -746,8 +746,8 @@
     P.saree = K.geo();
     // lungi (ankle length with a front fold) and dhoti (white, knee length, tucked)
     K = new Kit();
-    K.add(deform(new THREE.CylinderGeometry(0.17, 0.2, 0.86, 22, 3, true), v => { const a = Math.atan2(v.x, v.z); v.z *= 0.76; if (Math.abs(a) < 0.4) v.z += 0.012; }), 0xffffff, { p: [0, 0.53, 0] });
-    K.box([0.02, 0.6, 0.155], [0.07, 0.62, 0.012], 0xe8e8e8, [0, 0, 0.04]);
+    K.add(deform(new THREE.CylinderGeometry(0.17, 0.2, 0.86, 22, 3, true), v => { const a = Math.atan2(v.x, v.z); v.x *= 1.09; v.z *= 0.76 + (0.43 - v.y) / 0.86 * 0.32; if (Math.abs(a) < 0.4) v.z += 0.012; }), 0xffffff, { p: [0, 0.53, 0] });   // deeper toward the hem so a walking leg stays inside the cloth
+    K.box([0.02, 0.6, 0.168], [0.07, 0.62, 0.012], 0xe8e8e8, [-0.05, 0, 0.04]);
     K.add(new THREE.TorusGeometry(0.168, 0.02, 5, 18), 0xe0e0e0, { p: [0, 0.95, 0], r: [Math.PI / 2, 0, 0], s: [1, 0.76, 1] });
     P.lungi = K.geo();
     K = new Kit();
@@ -3329,7 +3329,7 @@
         if (quiet(q0[0], q0[1])) { for (const k2 in parts) { const m = PART[k2 === 'armL' || k2 === 'armR' ? 'arm' : k2 === 'legL' || k2 === 'legR' ? 'leg' : k2]; if (m) m.count--; } continue; }
         people.push({ r, len: lens[k], s: s0, dir: Math.random() < 0.5 ? 1 : -1, speed: (elder ? 0.55 : kid ? 1.1 : 0.9) + Math.random() * (elder ? 0.2 : 0.6),
           side: Math.random() < 0.5 ? 1 : -1, off: 0, phase: Math.random() * 6, scale, type, parts, stick, stoop: elder ? 0.14 : 0,
-          swing: type === 'woman' || type === 'elderWoman' ? 0.3 : 0.5, idle: Math.random() < 0.25, x: 0, z: 0, rot: 0 });
+          swing: type === 'woman' || type === 'elderWoman' ? 0.3 : parts.lungi != null ? 0.3 : 0.5, idle: Math.random() < 0.25, x: 0, z: 0, rot: 0 });
         made++;
       }
       people.meshes = PART;

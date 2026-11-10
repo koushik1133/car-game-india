@@ -27,7 +27,7 @@ window.Cockpit = (function () {
   // true planar reflection: the camera is the eye reflected in the mirror plane, looking through the mirror rectangle
   // (off-axis frustum, near plane on the glass). k widens a mirror's view about its centre, like convex glass.
   // [w, h, frames between passes, far]. Only one region is drawn per pass, so the cost is one reduced scene.
-  const QS = { low: [360, 212, 4, 120], medium: [512, 300, 3, 160] }, QHI = [720, 424, 2, 200];
+  const QS = { low: [360, 212, 4, 90], medium: [512, 300, 3, 115] }, QHI = [720, 424, 2, 140];   // a mirror is a few centimetres of glass: past ~140 m nothing in it is a pixel tall
   const qual = () => QS[(window.Quality && Quality.tier) || 'high'] || QHI;
   const SLOT = { C: [0, 0.5, 1, 0.5], L: [0, 0, 0.495, 0.5], R: [0.505, 0, 0.495, 0.5] };
   let rt = null, rtRead = false, mirrorCam = null, turn = 0;
@@ -283,11 +283,15 @@ window.Cockpit = (function () {
     const S = chassis._ck = { kind: 'crysta', own: true, eye: { x: -0.4, y: 1.43, z: 0.0 }, group: new THREE.Group(), glass: [] }, G = S.group, m = mats();
     // the tinted glass reads near black from inside: it steps aside while seated
     chassis.traverse(o => { const q = o.isMesh && o.material; if (q && q.transparent && q.opacity > 0.5 && q.color && q.color.getHSL({}).l < 0.15) S.glass.push(o); });
+    // each door's black window sash is a solid plate that fills the window: it steps aside too
+    Object.values(doorMeshes).forEach(d => d.group.traverse(o => { if (o.isMesh && o.material.color && o.material.color.getHex() === 0x07090d) S.glass.push(o); }));
     const sw = chassis.userData.steeringWheel, R = 0.18;
     arm(sw, -R * 0.94, R * 0.25, -0.012, -0.3, -0.25, -0.42, m); arm(sw, R * 0.94, R * 0.25, -0.012, 0.3, -0.25, -0.42, m);
     const eye = S.eye;
     mirror(S, G, 'C', 0, 1.53, 0.36, 0.22, 0.06, eye, m, null, 0, 3.1);
-    [-1, 1].forEach(s => mirror(S, G, s < 0 ? 'R' : 'L', s * 1.07, 1.17, 0.92, 0.17, 0.11, eye, m, null, 0, 0.4));
+    // the door mirrors sit behind the windscreen pillar's sightline, seen through the door glass; the body's own housings step aside
+    [-1, 1].forEach(s => mirror(S, G, s < 0 ? 'R' : 'L', s * 1.07, 1.22, 0.72, 0.24, 0.15, eye, m, [s * 0.93, 1.13, 0.76], 0, 0.4));
+    Object.values(mirrorMeshes).forEach(d => { d.group.userData.noMirror = true; S.glass.push(d.group); });   // never drawn into the mirror that replaces them
     chassis.add(G); G.traverse(o => { o.userData.noLOD = true; o.frustumCulled = false; }); G.visible = false;
     return S;
   }
@@ -376,6 +380,17 @@ window.Cockpit = (function () {
     S.group.visible = true; seated = { S, spr, hid };
     head = headV = 0;
   }
+  // the Crysta's meshes are merged after building, so the live screen material is found by its texture
+  function crystaScreenMat(spr) {
+    if (spr._scrMat) return spr._scrMat;
+    const t = window.CrystaScreen.tex; let f = null;
+    spr.traverse(o => { if (f || !o.isMesh) return; (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if (m && m.map === t) f = m; }); });
+    return spr._scrMat = f || window.CrystaScreen.mesh.material;
+  }
+  // mouse look while seated: stays exactly where it is put until the player double-clicks to face forward again
+  let lookYaw = 0, lookPitch = 0;
+  function look(dx, dy) { lookYaw = THREE.MathUtils.clamp(lookYaw - dx, -2.9, 2.9); lookPitch = THREE.MathUtils.clamp(lookPitch + dy, -0.75, 1); }
+  addEventListener('dblclick', () => { if (seated) lookYaw = lookPitch = 0; });
   const _q = new THREE.Quaternion(), _qy = new THREE.Quaternion(), _qx = new THREE.Quaternion(), _e = new THREE.Vector3(), _ax = new THREE.Vector3(1, 0, 0);
   // place the camera at the driver's eye. Returns false when this vehicle has no cockpit (bullock cart).
   function camera_(dt) {
@@ -391,6 +406,7 @@ window.Cockpit = (function () {
       if (S.group.parent && S.group.parent !== spr) { release(); S.group.parent.remove(S.group); }
     }
     seat(v, S, spr); usedFrame = true;
+    if (window.Drive && Drive.gear === 'R' && (crysta || S.hasScreen)) revWant = crysta ? crystaScreenMat(spr) : SparkPlay.mat;
     if (window.SparkPlay && (crysta || S.hasScreen)) { SparkPlay.tick(dt, S, crysta ? window.CrystaScreen : null); }
     if (S.steerObj) S.steerObj.rotation[S.steerAxis] = S.steerK(steer);
     const sp = Math.abs(carSpeed), rat = Math.min(1, sp / ((v && v.p && v.p.top) || 180));
@@ -412,8 +428,8 @@ window.Cockpit = (function () {
     camera.position.copy(_e);
     spr.getWorldQuaternion(_q);
     const back = typeof lookBack !== 'undefined' && !!lookBack;
-    _qy.setFromAxisAngle(_up, Math.PI + (back ? Math.PI : 0) + THREE.MathUtils.clamp(steer, -0.6, 0.6) * 0.14 * (back ? 0 : 1));
-    _qx.setFromAxisAngle(_ax, -0.1 + head * 0.7 + rr);
+    _qy.setFromAxisAngle(_up, Math.PI + (back ? Math.PI : lookYaw) + THREE.MathUtils.clamp(steer, -0.6, 0.6) * 0.14 * (back ? 0 : 1));
+    _qx.setFromAxisAngle(_ax, -0.1 + head * 0.7 + rr - (back ? 0 : lookPitch));
     camera.quaternion.copy(_q).multiply(_qy).multiply(_qx);
     const fov = S.kind === 'bike' ? 76 : 70;
     if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
@@ -439,6 +455,12 @@ window.Cockpit = (function () {
       if (c.name === 'villageDetail') trimAlways.push(c);
       else if (c.isInstancedMesh) { if (triCount(c.geometry) > 48) trimAlways.push(c); }
       else if (c.isMesh && triCount(c.geometry) > 3000) { c.geometry.computeBoundingSphere(); trimNear.push(c); }
+      // a split mesh draws through its child chunks: the map-wide far stand-ins never belong in a mirror, the rest count only when near
+      if (c.isMesh && c.children.length) for (const k of c.children) {
+        if (!k.isMesh || k.isInstancedMesh || !k.geometry) continue;
+        if (!k.geometry.boundingSphere) k.geometry.computeBoundingSphere();
+        if (k.geometry.boundingSphere.radius > 300) trimAlways.push(k); else if (triCount(k.geometry) > 1500) trimNear.push(k);
+      }
     }
     // heavy instanced props anywhere else (trees, dressing, crowds of small things); parked cars stay, they matter behind you
     const seen = new Set(trimAlways);
@@ -490,7 +512,7 @@ window.Cockpit = (function () {
     if (typeof sky !== 'undefined') hide(sky);        // the sky dome rides the main camera and reads wrong from here: the clear colour is the horizon
     for (const o of trimNear) { const b = o.geometry.boundingSphere; if (b && _rp.distanceTo(b.center) - b.radius > 35) hide(o); }
     // the cabin is ours, the exterior belongs in a door mirror (its shell is hidden from the eye while seated)
-    if (seated && !hud) { hide(seated.S.group); if (slot !== 'C') seated.hid.forEach(o => { if (!o.visible) { o.visible = true; shown.push(o); } }); }
+    if (seated && !hud) { hide(seated.S.group); if (slot !== 'C') seated.hid.forEach(o => { if (!o.visible && !o.userData.noMirror) { o.visible = true; shown.push(o); } }); }
     const auto = r.shadowMap.autoUpdate, nu = r.shadowMap.needsUpdate, t0 = performance.now(), bg = scene.background, A = SLOT[slot];
     r.shadowMap.autoUpdate = false; r.shadowMap.needsUpdate = false;
     const x = Math.round(A[0] * rt.width), y = Math.round(A[1] * rt.height), w = Math.round(A[2] * rt.width), h = Math.round(A[3] * rt.height);
@@ -504,6 +526,46 @@ window.Cockpit = (function () {
     stats.passes++; stats.ms += (performance.now() - t0 - stats.ms) * 0.1;
     rtRead = true;
   }
+  // reverse camera: its own small target on the dash screen while in R, mirrored like a real one, with parking guides
+  let revRT = null, revMat = null, revMap = null, revWant = null, revScene = null, revCam = null, revTurn = 0;
+  function revGuides() {
+    revScene = new THREE.Scene(); revCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    [[-0.86, 0x37d24a], [-0.42, 0xf6d21b], [-0.05, 0xe5342b]].forEach(([y, c], i) => {
+      const inX = 0.72 - i * 0.14, m = new THREE.MeshBasicMaterial({ color: c, toneMapped: false, depthTest: false });
+      [-1, 1].forEach(s => { const q = new THREE.Mesh(new THREE.PlaneGeometry(0.012 + 0.012 * (3 - i) / 3, 0.44), m); q.position.set(s * inX, y + 0.2, 0); q.rotation.z = -s * 0.24; revScene.add(q); });
+      const t = new THREE.Mesh(new THREE.PlaneGeometry(2 * inX * 0.72, 0.02), m); t.position.set(0, y + 0.42, 0); revScene.add(t);
+    });
+  }
+  function renderReverse(r, scene) {
+    const M_ = vehicleForMirror(); if (!M_) return;
+    if (!revRT) {
+      revRT = new THREE.WebGLRenderTarget(384, 224, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false, depthBuffer: true });
+      revRT.texture.wrapS = THREE.RepeatWrapping; revRT.texture.repeat.set(-1, 1); revRT.texture.offset.set(1, 0); revGuides();
+    }
+    target(); const q = qual();
+    M_.spr.updateWorldMatrix(true, false);
+    _rp.set(0, Math.min(M_.y, 1.15), M_.z + 0.15).applyMatrix4(M_.spr.matrixWorld);
+    mirrorCam.position.copy(_rp); M_.spr.getWorldQuaternion(mirrorCam.quaternion); mirrorCam.rotateX(-0.38);
+    mirrorCam.far = Math.min(q[3], 120); mirrorCam.near = 0.15; mirrorCam.aspect = 384 / 224; mirrorCam.fov = 68; mirrorCam.updateProjectionMatrix();
+    mirrorCam.layers.mask = camera.layers.mask; mirrorCam.updateMatrixWorld();
+    if (!trimAlways || stats.passes % 300 === 0) prepareTrim(scene);
+    const vis = mirrorMats.map(m => m.visible); mirrorMats.forEach(m => { m.visible = false; });
+    const hidden = [], hide = o => { if (o.visible) { o.visible = false; hidden.push(o); } };
+    trimAlways.forEach(hide); if (typeof sky !== 'undefined') hide(sky); if (seated) hide(seated.S.group);
+    const auto = r.shadowMap.autoUpdate, nu = r.shadowMap.needsUpdate, bg = scene.background, ac = r.autoClear, ca = r.getClearAlpha(); r.getClearColor(_cc);
+    r.shadowMap.autoUpdate = false; r.shadowMap.needsUpdate = false; scene.background = null;
+    _cf.set(scene.fog ? scene.fog.color : 0x9fb6d0); if (typeof stars !== 'undefined') _cf.lerp(_cn, stars.material.opacity); r.setClearColor(_cf, 1);
+    r.setRenderTarget(revRT); r.clear(); r.render(scene, mirrorCam); r.autoClear = false; r.render(revScene, revCam); r.autoClear = ac; r.setRenderTarget(null); r.setClearColor(_cc, ca);
+    r.shadowMap.autoUpdate = auto; r.shadowMap.needsUpdate = nu; scene.background = bg;
+    hidden.forEach(o => { o.visible = true; }); mirrorMats.forEach((m, i) => { m.visible = vis[i]; });
+  }
+  function reverseFrame(r, scene) {
+    if (revMat && revMat !== revWant) { revMat.map = revMap; revMat = null; }
+    if (!revWant) return;
+    if ((revTurn++ % 3) === 0 || !revRT) try { renderReverse(r, scene); } catch (e) { console.warn('reverse cam', e); r.setRenderTarget(null); }
+    if (revRT && !revMat) { revMat = revWant; revMap = revMat.map; revMat.map = revRT.texture; }
+    revWant = null;
+  }
   function drawHud(r) {
     if (!hudScene) {
       hudScene = new THREE.Scene(); hudCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -513,7 +575,8 @@ window.Cockpit = (function () {
       document.body.appendChild(frameEl);
     }
     frameEl.style.display = 'block';
-    const b = frameEl.getBoundingClientRect(), H = innerHeight, ac = r.autoClear;
+    const tn = performance.now(); if (!drawHud.b || tn - drawHud.t > 400) { drawHud.b = frameEl.getBoundingClientRect(); drawHud.t = tn; }
+    const b = drawHud.b, H = innerHeight, ac = r.autoClear;
     r.getViewport(_v); r.autoClear = false; r.setScissorTest(true);
     r.setViewport(b.left, H - b.bottom, b.width, b.height); r.setScissor(b.left, H - b.bottom, b.width, b.height);
     r.render(hudScene, hudCam);
@@ -524,6 +587,7 @@ window.Cockpit = (function () {
     if (!usedFrame && seated) release();
     const drove = isPlaying && (Player.mode === 'crysta' || Player.mode === 'vehicle');
     const hud = hudOn && drove && !usedFrame && (typeof showMap === 'undefined' || !showMap);
+    reverseFrame(r, scene);
     const showMirrors = usedFrame && !(seated && seated.S.noMirrors);
     usedFrame = false;
     if ((showMirrors || hud) && frame % (hud ? Math.max(3, qual()[2]) : qual()[2]) === 0) {   // the small chase strip refreshes at a third of the frame rate
@@ -535,5 +599,5 @@ window.Cockpit = (function () {
     const c = document.getElementById('rearHudOpt'); if (c) c.checked = hudOn;
     return hudOn;
   }
-  return { interiorGlass, ownGlass, classOf, paintOf, camera: camera_, afterRender, toggleHud, stats, get hud() { return hudOn; }, get seated() { return seated; }, get rt() { return rt; } };
+  return { interiorGlass, ownGlass, classOf, paintOf, camera: camera_, afterRender, toggleHud, look, stats, get lookYaw() { return lookYaw; }, get lookPitch() { return lookPitch; }, get reverseOn() { return !!revMat; }, get hud() { return hudOn; }, get seated() { return seated; }, get rt() { return rt; } };
 })();

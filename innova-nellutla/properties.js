@@ -567,10 +567,17 @@
     g.fillStyle = 'rgba(10,15,25,.8)'; g.fillRect(W - 300, H - 30, 290, 22); g.fillStyle = '#cbd5e1'; g.font = '12px system-ui';
     g.fillText('₹ house · S shop · P plot/parking · blue house = yours · G garage', W - 292, H - 14);
   }
+  const radLay = { t: -1e9, on: null, x: NaN, y: NaN, n: 0 };
   function drawRadarOverlay() {
-    const rad = document.getElementById('radar'), st = document.getElementById('start'); const on = rad && getComputedStyle(rad).display !== 'none' && !(st && getComputedStyle(st).display !== 'none');
-    radCv.style.display = on ? 'block' : 'none'; if (hud) hud.style.display = on ? '' : 'none'; if (!on) return;
-    const r = rad.getBoundingClientRect(); radCv.style.left = r.left + 3 + 'px'; radCv.style.top = r.top + 3 + 'px'; radCv.style.right = radCv.style.bottom = 'auto';
+    // where the radar sits is read a few times a second, not every frame: reading layout forces the browser to recompute it
+    const now = performance.now();
+    if (now - radLay.t > 300) {
+      radLay.t = now;
+      const rad = document.getElementById('radar'), st = document.getElementById('start'); const on = !!(rad && getComputedStyle(rad).display !== 'none' && !(st && getComputedStyle(st).display !== 'none'));
+      if (on !== radLay.on) { radLay.on = on; radCv.style.display = on ? 'block' : 'none'; if (hud) hud.style.display = on ? '' : 'none'; }
+      if (on) { const r = rad.getBoundingClientRect(); if (r.left !== radLay.x || r.top !== radLay.y) { radLay.x = r.left; radLay.y = r.top; radCv.style.left = r.left + 3 + 'px'; radCv.style.top = r.top + 3 + 'px'; radCv.style.right = radCv.style.bottom = 'auto'; } }
+    }
+    if (!radLay.on || (radLay.n++ & 1)) return;        // the overlay itself redraws every other frame
     const g = radCv.getContext('2d'); g.clearRect(0, 0, 220, 220); g.save(); g.beginPath(); g.arc(110, 110, 108, 0, 7); g.clip();
     const a = Math.PI + gRot(), c = Math.cos(a), s = Math.sin(a), K = 0.9, cp = G.carPos;
     const pr = (x, z) => { const dx = x - cp.x, dz = z - cp.z; return [(dx * c - dz * s) * K, (dx * s + dz * c) * K]; };

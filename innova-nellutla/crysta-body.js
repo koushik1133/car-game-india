@@ -120,17 +120,18 @@ function buildCrystaShell(chassis, M, plateTex) {
 
   // ---------------- 4. tailgate (hinged at the roof)
   trunkMesh = new THREE.Group(); trunkMesh.position.set(0, 1.70, -2.26);
-  const gate = sideExtrude(s => {
-    s.moveTo(-2.26, 1.68); s.lineTo(-2.31, 1.12); s.lineTo(-2.365, 1.08); s.lineTo(-2.37, 0.62);
-    s.lineTo(-2.315, 0.62); s.lineTo(-2.30, 1.06); s.lineTo(-2.245, 1.64);
-  }, W - 0.26, M.paint, 0.025);
-  gate.geometry.translate(0, -1.70, 2.26); trunkMesh.add(gate);
-  const rglass = sideExtrude(s => { s.moveTo(-2.268, 1.61); s.lineTo(-2.312, 1.17); s.lineTo(-2.322, 1.17); s.lineTo(-2.278, 1.61); }, 1.30, M.glass, 0);
+  // the gate is a frame round the rear window, not one sheet over it: lower panel, header, two pillars
+  const gateParts = [
+    sideExtrude(s => { s.moveTo(-2.300, 1.15); s.lineTo(-2.325, 1.13); s.lineTo(-2.345, 1.08); s.lineTo(-2.35, 0.62); s.lineTo(-2.30, 0.62); s.lineTo(-2.29, 1.06); s.lineTo(-2.285, 1.15); }, W - 0.62, M.paint, 0.02),
+    sideExtrude(s => { s.moveTo(-2.26, 1.68); s.lineTo(-2.268, 1.60); s.lineTo(-2.25, 1.60); s.lineTo(-2.245, 1.66); }, W - 0.30, M.paint, 0.012)];
+  [-1, 1].forEach(sd => { const pg = new THREE.BoxGeometry(0.09, 0.50, 0.03); pg.rotateX(-0.1); pg.translate(sd * (W / 2 - 0.2), 1.38 - 1.70, -2.29 + 2.26); trunkMesh.add(new THREE.Mesh(pg, M.paint)); });
+  gateParts.forEach(gp => { gp.geometry.translate(0, -1.70, 2.26); trunkMesh.add(gp); });
+  const rglass = sideExtrude(s => { s.moveTo(-2.268, 1.61); s.lineTo(-2.312, 1.15); s.lineTo(-2.322, 1.15); s.lineTo(-2.278, 1.61); }, W - 0.44, M.glass, 0);
   rglass.geometry.translate(0, -1.70, 2.26); trunkMesh.add(rglass);
-  const garnish = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.07, 0.03), M.chrome); garnish.position.set(0, 0.98 - 1.70, -2.375 + 2.26); trunkMesh.add(garnish);
-  const emblemR = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.015, 6, 20), M.chrome); emblemR.scale.y = 0.7; emblemR.position.set(0, 1.12 - 1.70, -2.355 + 2.26); trunkMesh.add(emblemR);
+  const garnish = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.07, 0.03), M.chrome); garnish.position.set(0, 0.98 - 1.70, -2.385 + 2.26); trunkMesh.add(garnish);
+  const emblemR = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.015, 6, 20), M.chrome); emblemR.scale.y = 0.7; emblemR.position.set(0, 1.07 - 1.70, -2.378 + 2.26); trunkMesh.add(emblemR);
   const rPlate = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.15), new THREE.MeshBasicMaterial({ map: plateTex, side: THREE.DoubleSide }));
-  rPlate.position.set(0, 0.80 - 1.70, -2.378 + 2.26); rPlate.rotation.y = Math.PI; trunkMesh.add(rPlate);
+  rPlate.position.set(0, 0.80 - 1.70, -2.385 + 2.26); rPlate.rotation.y = Math.PI; trunkMesh.add(rPlate);
   const wiperR = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.015, 0.015), M.pianoBlack); wiperR.position.set(-0.12, 1.22 - 1.70, -2.33 + 2.26); wiperR.rotation.z = 0.35; trunkMesh.add(wiperR);
   chassis.add(trunkMesh);
 
@@ -145,12 +146,12 @@ function buildCrystaShell(chassis, M, plateTex) {
 
   // L-shaped tail lamps wrapping onto the quarter panel
   [-1, 1].forEach(sd => {
-    const v = box(0.15, 0.50, 0.05, tailMat(), sd * 0.79, 0.90, -2.305);
-    box(0.04, 0.34, 0.052, new THREE.MeshPhongMaterial({ color: 0x3a0a0a, shininess: 120 }), sd * 0.73, 0.92, -2.307);   // smoked inner strip
-    box(0.17, 0.52, 0.04, M.chrome, sd * 0.79, 0.90, -2.297);                                                   // bezel
-    const h = box(0.26, 0.10, 0.05, tailMat(), sd * 0.66, 1.05, -2.30);
-    const wrap = box(0.03, 0.30, 0.22, tailMat(), sd * (W / 2 - 0.005), 0.92, -2.18);
-    box(0.10, 0.06, 0.055, new THREE.MeshBasicMaterial({ color: 0xf1f5f9 }), sd * 0.80, 0.76, -2.31);   // reverse lamp
+    const v = box(0.15, 0.46, 0.05, tailMat(), sd * 0.775, 0.90, -2.325);
+    box(0.04, 0.30, 0.052, new THREE.MeshPhongMaterial({ color: 0x3a0a0a, shininess: 120 }), sd * 0.725, 0.92, -2.327);   // smoked inner strip
+    box(0.17, 0.48, 0.04, M.chrome, sd * 0.775, 0.90, -2.315);                                                  // bezel
+    const h = box(0.20, 0.09, 0.03, tailMat(), sd * 0.56, 1.06, -2.368);                                        // the arm running onto the gate
+    const wrap = box(0.02, 0.11, 0.15, tailMat(), sd * (W / 2 + 0.002), 1.03, -2.235);                           // slim strip on the quarter panel
+    box(0.10, 0.06, 0.055, new THREE.MeshBasicMaterial({ color: 0xf1f5f9 }), sd * 0.785, 0.74, -2.33);   // reverse lamp
     rearBrakeLights.push(v, h, wrap);
   });
 

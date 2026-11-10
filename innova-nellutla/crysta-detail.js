@@ -123,7 +123,7 @@ function buildCrystaInterior(chassis) {
 
   // floor, headliner, pillar trims
   add(new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.04, 3.3), carpet), 0, 0.46, -0.55);
-  const head = add(new THREE.Mesh(new THREE.PlaneGeometry(1.5, 3.2), beige), 0, 1.66, -0.55); head.rotation.x = Math.PI / 2;
+  const head = add(new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2.4), beige), 0, 1.66, -0.98);   // ends where the windscreen meets the roof, not out over the bonnet head.rotation.x = Math.PI / 2;
 
   // dashboard: sculpted profile across the width
   const ds = new THREE.Shape();

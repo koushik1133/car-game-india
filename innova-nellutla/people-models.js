@@ -237,7 +237,7 @@ const HumanModel = (function () {
     const topC = bottom === 'saree' ? pick(WR.blouse) : !f && top !== 'kurta' ? pick(WR.shirt) : pick(PALETTE);
     const botC = bottom === 'saree' ? pick(WR.saree) : WR[bottom] ? pick(WR[bottom]) : bottom === 'salwar' ? 0xefe9dc : pick(PALETTE);
     return normalize({
-      gender: f ? 'f' : 'm', height: 0.94 + Math.random() * 0.12, build: 0.88 + Math.random() * 0.28, skin: pick(SKINS),
+      gender: f ? 'f' : 'm', height: 0.94 + Math.random() * 0.12, build: 0.88 + Math.random() * 0.28, skin: pick([0x9a6a48, 0x8d5a3b, 0x7a4c30, 0x7a4a2e, 0x6b4028]),   // village tones; the full range stays in the creator's palette
       face: pick(OPTIONS.face), brows: f ? pick(['thin', 'arched']) : pick(['medium', 'thick']), eyes: pick(EYES),
       hair: f ? pick(['braid', 'bun', 'long']) : pick(['short', 'sidepart', 'curly', 'bald']), hairColor: pick(HAIR_COLORS.slice(0, 4)),
       facial: f ? 'none' : pick(OPTIONS.facial), top, bottom, topColor: topC, bottomColor: botC, feet: pick(['chappals', 'shoes']),
@@ -381,8 +381,15 @@ const HumanModel = (function () {
       const lo = mesh(G('lipL', () => { const g = new THREE.SphereGeometry(0.018, 10, 6); g.scale(0.95, 0.28, 0.34); return g; }), lipCol, head, 0, headY - 0.063, fz - 0.009);
       // cheekbones and chin
     } else {
-      for (const sx of [-1, 1]) mesh(sphere(0.01, 4, 3), plain(0x1a1210), head, sx * 0.031, headY + 0.012, fz - 0.006);
-      mesh(sphere(0.012, 4, 3), skinM, head, 0, headY - 0.025, fz + 0.004);
+      // the far figure still needs a readable face: eyes with a white, brows, a nose with a bridge, and a mouth
+      const eyeG = G('eyeLow', () => { const g = new THREE.SphereGeometry(0.0085, 5, 4); g.scale(1.25, 0.8, 0.6); return g; }), dark = plain(0x1a1210);
+      const browG = G('browLow', () => new THREE.BoxGeometry(0.026, 0.005, 0.006));
+      for (const sx of [-1, 1]) {
+        mesh(eyeG, dark, head, sx * 0.031, headY + 0.012, fz - 0.004);
+        const b = mesh(browG, hm, head, sx * 0.031, headY + 0.03, fz - 0.003); b.rotation.z = sx * -0.14;
+      }
+      const nz = mesh(G('noseLow', () => { const g = new THREE.CylinderGeometry(0.005, 0.012, 0.04, 5, 1); g.translate(0, -0.02, 0); return g; }), skinM, head, 0, headY + 0.012, fz - 0.002); nz.rotation.x = 0.3;
+      mesh(G('lipLow', () => new THREE.BoxGeometry(0.03, 0.007, 0.006)), lipM, head, 0, headY - 0.058, fz - 0.004);
     }
     buildHair(o, head, headY, hm, low, female);
     buildFacial(o, head, headY, hm, low);
@@ -577,7 +584,7 @@ const HumanModel = (function () {
       const k = f === 'beard' ? 1.09 : 1.012; b.scale.set(k, f === 'beard' ? 1.06 : 1.005, k);
     }
     if (f === 'moustache' || f === 'beard' || f === 'handlebar' || f === 'stubble') {
-      if (low) { mesh(limb(0.008, 0.008, 0.05, 0, 0.5), hm, head, 0.025, y - 0.046, fz + 0.002).rotation.z = Math.PI / 2; return; }
+      if (low) { mesh(G('mustLow', () => { const g = new THREE.BoxGeometry(0.046, 0.011, 0.008); const p = g.attributes.position; for (let i = 0; i < p.count; i++) if (Math.abs(p.getX(i)) > 0.02) p.setY(i, p.getY(i) - 0.006); return g; }), hm, head, 0, y - 0.044, fz + 0.001); return; }   // centred under the nose, ends drooping
       const th = f === 'handlebar' ? 1.9 : 1.35;
       const mo = mesh(G('must' + f, () => { const g = new THREE.TorusGeometry(0.026, f === 'stubble' ? 0.0045 : 0.0085, 6, 14, th); g.rotateZ(-Math.PI / 2 - th / 2 + Math.PI); g.scale(1, 0.55, 0.6); return g; }), hm, head, 0, y - 0.043, fz + 0.001);
       mo.rotation.x = 0.1;

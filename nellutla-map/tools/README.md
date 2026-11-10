@@ -30,3 +30,7 @@ Using the map in a game:
 and OSM Overpass `osm.json` for bbox 79.09-79.215 E, 17.68-17.77 N. `jangaon.js` streams 320 m tiles and wraps the world queries.
 
 `python3 tools/build_jangaon_net.py <dir> [outdir]` (after `build_jangaon.py`) builds `jangaon-net.json`: full road graph, height grid and inferred signals, lamps, humps. Needs `<dir>/segments.csv` and terrarium tiles at `<dir>/dem/z13_<x>_<y>.png`. `jangaon-life.js` runs the signals, lamps, traffic and people from it.
+
+## Jangaon to Secunderabad (streamed corridor)
+
+`python3 tools/build_hyderabad.py <dir> [outdir]` builds `hyd-lite.js` (always loaded), `hyd-net.json` (arterials: nav, traffic, nearestRoad) and `hyd/<i>_<j>.bin` (one file per 640 m tile, coordinates local to the tile). Sources and inferred items are in the script's docstring. `hyderabad.js` streams the tiles through `hyderabad-worker.js` and wraps the world queries west of the Jangaon edge.

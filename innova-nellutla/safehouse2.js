@@ -216,14 +216,30 @@
     wallA(8.0, -14, -6.9, [[-11, -9.9, 0, 2.2]], '#f3ead4');                         // partition: front room | bedroom
     // brown wooden windows (frame + shutters + bars)
     const winA = (b, g0, g1, sill, head, out) => {
-      B.box(g0 - 0.08, g1 + 0.08, sill - 0.08, head + 0.08, b + out * 0.12, b + out * 0.16, C.wood);
+      // a frame round the opening (not a plank over it), a centre mullion, a sill, and the two shutters folded back on the wall
+      const f0 = b + out * 0.02, f1 = b + out * 0.16, w = Math.min((g1 - g0) / 2, 0.28);
+      B.box(g0 - 0.08, g0, sill - 0.08, head + 0.08, f0, f1, C.wood); B.box(g1, g1 + 0.08, sill - 0.08, head + 0.08, f0, f1, C.wood);
+      B.box(g0 - 0.08, g1 + 0.08, head, head + 0.08, f0, f1, C.wood); B.box(g0 - 0.08, g1 + 0.08, sill - 0.08, sill, f0, f1, C.wood);
+      B.box(g0 - 0.14, g1 + 0.14, sill - 0.13, sill - 0.08, b, b + out * 0.24, C.creamDk);
       B.box(g0, g1, sill, head, b - 0.03, b + 0.03, C.glass);
       B.box((g0 + g1) / 2 - 0.03, (g0 + g1) / 2 + 0.03, sill, head, b + out * 0.1, b + out * 0.14, C.wood);
+      for (const [s0, s1] of [[g0 - 0.1 - w, g0 - 0.1], [g1 + 0.1, g1 + 0.1 + w]]) {
+        B.box(s0, s1, sill, head, b + out * 0.125, b + out * 0.155, C.wood);
+        for (let y = sill + 0.12; y < head - 0.08; y += 0.3) B.box(s0 + 0.05, s1 - 0.05, y, y + 0.2, b + out * 0.155, b + out * 0.165, C.woodDk);
+      }
       for (let a = g0 + 0.13; a < g1 - 0.05; a += 0.15) B.box(a, a + 0.025, sill, head, b + out * 0.06, b + out * 0.09, C.black);
     };
     const winB = (a, g0, g1, sill, head, out) => {
-      B.box(a + out * 0.12, a + out * 0.16, sill - 0.08, head + 0.08, g0 - 0.08, g1 + 0.08, C.wood);
+      const f0 = a + out * 0.02, f1 = a + out * 0.16, w = Math.min((g1 - g0) / 2, 0.28), lo = Math.min, hi = Math.max;
+      const bx = (x0, x1, y0, y1, b0, b1, c) => B.box(lo(x0, x1), hi(x0, x1), y0, y1, b0, b1, c);
+      bx(f0, f1, sill - 0.08, head + 0.08, g0 - 0.08, g0, C.wood); bx(f0, f1, sill - 0.08, head + 0.08, g1, g1 + 0.08, C.wood);
+      bx(f0, f1, head, head + 0.08, g0 - 0.08, g1 + 0.08, C.wood); bx(f0, f1, sill - 0.08, sill, g0 - 0.08, g1 + 0.08, C.wood);
+      bx(a, a + out * 0.24, sill - 0.13, sill - 0.08, g0 - 0.14, g1 + 0.14, C.creamDk);
       B.box(a - 0.03, a + 0.03, sill, head, g0, g1, C.glass);
+      for (const [s0, s1] of [[g0 - 0.1 - w, g0 - 0.1], [g1 + 0.1, g1 + 0.1 + w]]) {
+        bx(a + out * 0.125, a + out * 0.155, sill, head, s0, s1, C.wood);
+        for (let y = sill + 0.12; y < head - 0.08; y += 0.3) bx(a + out * 0.155, a + out * 0.165, y, y + 0.2, s0 + 0.05, s1 - 0.05, C.woodDk);
+      }
       for (let b = g0 + 0.13; b < g1 - 0.05; b += 0.15) B.box(a + out * 0.06, a + out * 0.09, sill, head, b, b + 0.025, C.black);
     };
     winA(3.0, -13.2, -12.0, 0.9, 2.1, -1); winA(3.0, -11.2, -10.2, 0.9, 2.1, -1); winA(12.8, -12, -11, 0.9, 2.1, 1); winA(12.8, -9, -8, 0.9, 2.1, 1);
@@ -551,7 +567,12 @@
     parts.ped = new THREE.Group(); parts.ped.position.set(PG[0] + 0.2, 0, WB);
     { const pm = new THREE.MeshLambertMaterial({ map: gateLeafTex(false, 1.7), alphaTest: 0.5, side: THREE.DoubleSide }); const m = new THREE.Mesh(new THREE.PlaneGeometry(pgw, 1.7), pm); m.position.set(pgw / 2, 0.88, 0); parts.ped.add(m); root.add(parts.ped); }
     parts.door = new THREE.Group(); parts.door.position.set(DOOR[0], FLOOR, 3.0);
-    { const dw = DOOR[1] - DOOR[0], d = new THREE.Mesh(new THREE.BoxGeometry(dw, 2.08, 0.06), new THREE.MeshLambertMaterial({ color: C.wood })); d.position.set(dw / 2, 1.04, 0); parts.door.add(d); root.add(parts.door); }
+    { const dw = DOOR[1] - DOOR[0], d = new THREE.Mesh(new THREE.BoxGeometry(dw, 2.08, 0.06), new THREE.MeshLambertMaterial({ color: C.wood })); d.position.set(dw / 2, 1.04, 0); parts.door.add(d);
+      // raised panels on both faces and a brass handle, so the leaf reads as a door and not a board
+      const pm = new THREE.MeshLambertMaterial({ color: C.woodDk }), pw = dw / 2 - 0.16;
+      for (const px of [0.11, dw / 2 + 0.05]) for (const [py, ph] of [[0.16, 0.62], [0.9, 0.62], [1.64, 0.3]]) { const q = new THREE.Mesh(new THREE.BoxGeometry(pw, ph, 0.075), pm); q.position.set(px + pw / 2, py + ph / 2, 0); parts.door.add(q); }
+      const hd = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.16, 0.11), new THREE.MeshLambertMaterial({ color: 0xd4a82a })); hd.position.set(dw - 0.09, 1.05, 0); parts.door.add(hd);
+      root.add(parts.door); }
     const leafDoor = (a0, a1, y, b, color) => { const g = new THREE.Group(), w = a1 - a0, m = new THREE.Mesh(new THREE.BoxGeometry(w, 2.02, 0.05), new THREE.MeshLambertMaterial({ color })), hd = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.07), new THREE.MeshLambertMaterial({ color: 0xd4a82a })); g.position.set(a0, y, b); m.position.set(w / 2, 1.03, 0); hd.position.set(w - 0.12, 1.0, 0); g.add(m, hd); root.add(g); return g; };
     parts.kd = leafDoor(KD[0], KD[1], FLOOR, KIT.b1 + 0.11, C.wood); parts.rd = leafDoor(RD[0], RD[1], -YARD_H, PLOT.b1, '#5a6b4a');
     { const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, 1.6, 6), new THREE.MeshLambertMaterial({ color: 0xdddddd })); pole.position.set(YARD.a0 + 0.05, 1.9 + 0.8, WB);
@@ -610,7 +631,13 @@
   // the gate and the car porch: cross-parked at one angle (55 deg to the wall), back wheels to the wall, noses toward the
   // gate and clear of the driveway, each leaning a little on its side stand. Built with TrafficModels, registered with
   // Player.addParked so F mounts exactly that bike.
-  const BIKE_ROW = ['classic', 'classic2', 'sport', 'faired', 'bike', 'hayabusa', 's1000rr', 'r1300gsa', 'r1250gsa', 'scooter', 'cycle'];
+  // Fixed layout set by the player in the game (world x, z, heading): nine bikes plus the bicycle beside the Classic 350.
+  const BIKE_LAYOUT = [
+    ['classic', 38.254, -271.070, 1.7307], ['classic2', 39.671, -274.256, 1.1286], ['sport', 36.213, -271.227, -3.6911],
+    ['faired', 35.624, -276.025, 0.1092], ['hayabusa', 37.866, -274.854, 0.2318], ['s1000rr', 36.767, -275.535, 0.0878],
+    ['r1300gsa', 34.076, -272.918, 2.5163], ['r1250gsa', 35.209, -271.772, -3.6397], ['scooter', 42.311, -272.603, 4.1550],
+    ['cycle', 38.111, -271.958, 1.7307]];
+  const BIKE_ROW = BIKE_LAYOUT.map(q => q[0]);
   const rowBikes = [];
   function spawnBikeRow() {
     const P = PL(), TMs = TM(); if (!P || !TMs || !P.addParked || rowBikes.length) return;
@@ -618,11 +645,9 @@
     BIKE_ROW.forEach((kind, i) => {
       if (!TMs[kind]) return;
       const v = TMs[kind](); v.g.name = 'safehouse-bike-' + kind;
-      const p = W(-2.2, -0.2 + i * 0.95);   // clear of the gate leaves' swing (b < -2)
-      v.g.position.set(p.x, groundY(p.x, p.z), p.z); v.g.rotation.order = 'YXZ'; v.g.rotation.set(0, rot, 0.13);   // leaning left on the side stand
-      // side stand: a short black rod from under the footrest to the floor on the left
-      const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.36, 5), new THREE.MeshLambertMaterial({ color: 0x151515 }));
-      stand.position.set(0.17, 0.16, -0.05); stand.rotation.z = -0.55; v.g.add(stand);
+      const L = BIKE_LAYOUT[i], p = { x: L[1], z: L[2] };
+      v.g.position.set(p.x, groundY(p.x, p.z), p.z); v.g.rotation.order = 'YXZ'; v.g.rotation.set(0, L[3], 0);   // upright, as the player parked them
+      const stand = { parent: null };
       v.g.traverse(o => { if (o.userData && o.userData.human) o.visible = false; });
       scene.add(v.g);
       const obj = { ...v, model: 'bike', type: kind, r: null, len: 100, s: 0, dir: 1, speed: 0, cur: 0, len2: (v.len || 2.1) / 2, hw: 0.36,

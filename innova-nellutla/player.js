@@ -1299,7 +1299,7 @@ const Player = (function () {
   const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
   // critically damped spring (exact for constant target): x toward t with angular frequency w
   function spring(x, v, t, w, dt) { const d = x - t, e = Math.exp(-w * dt), nx = t + (d + (v + w * d) * dt) * e, nv = (v - w * (v + w * d) * dt) * e; return [nx, nv]; }
-  function lookInput(dx, dy) { R.yaw -= dx; R.pitch = THREE.MathUtils.clamp(R.pitch + dy, PITCH_MIN, PITCH_MAX); R.idle = 0; R.yv = R.pv = 0; R.ret = false; }
+  function lookInput(dx, dy) { if (mode !== 'foot' && window.Cockpit && Cockpit.seated) { Cockpit.look(dx, dy); return; } R.yaw -= dx; R.pitch = THREE.MathUtils.clamp(R.pitch + dy, PITCH_MIN, PITCH_MAX); R.idle = 0; R.yv = R.pv = 0; R.ret = false; }
   const canvasEl = () => (typeof renderer !== 'undefined' && renderer.domElement) || document.getElementById('gl');
   function isView(t) { return t && t.tagName === 'CANVAS' && (t === canvasEl() || t.id === 'gl'); }
   const playing = () => typeof isPlaying === 'undefined' || isPlaying;
