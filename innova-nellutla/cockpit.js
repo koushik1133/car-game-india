@@ -285,6 +285,9 @@ window.Cockpit = (function () {
     chassis.traverse(o => { const q = o.isMesh && o.material; if (q && q.transparent && q.opacity > 0.5 && q.color && q.color.getHSL({}).l < 0.15) S.glass.push(o); });
     // each door's black window sash is a solid plate that fills the window: it steps aside too
     Object.values(doorMeshes).forEach(d => d.group.traverse(o => { if (o.isMesh && o.material.color && o.material.color.getHex() === 0x07090d) S.glass.push(o); }));
+    // the rounded shell's window surrounds and glass are dark panels on a solid body: from the seat they would be black
+    // walls, so every dark piece of it steps aside too (the door mirrors still show the whole car)
+    { const sh = chassis.userData.shell2; if (sh) sh.g.traverse(o => { if (!o.isMesh || S.glass.includes(o)) return; const c = o.material && o.material.color; if (c && c.getHSL({}).l < 0.3) S.glass.push(o); }); }   // includes the doors' dark inner faces
     const sw = chassis.userData.steeringWheel, R = 0.18;
     arm(sw, -R * 0.94, R * 0.25, -0.012, -0.3, -0.25, -0.42, m); arm(sw, R * 0.94, R * 0.25, -0.012, 0.3, -0.25, -0.42, m);
     const eye = S.eye;

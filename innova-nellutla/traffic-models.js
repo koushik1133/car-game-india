@@ -300,11 +300,12 @@ const TrafficModels = (function () {
     g._parts = { doors: [], hood: null, boot: null, sunroof: null, top: null };
     return { g, wheels, head, tail, steer, add, wheel, lamp, headM, tailM, parts: g._parts, grabbed: new Set(), apertures: [] };
   }
+  let plateText = null;   // set while building a car with a fixed registration (the player's)
   function plate(k, z, y, front, x) {
     const c = document.createElement('canvas'); c.width = 128; c.height = 32; const t = c.getContext('2d');
-    t.fillStyle = front ? '#fff' : '#ffd400'; t.fillRect(0, 0, 128, 32); t.strokeStyle = '#222'; t.lineWidth = 2; t.strokeRect(2, 2, 124, 28);
+    t.fillStyle = front || plateText ? '#fff' : '#ffd400'; t.fillRect(0, 0, 128, 32); t.strokeStyle = '#222'; t.lineWidth = 2; t.strokeRect(2, 2, 124, 28);
     t.fillStyle = '#111'; t.font = 'bold 17px sans-serif'; t.textAlign = 'center';
-    t.fillText('TS 27 ' + String.fromCharCode(65 + Math.random() * 26 | 0, 65 + Math.random() * 26 | 0) + ' ' + (1000 + Math.random() * 8999 | 0), 64, 23);
+    t.fillText(plateText || ('TS 27 ' + String.fromCharCode(65 + Math.random() * 26 | 0, 65 + Math.random() * 26 | 0) + ' ' + (1000 + Math.random() * 8999 | 0)), 64, 23);
     const m = new THREE.Mesh(G('plate', () => new THREE.PlaneGeometry(0.42, 0.11)), new THREE.MeshLambertMaterial({ map: new THREE.CanvasTexture(c) }));
     m.position.set(x || 0, y, z); if (!front) m.rotation.y = Math.PI; k.g.add(m); return m;
   }
@@ -1725,9 +1726,9 @@ const TrafficModels = (function () {
       hood: o.noHood ? null : [o.doors[0][0][0] + 0.1, ZF - 0.14, W / 2 - 0.16], boot: o.boot || { hw: bsX + 0.08, y0: Math.min(...bsY) - 0.45, y1: Math.max(...bsY) + 0.06 }, sunroof: o.sunroof });
     if (o.after) o.after(c);
     const wx = W / 2 - o.wd / 2 - 0.015;
-    for (const [x, z] of [[-wx, FW], [wx, FW], [-wx, RW], [wx, RW]]) carWheel(k, F, o.R, o.wd, x, z, o.wheel);
+    if (!o.noWheels) for (const [x, z] of [[-wx, FW], [wx, FW], [-wx, RW], [wx, RW]]) carWheel(k, F, o.R, o.wd, x, z, o.wheel);
     const seat = o.seat || [0.38, o.belt - 0.3, 0, 'car'];
-    person(k, seat[0], seat[1], seat[2], { outfit: 'shirt', color: pickR([0xffffff, 0x222222, 0x8fa9c4]) }, 'car');
+    if (!o.noPerson) person(k, seat[0], seat[1], seat[2], { outfit: 'shirt', color: pickR([0xffffff, 0x222222, 0x8fa9c4]) }, 'car');
     return { g: k.g, wheels: k.wheels, head: k.head, tail: k.tail, len: ZF - ZR, kind: 'car', type: o.type, snd: o.type, seat };
   }
   // round projector: dark bezel, lit lens, glossy cover
@@ -1758,8 +1759,7 @@ const TrafficModels = (function () {
 
   // Toyota Innova first generation (2005-15): 4555 x 1770 x 1750, wb 2750, 2KD-FTV 102 hp, turning circle 10.8 m.
   // Soft one-box MPV: sloping bonnet flowing into the screen, big triple-window side, swept lamps, wide chrome grille
-  function innova() {
-    return car2({ key: 'inv', type: 'innova', cols: [0xefefea, 0xefefea, 0xefefea, 0xb8bcc0, 0x3c3f44, 0x6b1f1f, 0x8a7a5e], W: 1.77, H: 1.75, R: 0.32, wd: 0.205, A: 0.385, AY: 0.33, FW: 1.32, RW: -1.43, ZF: 2.28, ZR: -2.275, SY: 0.33, belt: 1.08, lean: 0.14,
+  const innovaDef = () => ({ key: 'inv', type: 'innova', cols: [0xefefea, 0xefefea, 0xefefea, 0xb8bcc0, 0x3c3f44, 0x6b1f1f, 0x8a7a5e], W: 1.77, H: 1.75, R: 0.32, wd: 0.205, A: 0.385, AY: 0.33, FW: 1.32, RW: -1.43, ZF: 2.28, ZR: -2.275, SY: 0.33, belt: 1.08, lean: 0.14,
       opts: { plan: 0.34, rt: 0.11, crown: 0.04, bulge: 0.04 }, wheel: WHEELS.mpv, seat: [0.4, 0.86, 0.12, 'car'], mirror: [0.92, 1.12], handles: [[0.26, 1.04], [-0.62, 1.04]], chromeH: true,
       top: s => { s.lineTo(2.28, 0.5); s.quadraticCurveTo(2.3, 0.68, 2.22, 0.84); s.quadraticCurveTo(2.14, 0.95, 1.92, 0.99); s.lineTo(1.1, 1.13); s.lineTo(0.4, 1.68); s.quadraticCurveTo(0.26, 1.74, 0, 1.75); s.lineTo(-1.9, 1.73); s.quadraticCurveTo(-2.1, 1.72, -2.15, 1.6); s.lineTo(-2.26, 1.06); s.lineTo(-2.275, 0.44); s.quadraticCurveTo(-2.27, 0.33, -2.19, 0.33); },
       boot: { hw: 0.66, y0: 0.56, y1: 1.64 }, win: [[[0.98, 1.14], [0.42, 1.6], [-0.1, 1.61], [-0.1, 1.12]], [[-0.18, 1.12], [-0.18, 1.61], [-1.0, 1.6], [-1.0, 1.12]], [[-1.08, 1.12], [-1.08, 1.6], [-2.0, 1.56], [-2.1, 1.14]]],
@@ -1780,6 +1780,21 @@ const TrafficModels = (function () {
         d.p('tgc', 'r', [[-0.56, 0.99], [0.56, 0.99], [0.56, 1.05], [-0.56, 1.05]], F.chrome, { off: 0.0095, step: 0.2, round: 0.012 });
         d.p('rb', 'r', [[-0.84, 0.36], [0.84, 0.36], [0.86, 0.5], [-0.86, 0.5]], F.clad, { round: 0 }); plate(k, -2.29, 0.8, false); k.add(sph(0.045, 12, 8), F.chrome, 0, 0.94, -2.29).scale.set(1.25, 0.8, 0.3);
         rearKit(c, { recess: [0.26, 0.8], wiper: [0, 1.16, 0.6], spoiler: [1.04, 1.66, -2.03, 0.2], refl: [0.6, 0.54, 0.26], badge: [[0.44, 0.92, 0.2, 0.016], [0.58, 0.92, 0.03, 0.03]] }); } });
+  function innova() { return car2(innovaDef()); }
+  // Innova Crysta on the same lofted body: 4735 x 1830 x 1795, wheelbase 2750. Built at the Innova's size with the
+  // arches moved to the Crysta's axles, then scaled, so every decal and lamp rides along. opts: { paint, bare } - bare
+  // leaves out wheels and driver (the player's car brings its own).
+  const CRY = [1.034, 1.026, 1.04];
+  function crystaShell(opts) {
+    opts = opts || {};
+    const o = innovaDef(); o.key = 'cry'; o.type = 'crysta';
+    o.FW = 1.38 / CRY[2]; o.RW = -1.37 / CRY[2]; o.A = 0.445; o.AY = 0.39; o.R = 0.37; o.wd = 0.215;
+    o.doors = [[[1.03, 1.16], [1.04, 0.92], [0.9, 0.7], [0.82, 0.42], [-0.14, 0.36], [-0.14, 1.64]], [[-0.14, 1.64], [-1.0, 1.64], [-1.0, 1.02], [-0.9, 0.78], [-0.84, 0.5], [-0.14, 0.36]]];
+    o.handles = [[0.26, 1.04], [-0.6, 1.04]];
+    if (opts.paint) o.paint = opts.paint; else o.cols = [0xf4f4f0, 0xf4f4f0, 0x9aa0a6, 0x2b2d31, 0x6e1a1e];
+    if (opts.bare) { o.noWheels = true; o.noPerson = true; }
+    plateText = opts.plate || null; let v; try { v = car2(o); } finally { plateText = null; } v.g.scale.set(CRY[0], CRY[1], CRY[2]); v.len = (o.ZF - o.ZR) * CRY[2];
+    return v;
   }
 
   // Toyota Fortuner, second generation: 4795 x 1855 x 1835, wb 2745, 265/60 R18. High flat bonnet, slim upper grille into
@@ -1801,9 +1816,10 @@ const TrafficModels = (function () {
         d.p('ug', 'f', [[-0.5, 0.88], [0.5, 0.88], [0.5, 1.0], [-0.5, 1.0]], F.mesh, { round: 0, off: 0.008 }); d.r('ub', 'f', [[-0.82, 0.86], [-0.5, 0.92], [0.5, 0.92], [0.82, 0.86]], 0.03, F.chrome, { off: 0.014 });
         d.p('lg', 'f', [[-0.38, 0.47], [0.38, 0.47], [0.54, 0.83], [-0.54, 0.83]], F.mesh, { round: 0, off: 0.008 }); d.r('lgc', 'f', [[-0.54, 0.84], [0.54, 0.84]], 0.024, F.chrome, { off: 0.012 });
         for (const sx of [-1, 1]) { d.r('lgs' + sx, 'f', MIR(sx, [[0.54, 0.84], [0.38, 0.47]]), 0.024, F.chrome, { off: 0.012 });
-          d.p('hl' + sx, 'f', MIR(sx, [[0.5, 0.86], [0.8, 0.86], [0.89, 0.96], [0.86, 1.06], [0.55, 1.03]]), F.black, { step: 0.05 }); proj(c, 'p1' + sx, 'f', sx * 0.62, 0.95, 0.042); proj(c, 'p2' + sx, 'f', sx * 0.76, 0.97, 0.042);
-          d.r('dr' + sx, 'f', MIR(sx, [[0.52, 0.875], [0.8, 0.885], [0.87, 0.97]]), 0.016, F.drl, { off: 0.012, step: 0.05 });
-          d.p('fg' + sx, 'f', MIR(sx, [[0.6, 0.5], [0.8, 0.5], [0.82, 0.62], [0.68, 0.72], [0.58, 0.62]]), F.black); d.p('fgl' + sx, 'f', MIR(sx, [[0.66, 0.54], [0.76, 0.54], [0.76, 0.62], [0.66, 0.62]]), F.drl, { off: 0.01 }); }
+          d.p('hl' + sx, 'f', MIR(sx, [[0.5, 0.875], [0.8, 0.87], [0.905, 0.95], [0.89, 1.0], [0.55, 0.995]]), F.black, { step: 0.05 }); proj(c, 'p1' + sx, 'f', sx * 0.615, 0.94, 0.03); proj(c, 'p2' + sx, 'f', sx * 0.715, 0.942, 0.03);   // slim swept-back units, small twin projectors
+          d.r('dr' + sx, 'f', MIR(sx, [[0.52, 0.887], [0.8, 0.884], [0.885, 0.955]]), 0.014, F.drl, { off: 0.012, step: 0.05 }); d.r('dr2' + sx, 'f', MIR(sx, [[0.78, 0.975], [0.875, 0.985]]), 0.014, F.amber, { off: 0.012, step: 0.05 });
+          d.p('fg' + sx, 'f', MIR(sx, [[0.62, 0.49], [0.84, 0.49], [0.87, 0.6], [0.82, 0.79], [0.7, 0.79], [0.6, 0.62]]), F.black);   // tall corner housing
+          d.r('fgl' + sx, 'f', MIR(sx, [[0.66, 0.57], [0.81, 0.57]]), 0.028, F.drl, { off: 0.01, step: 0.05 }); d.r('fgc' + sx, 'f', MIR(sx, [[0.6, 0.62], [0.7, 0.79]]), 0.016, F.chrome, { off: 0.011, step: 0.05 }); }
         k.add(sph(0.06, 14, 8), F.chrome, 0, 0.94, 2.43).scale.set(1.25, 0.8, 0.3);
         d.p('sk', 'f', [[-0.42, 0.45], [0.42, 0.45], [0.36, 0.5], [-0.36, 0.5]], F.silver, { round: 0, off: 0.012 }); plate(k, 2.43, 0.55, true); },
       boot: { hw: 0.74, y0: 0.66, y1: 1.74 },
@@ -2262,7 +2278,7 @@ const TrafficModels = (function () {
   const baked = f => (...args) => { const v = f(...args); if (!v.type) v.type = f.name; return bake(v); };
   return { setPart, thar: baked(thar), hector: baked(hector), auto: baked(auto), bike: baked(bike), splendor: baked(splendor), scooter: baked(scooter), classic: baked(classic), classic2: baked(classic2),
     sport: baked(sport), faired: baked(faired), cycle: baked(cycle), mpv: baked(mpv), innova: baked(innova), wagonR: baked(wagonR), landCruiser: baked(landCruiser), defender: baked(defender), gclass: baked(gclass), tharRoxx: baked(tharRoxx), hayabusa: baked(hayabusa), s1000rr: baked(s1000rr), r1250gsa: baked(r1250gsa), r1300gsa: baked(r1300gsa), fortuner: baked(fortuner), fortunerBlack: baked(fortunerBlack),
-    berlinetta: baked(berlinetta), muscle: baked(muscle), wedge: baked(wedge), coupe911: baked(coupe911), crysta: baked(crysta), SPORTS: ['berlinetta', 'muscle', 'wedge', 'coupe911'],
+    berlinetta: baked(berlinetta), muscle: baked(muscle), wedge: baked(wedge), coupe911: baked(coupe911), crysta: baked(function crysta() { return crystaShell(); }), crystaShell: opts => { const v = crystaShell(opts); v.type = 'crysta'; return bake(v); }, SPORTS: ['berlinetta', 'muscle', 'wedge', 'coupe911'],
     swift: baked(swift), swiftNew: baked(swiftNew), safari: baked(safari), sumo: baked(sumo), scorpioN: baked(scorpioN), activa: baked(activa), starCity: baked(starCity), trolley: baked(trolley), dzire: baked(dzire), alto: baked(alto), bolero: baked(bolero), scorpio: baked(scorpio), ace: baked(ace),
     headLift, TWO_WHEELERS: ['bike', 'splendor', 'starCity', 'activa', 'scooter', 'classic', 'classic2', 'sport', 'faired', 'cycle', 'hayabusa', 's1000rr', 'r1250gsa', 'r1300gsa'], hatch: baked(hatch), suv: baked(suv), tractor: baked(tractor), lorry: baked(lorry), bus: baked(bus), bullockCart: baked(bullockCart), bake, mergeUnder };
 })();
