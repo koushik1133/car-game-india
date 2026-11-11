@@ -657,6 +657,24 @@
     });
   }
   window.SafeHouse2Bikes = () => rowBikes;
+  // ---------------------------------------------------------------- the family's two cars on the lane
+  // The lane runs wall to drain with no shoulder, so they stand nose to tail hard against the front wall west of the
+  // pedestrian gate (as the village cars further along do), noses toward the gates, leaving the far half of the lane and
+  // both gateways free. [TrafficModels kind, paint, a (centre), b (centre), half width]. F drives them (Player.addParked).
+  const STREET_CARS = [['hilux', 0x8a8a68, -13.4, -6.72, 0.95], ['crysta2023', 0xf4f4f0, -19.05, -6.72, 0.95]];
+  const streetCars = [];
+  function spawnStreetCars() {
+    const P = PL(), TMs = TM(); if (!P || !TMs || !P.addParked || streetCars.length) return;
+    for (const [kind, paint, a, b, hw] of STREET_CARS) {
+      if (!TMs[kind]) continue;
+      const v = TMs[kind](paint); v.g.name = 'safehouse-car-' + kind;
+      const dead = []; v.g.traverse(o => { if (o.userData && o.userData.human) dead.push(o); }); dead.forEach(o => o.parent && o.parent.remove(o));   // parked: nobody at the wheel
+      const p = W(a, b); v.g.position.set(p.x, groundY(p.x, p.z), p.z); v.g.rotation.y = TH + Math.PI / 2; scene.add(v.g);
+      const obj = { ...v, model: 'suv', type: kind, r: null, len: 100, s: 0, dir: 1, speed: 0, cur: 0, len2: v.len / 2, hw, wheelR: 0.39, wheels: v.wheels || [], tail: v.tail || [], head: v.head || [], parked: true, _streetCar: kind };
+      streetCars.push(obj); P.addParked(obj);
+    }
+  }
+  window.SafeHouse2Cars = () => streetCars;
   function slotAt(x, z, maxD) { const l = L(x, z); let best = null; for (const s of SLOTS) { const d = Math.hypot(l.a - s.a, l.b - s.b); if (d < (maxD || 2.2) && (!best || d < best.d)) best = { s, d }; } return best && best.s; }
   function storeVehicle(s) {
     const P = PL(), v = P && P.active;
@@ -754,7 +772,7 @@
     if (world.addMapIcon) world.addMapIcon(c.x, c.z, '⌂', 'Safe House 2');
     MGw = W(MGc.a, MGc.b);
     window.SafeHouse2 = { dbg: () => ({ npcGate, npcPed, holdGate, gateBlocked }), W, L, slots: SLOTS, pedGate: { a: PGc.a, b: PGc.b, w: PG_CLEAR }, doorPt: { a: DOORc.a, b: DOORc.b }, yard: YARD, live, state: S, anim, want, manual, center: c, gate: W(MGc.a, MGc.b - 6), door: W(DOORc.a, DOORc.b) };
-    setTimeout(spawnStored, 0); setTimeout(() => { try { spawnBikeRow(); } catch (e) { console.error("safehouse2 bikes", e); } }, 0);
+    setTimeout(spawnStored, 0); setTimeout(() => { try { spawnBikeRow(); } catch (e) { console.error("safehouse2 bikes", e); } }, 0); setTimeout(() => { try { spawnStreetCars(); } catch (e) { console.error("safehouse2 cars", e); } }, 0);
   });
 
   // ---------------------------------------------------------------- NPCs near the gates (traffic, carts, herds, walkers)

@@ -34,7 +34,7 @@ window.VehicleLights = (function () {
   }
   const add = (map, o) => new THREE.MeshBasicMaterial(Object.assign({ map, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, fog: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }, o));
   // lamp colour per model: amber-white halogen on older and utility models, whiter LED on newer ones
-  const LED = /^(crysta|innova|hector|scorpioN|fortuner|landCruiser|defender|gclass|tharRoxx|thar|swiftNew|berlinetta|muscle|wedge|coupe911|hayabusa|s1000rr|r1250gsa|r1300gsa|faired)$/;
+  const LED = /^(crysta|crysta2023|hilux|innova|hector|scorpioN|fortuner|landCruiser|defender|gclass|tharRoxx|thar|swiftNew|berlinetta|muscle|wedge|coupe911|hayabusa|s1000rr|r1250gsa|r1300gsa|faired)$/;
   const tintOf = ty => (LED.test(ty) ? 0xfff0dc : 0xffd29a);
   // where the lamps really are, in the vehicle frame, from their meshes: one mesh may hold both lamps, so vertices are
   // binned by side. Falls back to the box. Cached on the group.

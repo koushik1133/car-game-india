@@ -197,7 +197,7 @@
     if (!tc._snd) {
       let type = tc.model;
       const sk = tc.snd || (tc.g && tc.g.userData && (tc.g.userData.snd || tc.g.userData.sndKind));
-      const ut = tc.g && tc.g.userData && tc.g.userData.type, UT = { activa: 'scooter', starCity: 'bike', splendor: 'bike', scooter: 'scooter', classic: 'bullet', classic2: 'jawa', sport: 'ktm', cycle: 'cycle', mpv: 'innova', fortuner: 'fortuner' };
+      const ut = tc.g && tc.g.userData && tc.g.userData.type, UT = { activa: 'scooter', starCity: 'bike', splendor: 'bike', scooter: 'scooter', classic: 'bullet', classic2: 'jawa', sport: 'ktm', cycle: 'cycle', mpv: 'innova', fortuner: 'fortuner', hilux: 'fortuner', crysta2023: 'innova' };
       if (sk) type = sk;
       else if (ut && UT[ut]) type = UT[ut];
       else if (type === 'bike') { const r = Math.random(); type = r < 0.25 ? 'bullet' : r < 0.32 ? 'bullet500' : r < 0.55 ? 'scooter' : r < 0.64 ? 'ktm' : r < 0.68 ? 'jawa' : 'bike'; }
@@ -355,7 +355,7 @@
   // ------------------------------------------------------------------ engine start / stop (called by player.js)
   let muteUntil = 0;
   const TWO = /bike|bullet|scooter|ktm|jawa|splendor|sport|i4sport|boxer/;
-  const DIESEL = /safari|sumo|crysta|innova|fortuner|bolero|scorpio|suv|tractor|lorry|bus|truck|mpv/;
+  const DIESEL = /safari|sumo|crysta|innova|fortuner|hilux|bolero|scorpio|suv|tractor|lorry|bus|truck|mpv/;
   function kindOf(k) { return k || playerKind(); }
   function engineStart(k) {
     k = kindOf(k);

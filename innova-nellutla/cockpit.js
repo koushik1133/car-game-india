@@ -118,7 +118,7 @@ window.Cockpit = (function () {
   }
   // interior class per model: dash layout, trim colours, instrument type
   const CLS = {};
-  [['budget', 'alto hatch wagonR swift dzire innova mpv'], ['modern', 'swiftNew hector scorpioN tharRoxx crysta'], ['utility', 'bolero sumo scorpio safari thar suv ace'], ['luxury', 'fortuner fortunerBlack landCruiser defender gclass'], ['sports', 'berlinetta muscle wedge coupe911'],
+  [['budget', 'alto hatch wagonR swift dzire innova mpv'], ['modern', 'swiftNew hector scorpioN tharRoxx crysta crysta2023'], ['utility', 'bolero sumo scorpio safari thar suv ace'], ['luxury', 'fortuner fortunerBlack hilux landCruiser defender gclass'], ['sports', 'berlinetta muscle wedge coupe911'],
     ['commuter', 'bike splendor starCity cycle'], ['scoot', 'scooter activa'], ['cruiser', 'classic classic2'], ['super', 'sport faired hayabusa s1000rr'], ['adv', 'r1250gsa r1300gsa']].forEach(([c, l]) => l.split(' ').forEach(k => { CLS[k] = c; }));
   const typeKey = v => (v.g && v.g.userData && v.g.userData.type) || v._ty || v.model;
   const classOf = v => CLS[typeKey(v)] || 'budget';

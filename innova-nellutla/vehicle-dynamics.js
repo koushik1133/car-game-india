@@ -23,6 +23,7 @@ window.VehicleDynamics = (function () {
     bolero: { L: 2.68, R: 5.8, T: 1.48, us: 4.5, grip: 0.72, lock: 0.9, h: 0.85, src: 'est' }, scorpio: { L: 2.68, R: 5.4, T: 1.5, us: 4.2, grip: 0.74, lock: 0.85, h: 0.85, src: 'pub' }, scorpioN: { L: 2.75, R: 5.5, T: 1.6, us: 3.4, grip: 0.84, lock: 0.8, h: 0.75, src: 'pub' },
     safari: { L: 2.65, R: 5.4, T: 1.56, us: 4.4, grip: 0.74, lock: 0.9, h: 0.86, src: 'pub' }, sumo: { L: 2.425, R: 5.0, T: 1.42, us: 4.8, grip: 0.68, lock: 0.9, h: 0.9, src: 'pub' },
     suv: { L: 2.7, R: 5.6, T: 1.52, us: 4, grip: 0.76, lock: 0.85, h: 0.8, src: 'est' }, fortuner: { L: 2.745, R: 5.8, T: 1.54, us: 3.8, grip: 0.8, lock: 0.85, h: 0.8, src: 'pub' },
+    hilux: { L: 3.085, R: 6.4, T: 1.54, us: 3.8, grip: 0.8, lock: 0.85, h: 0.8, src: 'pub' }, crysta2023: { L: 2.75, R: 5.4, T: 1.54, us: 3.0, grip: 0.86, lock: 0.75, h: 0.72, src: 'pub' },
     ace: { L: 2.1, R: 4.3, T: 1.3, us: 3.8, grip: 0.66, lock: 0.8, h: 0.75, src: 'est' }, auto: { L: 2.0, R: 3.0, T: 1.15, us: 3, grip: 0.55, lock: 0.45, h: 0.6, src: 'est' },
     tractor: { L: 1.95, R: 3.2, T: 1.5, us: 3, grip: 0.55, lock: 1.1, h: 0.9, src: 'est' }, lorry: { L: 4.8, R: 8.0, T: 1.85, us: 6, grip: 0.5, lock: 1.4, h: 1.3, src: 'est' }, bus: { L: 5.5, R: 10, T: 1.9, us: 6, grip: 0.5, lock: 1.4, h: 1.2, src: 'est' },
     bike: { L: 1.27, R: 2.1, T: 0, us: 0.8, grip: 0.85, lock: 0.3, h: 0.55, src: 'est' }, splendor: { L: 1.26, R: 2.0, T: 0, us: 0.8, grip: 0.85, lock: 0.3, h: 0.55, src: 'est' }, starCity: { L: 1.26, R: 2.0, T: 0, us: 0.8, grip: 0.85, lock: 0.3, h: 0.55, src: 'est' },
@@ -43,8 +44,8 @@ window.VehicleDynamics = (function () {
   // Figures are game tuning, not published data. lean: max deg; leanW: servo rad/s; leanRate: rad/s cap
   const tune = (keys, o) => keys.forEach(k => Object.assign(S[k], o));
   tune(['safari', 'bolero', 'scorpio'], { us: 2.8, grip: 0.82, lock: 0.62 }); tune(['sumo'], { us: 3, grip: 0.8, lock: 0.65 });
-  tune(['suv', 'tharRoxx'], { us: 2.8, grip: 0.82, lock: 0.6 }); tune(['fortuner', 'landCruiser', 'scorpioN'], { us: 2.6, grip: 0.86, lock: 0.58 });
-  tune(['crysta', 'mpv', 'innova'], { us: 2.4, grip: 0.88, lock: 0.55 }); tune(['swift', 'swiftNew', 'dzire', 'hatch', 'alto', 'wagonR'], { us: 1.9, lock: 0.46 });
+  tune(['suv', 'tharRoxx'], { us: 2.8, grip: 0.82, lock: 0.6 }); tune(['fortuner', 'hilux', 'landCruiser', 'scorpioN'], { us: 2.6, grip: 0.86, lock: 0.58 });
+  tune(['crysta', 'crysta2023', 'mpv', 'innova'], { us: 2.4, grip: 0.88, lock: 0.55 }); tune(['swift', 'swiftNew', 'dzire', 'hatch', 'alto', 'wagonR'], { us: 1.9, lock: 0.46 });
   tune(['ace'], { us: 3, grip: 0.74, lock: 0.65 });
   tune(['bike', 'splendor', 'starCity'], { lean: 36, leanW: 7, leanRate: 1.25 }); tune(['scooter', 'activa'], { lean: 33, leanW: 8, leanRate: 1.3 });
   tune(['classic', 'classic2'], { lean: 34, leanW: 5.5, leanRate: 1.05 }); tune(['sport'], { lean: 42, leanW: 7.5, leanRate: 1.6 }); tune(['faired'], { lean: 45, leanW: 8, leanRate: 1.7 });
@@ -235,7 +236,7 @@ window.VehicleDynamics = (function () {
     PW[k][19] = ((q.ps && q.nm) ? 'v' : 'e') + 'e' + ((q.t100 || q.vmax) ? 'v' : 'e'); PW[k].kgOK = q.kg !== undefined; }
   PW.safari[7] = D6;                                  // source: 6-speed
   for (const k in PW) if (!SRC[k]) { PW[k][19] = 'eee'; PW[k].kgOK = false; }
-  const ALIAS = { mpv: 'innova', fortunerBlack: 'fortuner' };
+  const ALIAS = { mpv: 'innova', fortunerBlack: 'fortuner', hilux: 'fortuner', crysta2023: 'crysta' };   // hilux: same 2.8 diesel and gearbox
   const srcName = { v: 'sourced online', e: 'ESTIMATED' };
   const PS_KW = 0.7355, RHO = 1.2, kmh = 3.6;
   function ptSpec(type) {

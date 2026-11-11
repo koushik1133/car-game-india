@@ -21,6 +21,8 @@ const Player = (function () {
     mpv:         { name: 'MPV',           top: 165, accel: 4.0, brake: 9,   rev: 4,   turn: 2.0, steerRate: 5.5, turnFade: 18, offroad: 0.3, hw: 0.92, gears: 6 },
     // Fortuner-style 4x4: 2.8 L diesel (500 Nm), ~2.2 t, top ~180, low-range grip off the tarmac; sounds as 'suv' (diesel)
     fortuner:    { name: 'FORTUNER 4X4',  top: 180, accel: 5.0, brake: 8, rev: 4.5, turn: 1.85, steerRate: 5,  turnFade: 19, offroad: 0.8, hw: 0.95, gears: 6 },
+    // double-cab pickup on the Fortuner's ladder frame and 2.8 diesel: longer wheelbase, light tail, good off the tarmac
+    hilux:       { name: 'HILUX 4X4',     top: 175, accel: 4.9, brake: 8, rev: 4.5, turn: 1.75, steerRate: 4.8, turnFade: 19, offroad: 0.85, hw: 0.95, gears: 6 },
     // Indian car range (traffic-models.js): light petrol hatches, diesel utilities, mini truck, faired 155 cc sport bike
     swift:       { name: 'SWIFT',         top: 155, accel: 4.4, brake: 9,   rev: 4,   turn: 2.2, steerRate: 6.5, turnFade: 18, offroad: 0.1, hw: 0.85, gears: 5 },
     dzire:       { name: 'DZIRE',         top: 155, accel: 4.3, brake: 9,   rev: 4,   turn: 2.1, steerRate: 6,  turnFade: 18, offroad: 0.1,  hw: 0.87, gears: 5 },
@@ -31,6 +33,7 @@ const Player = (function () {
     faired:      { name: 'SPORT 155',     top: 155, accel: 8.8, brake: 11.5, rev: 2.5, turn: 2.7, steerRate: 8.5, turnFade: 19, offroad: 0.25, hw: 0.4, gears: 6, lean: true },
     // real Crysta copy parked at the safe house (2.4 D, ~2 t, 0-100 ~13 s, ~170 km/h)
     crysta:      { name: 'INNOVA CRYSTA', top: 170, accel: 4.3, brake: 8.5, rev: 4.5, turn: 1.9, steerRate: 5.5, turnFade: 18, offroad: 0.4, hw: 0.95, gears: 6 },
+    crysta2023:  { name: 'INNOVA CRYSTA 2023', top: 170, accel: 4.3, brake: 8.5, rev: 4.5, turn: 1.9, steerRate: 5.5, turnFade: 18, offroad: 0.4, hw: 0.95, gears: 6 },   // facelift shell, same running gear
     // sports cars (accel ~ 2 x the real 0-100 average, the scale the rest of this table uses): light, low and grippy
     berlinetta:  { name: 'BERLINETTA V8', top: 320, accel: 19,  brake: 12,  rev: 4.5, turn: 2.6, steerRate: 7.5, turnFade: 30, offroad: 0.05, hw: 1.0, gears: 7 },   // 0-100 2.9 s, 1.4 t
     muscle:      { name: 'MUSCLE V8',     top: 250, accel: 12.9, brake: 10.5, rev: 4.5, turn: 2.2, steerRate: 6.5, turnFade: 26, offroad: 0.1, hw: 0.97, gears: 6 },   // 0-100 4.3 s, 1.75 t
@@ -80,7 +83,8 @@ const Player = (function () {
     swiftNew: { rollK: 0.008, pitchK: 0.005, maxSteer: 0.6, w: 10.5 }, activa: { rollK: 0, pitchK: 0.004, maxSteer: 0.5, w: 11 }, starCity: { rollK: 0, pitchK: 0.003, maxSteer: 0.45, w: 10 },
     defender: { rollK: 0.012, pitchK: 0.005, maxSteer: 0.55, w: 8.5 }, gclass: { rollK: 0.012, pitchK: 0.006, maxSteer: 0.55, w: 8.5 },
     thar: { rollK: 0.016, pitchK: 0.007, maxSteer: 0.58, w: 8 }, hector: { rollK: 0.011, pitchK: 0.005, maxSteer: 0.55, w: 9 },
-    crysta: { rollK: 0.01, pitchK: 0.005, maxSteer: 0.55, w: 9 },
+    crysta: { rollK: 0.01, pitchK: 0.005, maxSteer: 0.55, w: 9 }, crysta2023: { rollK: 0.01, pitchK: 0.005, maxSteer: 0.55, w: 9 },
+    hilux: { rollK: 0.013, pitchK: 0.0065, maxSteer: 0.55, w: 8 },   // leaf-sprung pickup: Fortuner roll, a little more pitch
     wagonR: { rollK: 0.011, pitchK: 0.006, maxSteer: 0.6, w: 9.5 }, innova: { rollK: 0.011, pitchK: 0.005, maxSteer: 0.55, w: 8.5 }, landCruiser: { rollK: 0.011, pitchK: 0.005, maxSteer: 0.55, w: 8.5 }, tharRoxx: { rollK: 0.015, pitchK: 0.007, maxSteer: 0.55, w: 8 },
     hayabusa: { rollK: 0, pitchK: 0.004, maxSteer: 0.36, w: 12 }, s1000rr: { rollK: 0, pitchK: 0.004, maxSteer: 0.36, w: 13 }, r1250gsa: { rollK: 0, pitchK: 0.004, maxSteer: 0.42, w: 9 }, r1300gsa: { rollK: 0, pitchK: 0.004, maxSteer: 0.42, w: 9 },
     berlinetta: { rollK: 0.003, pitchK: 0.003, maxSteer: 0.55, w: 14 }, muscle: { rollK: 0.006, pitchK: 0.004, maxSteer: 0.55, w: 11 },
@@ -91,12 +95,13 @@ const Player = (function () {
   const feelOf = v => FEEL[v._ty || v.model] || FEEL.hatch;
   // engine-audio.js voices for the player's two-wheeler (it reads Player.active._snd.type for model 'bike')
   const SND = { activa: 'scooter', starCity: 'bike', splendor: 'bike', scooter: 'scooter', classic: 'bullet', classic2: 'jawa', sport: 'ktm', faired: 'sportbike', hayabusa: 'i4sport', s1000rr: 'i4sport', r1250gsa: 'boxer', r1300gsa: 'boxer',
-    berlinetta: 'v8flat', muscle: 'v8', wedge: 'v10', coupe911: 'flat6', thar: 'scorpioN', hector: 'innova', gclass: 'v8' };
+    berlinetta: 'v8flat', muscle: 'v8', wedge: 'v10', coupe911: 'flat6', thar: 'scorpioN', hector: 'innova', gclass: 'v8', hilux: 'fortuner', crysta2023: 'innova' };
 
   // where the driver sits in each TrafficModels vehicle (local x, seat height, local z, HumanModel.sit pose);
   // the same numbers traffic-models.js uses for its AI drivers
   const SEATS = {
     bike: [0, 0.9, -0.28, 'bike'], auto: [0, 0.9, 0.08, 'car'], hatch: [0.36, 0.62, -0.25, 'car'], suv: [0.38, 0.86, -0.2, 'car'],
+    hilux: [0.42, 0.95, 0.15, 'car'], crysta2023: [0.4, 0.86, 0.0, 'car'],
     tractor: [0, 1.42, -0.5, 'car'], lorry: [-0.55, 1.5, 3.0, 'car'], bus: [-0.7, 1.3, 4.3, 'car'], bullockCart: [0, 1.1, 0.45, 'bench'],
   };
   const CAM_NAMES = ['CHASE', 'CLOSE CHASE', 'COCKPIT', 'HOOD', 'TOP-DOWN'];
@@ -477,7 +482,7 @@ const Player = (function () {
   const kindOf = v => { if (!v) return 'foot'; if (v.crysta || v === 'crysta') return 'crysta'; const t = v._ty || typeOf(v) || v.model || 'car'; return SND[t] || t; };
   function engineOff(v) { try { window.SFX && SFX.engineOff && SFX.engineOff(kindOf(v)); } catch (e) {} }
   function engineStart(v) { try { window.SFX && SFX.engineStart && SFX.engineStart(kindOf(v)); } catch (e) {} }
-  const NICE = { defender: 'Overlander 110', gclass: 'G Wagon V8', thar: 'Mahindra Thar', hector: 'MG Hector', safari: 'Tata Safari', sumo: 'Tata Sumo Gold', scorpioN: 'Mahindra Scorpio-N', swiftNew: 'Swift (2024)', activa: 'Honda Activa', starCity: 'TVS Star City+', fortuner: 'Fortuner 4x4', mpv: 'Crysta-style MPV', suv: 'SUV', hatch: 'Hatchback', swift: 'Swift (2010)', dzire: 'Dzire', alto: 'Alto 800',
+  const NICE = { defender: 'Overlander 110', gclass: 'G Wagon V8', thar: 'Mahindra Thar', hector: 'MG Hector', safari: 'Tata Safari', sumo: 'Tata Sumo Gold', scorpioN: 'Mahindra Scorpio-N', swiftNew: 'Swift (2024)', activa: 'Honda Activa', starCity: 'TVS Star City+', fortuner: 'Fortuner 4x4', hilux: 'Hilux 4x4 Double Cab', crysta2023: 'Innova Crysta 2023', mpv: 'Crysta-style MPV', suv: 'SUV', hatch: 'Hatchback', swift: 'Swift (2010)', dzire: 'Dzire', alto: 'Alto 800',
     bolero: 'Bolero', scorpio: 'Scorpio Classic', ace: 'Tata Ace Mini Truck', tractor: 'Tractor', lorry: 'Lorry', bus: 'RTC Bus', auto: 'Auto Rickshaw',
     bike: 'Motorbike', splendor: 'Splendor', scooter: 'Scooter', classic: 'Classic 350', classic2: 'Jawa Classic', sport: 'Sport / Adventure Bike',
     faired: 'Faired Sport 155', cycle: 'Bicycle', bullockCart: 'Bullock Cart' };

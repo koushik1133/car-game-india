@@ -56,7 +56,7 @@ const EngineProfiles = (function () {
   P.safari = Object.assign({}, P.scorpio, { idle: 750, pulseMs: 12, muff: 84, rough: .5, pipe: 3.7 });                       // 2.2 DICOR
   P.sumo = Object.assign({}, P.bolero, { ang: [0, .25, .5, .75], imb: [1, .88, 1.08, .93], idle: 700, red: 3600, pulseMs: 15, bright: 500, rough: .65, clatter: 1, turbo: 0 });   // 3.0 CR4, truck-derived
   P.scorpioN = Object.assign({}, P.scorpio, { idle: 760, red: 4400, pulseMs: 9, bright: 700, rough: .3, clatter: .45 });     // 2.2 mHawk, refined
-  const ALIAS = { defender: 'fortuner', thar: 'scorpioN', hector: 'innova', safari: 'safari', sumo: 'sumo', scorpioN: 'scorpioN', crysta: 'innova', mpv: 'innova', innova: 'innova', fortuner: 'fortuner', suv: 'bolero', bolero: 'bolero', scorpio: 'scorpio',
+  const ALIAS = { defender: 'fortuner', thar: 'scorpioN', hector: 'innova', safari: 'safari', sumo: 'sumo', scorpioN: 'scorpioN', crysta: 'innova', crysta2023: 'innova', mpv: 'innova', innova: 'innova', fortuner: 'fortuner', hilux: 'fortuner', suv: 'bolero', bolero: 'bolero', scorpio: 'scorpio',
     hatch: 'swift', swift: 'swift', car: 'swift', tractor: 'tractor', lorry: 'lorry', truck: 'lorry', bus: 'bus', auto: 'auto',
     bike: 'splendor', splendor: 'splendor', bullet: 'bullet', classic: 'bullet', classic2: 'bullet500', bullet500: 'bullet500',
     scooter: 'scooter', ktm: 'ktm', sport: 'ktm', sportbike: 'sportbike', i4sport: 'i4sport', boxer: 'boxer', jawa: 'jawa', v8: 'v8', muscle: 'v8', v8flat: 'v8flat', ferrari: 'v8flat', v10: 'v10', lambo: 'v10', flat6: 'flat6', porsche: 'flat6', cycle: null, bullockCart: null, cart: null, none: null };

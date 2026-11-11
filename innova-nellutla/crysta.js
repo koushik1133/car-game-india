@@ -333,16 +333,6 @@ function buildToyotaInnovaCrysta() {
 
   // 1-8. Sculpted exterior shell (crysta-body.js)
   buildCrystaShell(chassisMesh, { paint: bodyPaintMat, pianoBlack: pianoBlackMat, chrome: chromeMat, glass: darkGlassMat }, createLicensePlateTexture());
-  // The rounded body from the shared car builder replaces that older slab shell: the old parts leave the car (their
-  // handles stay alive so nothing that animates them breaks) and the new shell brings its own lamps and opening parts.
-  if (typeof TrafficModels !== 'undefined' && TrafficModels.crystaShell) {
-    try {
-      const v = TrafficModels.crystaShell({ paint: bodyPaintMat, bare: true, plate: 'TS 08 HN 1111' });
-      chassisMesh.children.slice().forEach(c => { if (!nosFlameJets.includes(c)) chassisMesh.remove(c); });
-      v.g.name = 'crystaShell2'; chassisMesh.add(v.g); chassisMesh.userData.shell2 = v;
-      frontHeadlights = v.head.slice(); rearBrakeLights = v.tail.slice();
-    } catch (e) { console.error('crysta shell', e); }
-  }
 
   // 9. RHD cabin interior (crysta-detail.js)
   buildCrystaInterior(chassisMesh);
@@ -385,7 +375,6 @@ function mergeCrystaStatic(chassis) {
     ...Object.values(doorMeshes).map(d => d.group), ...Object.values(mirrorMeshes).map(d => d.group)].filter(Boolean);
   const lamps = [...rearBrakeLights, ...frontHeadlights];
   const keep = new Set([...handles, ...lamps]);
-  if (chassis.userData.shell2) keep.add(chassis.userData.shell2.g);   // already merged by its own builder; its doors and lamps must stay separate
   // many parts build their own identical material: share them so the merge yields fewer buckets
   const canon = new Map(), hex = c => (c && c.isColor ? c.getHexString() : '');
   chassis.traverse(o => {
@@ -427,13 +416,6 @@ function toggleSunroof() {
   playMechanicalClick();
 }
 
-// which of the shell's doors is FL / FR / RL / RR: front or rear by where the hinge sits, left or right by its side
-function crystaDoorMap(U) {
-  if (U._dmap) return U._dmap;
-  const m = {}, ds = (U.doors || []).slice().sort((a, b) => b.mesh.position.z - a.mesh.position.z);
-  ds.forEach((q, i) => { m[(i < ds.length / 2 ? 'F' : 'R') + (q.side < 0 ? 'L' : 'R')] = q; });
-  return U._dmap = m;
-}
 function toggleMirrors() {
   mirrorState = mirrorState ? 0 : 1;
   playMechanicalClick();
@@ -459,18 +441,6 @@ function updateCarAnimations(dt) {
     }
   }
 
-  // the cabin cannot be seen through the rounded shell's dark windows, so it is only drawn from the driver's seat
-  { const b = playerCarGroup && playerCarGroup.userData.body;
-    if (b && b.userData.shell2) { const seated = !!(window.Cockpit && Cockpit.seated);
-      if (b.userData._cabin !== seated) { b.userData._cabin = seated; for (const c of b.children) if (c !== b.userData.shell2.g && !nosFlameJets.includes(c)) c.visible = seated; } } }
-  // the rounded shell's own doors, bonnet and tailgate follow the same switches
-  { const b = playerCarGroup && playerCarGroup.userData.body, v2 = b && b.userData.shell2, U = v2 && v2.userData;
-    if (U && typeof TrafficModels !== 'undefined') {
-      const ease = (q, to, k) => { if (!q) return; q._ct = (q._ct || 0) + (to - (q._ct || 0)) * Math.min(1, dt * k); TrafficModels.setPart(q, q._ct); };
-      const DMAP = crystaDoorMap(U);
-      for (const id in doorStates) ease(DMAP[id], doorStates[id], 8);
-      ease(U.boot, trunkState, 6); ease(U.hood, hoodState, 6); ease(U.sunroof, sunroofState, 5);
-    } }
   if (trunkMesh) {
     const targetTrunk = trunkState * 1.1;
     trunkMesh.rotation.x += (targetTrunk - trunkMesh.rotation.x) * dt * 6.0;
