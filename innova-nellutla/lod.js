@@ -10,6 +10,7 @@
 // that own .visible (parked / GLB swap / hide-on-board); the shadow pass honours layers too.
 (function () {
   const TIER = {
+    efficient: { veh: 200, ped: 70, near: 24, pedNear: 18, shadow: 0 },
     low:    { veh: 260, ped: 90,  near: 30, pedNear: 22, shadow: 40 },
     medium: { veh: 350, ped: 140, near: 40, pedNear: 30, shadow: 60 },
     high:   { veh: 500, ped: 220, near: 55, pedNear: 40, shadow: 60 },
@@ -231,7 +232,7 @@
     for (const q of cells.values()) if (q.dirty) { rebuildCell(q, G.scene); break; }          // at most one cell per frame
     acc += dt; if (acc < 0.2) return; acc = 0; builds = 0; rests = 0;
     const t = performance.now();
-    const T = TIER[window.Quality && Quality.tier] || TIER.medium;
+    const T = TIER[window.Quality && Quality.level] || TIER.medium;
     G.camera.getWorldPosition(cp);
     const P = typeof Player !== 'undefined' ? Player : null, mine = P && P.active && P.active.g, body = P && P.body && P.body.group;
     for (const q of cells.values()) { for (const c of q.vs) if (!c.parent || !c.visible) { leaveCell(c); c.userData._lod = undefined; } if (q.grp) { const on = Math.hypot(q.x - cp.x, q.z - cp.z) < T.shadow + 45; q.grp.children.forEach(m => { m.castShadow = on && m.userData._cs; }); } }

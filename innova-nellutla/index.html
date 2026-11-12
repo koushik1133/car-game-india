@@ -10,7 +10,7 @@
 <script>/* ?newgame=1: wipe this browser's saved progress and start clean */ if (/[?&]newgame=1/.test(location.search)) { try { Object.keys(localStorage).filter(k => /^(nellutla|sparkv)/i.test(k)).forEach(k => localStorage.removeItem(k)); sessionStorage.clear(); } catch (e) {} history.replaceState(null, '', location.pathname); }</script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700;800&display=swap">
-<link rel="stylesheet" href="ui.css?v=6">
+<link rel="stylesheet" href="ui.css?v=7">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="lgBg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b2c30"/><stop offset="1" stop-color="#151518"/></linearGradient><filter id="lgGlow" x="-10%" y="-20%" width="120%" height="140%"><feGaussianBlur stdDeviation="5"/></filter>
@@ -26,9 +26,11 @@ addEventListener('load',function(){requestAnimationFrame(done)});})();</script>
 <div id="start">
   <span style="color:#f4f8f2;display:block"><svg class="logo" viewBox="-14 -14 450 124" role="img" aria-label="SparkV"><use href="#sparkLogo"/></svg></span>
   <div class="plate">TS 08 HN 1111</div>
-  <p>Drive a real Telangana village. Cars, bikes, autos and tractors, on 1,600 mapped houses, the highway, the lanes and the river bed.</p>
+  <p>Drive a real Telangana village. Cars, bikes, autos and tractors, on 1,600 mapped houses, the lanes and the river bed, then out through Jangaon and down the Warangal highway to Secunderabad.</p>
+  <ul class="chips" aria-label="What is in the game"><li><b>Nellutla</b> village</li><li><b>Jangaon</b> town</li><li>Highway to <b>Secunderabad</b></li><li>Day, night and weather</li><li>Multiplayer</li></ul>
   <label>Your name in multiplayer<input id="pname" maxlength="20" autocomplete="nickname" enterkeyhint="go"></label>
-  <button id="go">Start driving</button>
+  <button id="go">Start driving <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+  <div id="startGfx" aria-live="polite"></div>
 </div>
 <div id="uiLeft"><div id="mission" class="panel" style="display:none"><div class="t" id="mTitle"></div><div class="d" id="mTask"></div><span id="where"></span></div></div>
 <div id="uiRight"></div>
@@ -42,7 +44,7 @@ addEventListener('load',function(){requestAnimationFrame(done)});})();</script>
   <button class="x" data-close aria-label="Close settings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   <h2>Settings</h2>
   <div class="sf">Graphics quality</div>
-  <div class="seg" id="qSeg"><button data-q="auto">Auto</button><button data-q="low">Low</button><button data-q="medium">Medium</button><button data-q="high">High</button></div>
+  <div class="seg" id="qSeg"><button data-q="auto">Auto</button><button data-q="efficient">Efficient</button><button data-q="low">Low</button><button data-q="medium">Medium</button><button data-q="high">High</button></div>
   <div class="muted" id="qInfo"></div>
   <label class="ck"><input type="checkbox" id="rearHudOpt"> Rear-view strip in chase view</label>
   <label class="ck"><input type="checkbox" id="batterySaver"> Battery saver (30 fps)</label>
@@ -96,7 +98,7 @@ addEventListener('load',function(){requestAnimationFrame(done)});})();</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>window.NELLUTLA_EXCLUDE = window.NELLUTLA_EXCLUDE || [];   // [{x, z, r}]: buildings whose centre is inside are skipped (custom-modelled by a feature module)</script>
 <script src="../nellutla-map/map-data.js?v=1794300001"></script>
-<script src="../nellutla-map/nellutla-world.js?v=1795600001"></script>
+<script src="../nellutla-map/nellutla-world.js?v=1795600002"></script>
 <script src="../nellutla-map/jangaon-lite.js?v=1"></script>
 <script src="../nellutla-map/hyd-lite.js?v=2"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
@@ -105,7 +107,7 @@ addEventListener('load',function(){requestAnimationFrame(done)});})();</script>
 <script src="crysta-detail.js?v=1795200004"></script>
 <script src="crysta.js?v=1794600001"></script>
 <script src="device.js?v=1793665390"></script>
-<script src="quality.js?v=1794100001"></script>
+<script src="quality.js?v=1794100002"></script>
 <script src="ambient.js?v=1794500002"></script>
 <script src="engine-audio.js?v=1794600006"></script>
 <script src="vehicle-dynamics.js?v=1794600006"></script>
@@ -115,7 +117,7 @@ addEventListener('load',function(){requestAnimationFrame(done)});})();</script>
 <script src="sculpt-people.js?v=1794500004"></script>
 <script src="people-models.js?v=1794500001"></script>
 <script src="assets.js?v=1793665390"></script>
-<script src="cockpit.js?v=1795400005"></script>
+<script src="cockpit.js?v=1795400006"></script>
 <script src="player.js?v=1795400001"></script>
 <!-- Feature modules. Each registers itself on GameHooks (init/update/key) and owns its own file. -->
 <script>window.GameHooks = { init: [], update: [], key: [] };</script>
@@ -124,11 +126,11 @@ addEventListener('load',function(){requestAnimationFrame(done)});})();</script>
 <script src="nav.js?v=8"></script>
 <script src="sparkplay.js?v=2"></script>
 <script src="economy.js?v=1794800001"></script>
-<script src="parked.js?v=1795500001"></script>
+<script src="parked.js?v=1795500002"></script>
 <script src="showroom.js?v=1794900001"></script>
 <script src="haul.js?v=1795200002"></script>
 <script src="knock.js?v=1795500001"></script>
-<script src="farm.js?v=1795100001"></script>
+<script src="farm.js?v=1795100002"></script>
 <script src="jobs.js?v=1795100001"></script>
 <script src="character-creator.js?v=1793665390"></script>
 <script src="properties.js?v=1795200002"></script>
@@ -141,10 +143,10 @@ addEventListener('load',function(){requestAnimationFrame(done)});})();</script>
 <script src="village-life.js?v=1795500001"></script>
 <script src="sfx.js?v=1794500001"></script>
 <script src="mud.js?v=1794000103"></script>
-<script src="weather.js?v=1796000001"></script>
+<script src="weather.js?v=1796000002"></script>
 <script src="touch-controls.js?v=1793665390"></script>
 <script src="auto-rides.js?v=1793665390"></script>
-<script src="lod.js?v=1795300003"></script>
+<script src="lod.js?v=1795300004"></script>
 <script src="perf.js?v=1795500002"></script>
 <script src="vehicle-lights.js?v=1795400004"></script>
 <script src="../nellutla-map/jangaon-life.js?v=3"></script>
@@ -157,6 +159,7 @@ addEventListener('load',function(){requestAnimationFrame(done)});})();</script>
 // ---------------------------------------------------------------- scene
 // antialias and the pixel-ratio cap come from the performance tier (quality.js)
 renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gl'), antialias: Quality.initial.antialias, powerPreference: 'high-performance' });
+renderer.debug.checkShaderErrors = false;   // the check stalls the frame each time a new material first appears
 renderer.setPixelRatio(Quality.initial.pixelRatio);
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
@@ -328,7 +331,9 @@ const trafficRouteLen = r => r.p.reduce((sum, p, i) => i ? sum + Math.hypot(p[0]
   for (const [kind, n, types, spd] of PLAN) {
     const routes = on(types); if (!routes.length) continue;
     TRAFFIC_ROUTES[kind] = { routes, spd };
-    for (let i = 0; i < n; i++) {
+    // population density by graphics tier (quality.js): Efficient spawns half the plan, Low 70 %, at least one of each kind
+    const count = Math.max(1, Math.round(n * ((window.Quality && Quality.trafficFrac) || 1)));
+    for (let i = 0; i < count; i++) {
       const o = routes[Math.floor(Math.random() * routes.length)];
       // each category draws from every TrafficModels car of its class ('bike' is already a random two-wheeler mix);
       // model stays the category (AI tuning, audio), v.type the specific car (player.js PARAMS when you take it)
@@ -504,7 +509,7 @@ function updateTraffic(dt) {
       if (lim < want) { want = gap < stop ? 0 : lim; }
       if (gap < minGap) { minGap = gap; leader = ref; blockedBy = kind; }
     };
-    for (const o of traffic) if (o !== t && o.box && o.mode !== 'respawn') consider(o.box, o.cur * (o.mode === 'reverse' ? -1 : 1), 'traffic', o);
+    for (const o of traffic) if (o !== t && o.box && o.mode !== 'respawn' && Math.abs(o.box.x - B.x) < 70 && Math.abs(o.box.z - B.z) < 70) consider(o.box, o.cur * (o.mode === 'reverse' ? -1 : 1), 'traffic', o);
     if (pl) consider(pl.box, pl.v, pl.solid ? 'player' : 'soft', 'player');
     if (!farAway) {
       for (const a of animals) { if (a && typeof a.x === 'number' && Math.abs(a.x - B.x) + Math.abs(a.z - B.z) < 40) { const r = (a.sp && a.sp.rig ? a.sp.rig.r : 0.6) * (a.scale || 1); consider(trafficOBB(a.x, a.z, 0, r * 2, r * 2), 0, 'soft', 'animal'); } }
@@ -1015,9 +1020,11 @@ function renderSettings() {
   let cm = 'auto'; try { cm = localStorage.getItem('nellutla.controls') || 'auto'; } catch (e) {}
   setEl.querySelectorAll('#ctrlSeg button').forEach(b => b.classList.toggle('on', b.dataset.c === cm));
   document.getElementById('devInfo').textContent = `· detected ${Device.type}, ${Device.touchUI ? 'touch' : 'keyboard'} controls`;
-  const a = Quality.applied;
-  document.getElementById('qInfo').innerHTML = `Now: <b>${Quality.TIERS[Quality.tier].name}</b>${Quality.mode === 'auto' ? ' (auto, detected ' + Quality.TIERS[Quality.detected].name + ')' : ''} · ${Quality.frameMs ? Quality.frameMs.toFixed(1) + ' ms/frame' : ''}<br>`
-    + `pixel ratio ${a.pixelRatio} · shadows ${a.shadows ? a.shadowSize : 'off'} · view ${a.cameraFar} m · villagers ${a.villagers}<br>Auto drops a tier if frames stay above 33 ms for 3 s.`;
+  const a = Quality.applied, R = Quality.res, hw = Quality.hw, T = Quality.TIERS;
+  document.getElementById('qInfo').innerHTML = `Now: <b>${T[Quality.level].name}</b>${Quality.mode === 'auto' ? ' (auto)' : ''} · ${Quality.frameMs ? Quality.frameMs.toFixed(1) + ' ms/frame' : ''}<br>`
+    + `Detected: ${hw.gpuName}${hw.mem ? ', ' + hw.mem + ' GB' : ''}${hw.cores ? ', ' + hw.cores + ' cores' : ''} → ${T[Quality.detected].name}<br>`
+    + `render scale ${R.scale.toFixed(2)}${R.scale < R.ceil ? ' (lowered from ' + R.ceil.toFixed(2) + ' to keep up)' : ''} · shadows ${a.shadows ? a.shadowSize : 'off'} · view ${a.cameraFar} m · villagers ${a.villagers}<br>`
+    + `Auto lowers the render scale first, then a tier, if frames stay slow.`;
 }
 document.getElementById('btnHelp').addEventListener('click', e => { e.stopPropagation(); toggleHelp(); e.currentTarget.blur(); });
 document.getElementById('btnSettings').addEventListener('click', e => { e.stopPropagation(); toggleSettings(); e.currentTarget.blur(); });
@@ -1085,6 +1092,8 @@ function updateHUD(dt) {
 // ---------------------------------------------------------------- loop
 try { document.getElementById('pname').value = MP.myName(); } catch (e) {}   // a chosen name, or this tab's random default
 document.getElementById('pname').addEventListener('keydown', e => e.stopPropagation());
+// start card: say which graphics level this machine was given (Settings changes it)
+try { const T = Quality.TIERS[Quality.level], hw = Quality.hw; document.getElementById('startGfx').innerHTML = 'Graphics: <b>' + T.name + '</b>' + (Quality.mode === 'auto' ? ' (auto' + (hw && hw.gpuName && hw.gpuName !== 'unknown GPU' ? ', ' + hw.gpuName : '') + ')' : '') + ' · change it in Settings'; } catch (e) {}
 document.getElementById('go').onclick = () => {
   const nm = document.getElementById('pname').value.trim(); if (nm && nm !== MP.myName()) MP.setName(nm);   // only an edited name is saved for future tabs
   MP.connect();
@@ -1093,13 +1102,15 @@ document.getElementById('go').onclick = () => {
   try { if (audioCtx && !engineSound) engineSound = EngineSound(audioCtx); } catch (e) { console.warn('engine sound', e); }
   // the legacy two-oscillator diesel + turbo whistle are muted every frame (EngineSound replaced them): stop them so they stop rendering
   try { if (engineSound) [dieselOsc1, dieselOsc2, turboOsc].forEach(o => { if (o && !o._stopped) { o.stop(); o._stopped = true; } }); } catch (e) {}
-  document.getElementById('start').style.display = 'none';
+  startBlend = { p: camera.position.clone(), q: camera.quaternion.clone(), t: 0 };   // the drone view swoops down behind the car (loop)
+  { const st = document.getElementById('start'); st.classList.add('leaving'); setTimeout(() => { st.style.display = 'none'; }, 560); }
   ['mission', 'dash', 'radar'].forEach(id => document.getElementById(id).style.display = '');
   document.body.classList.add('playing');
   setTimeout(() => { const r = document.getElementById('rotateHint'); if (r) r.classList.add('gone'); }, 6000);
   document.activeElement && document.activeElement.blur && document.activeElement.blur();
   respawnCar();
   isPlaying = true;
+  Quality.settle(5);
 };
 respawnCar(); setMission();
 // feature modules get the shared context once the world, car and traffic exist
@@ -1107,11 +1118,11 @@ const GAME = { scene, world, camera, renderer, traffic, get carPos() { return ca
   get cash() { return cash; }, set cash(v) { if (typeof v === 'number' && isFinite(v)) cash = Math.round(v); }, get playerMode() { return Player.mode; } };
 window.GAME = GAME;
 GameHooks.init.forEach(f => { try { f(GAME); } catch (e) { console.error('feature init failed', e); } });
-let lastFrameAt = 0, frameNo = 0, lastInputAt = 0, lastShadowPos = new THREE.Vector3(1e9, 0, 0);
+const _sbQ = new THREE.Quaternion();
+let startT = 0, startBlend = null, lastFrameAt = 0, frameNo = 0, lastInputAt = 0, lastShadowPos = new THREE.Vector3(1e9, 0, 0);
 ['keydown', 'pointerdown', 'pointermove', 'wheel', 'touchstart'].forEach(ev => addEventListener(ev, () => { lastInputAt = performance.now(); }, { passive: true, capture: true }));
 const engineFrame = { on: true, rpm: 0, throttle: 0, speedKmh: 0, surface: '', shifting: false };
 // no rendering at all while the tab is hidden (rAF already stops; this also drops the catch-up frame on return)
-const dynRes = window.dynRes = { ema: 16.7, slow: 0, fast: 0 };
 // hidden tab: no rendering, and the AudioContext is suspended so ~40 oscillator / buffer voices stop costing CPU
 document.addEventListener('visibilitychange', () => {
   try { if (audioCtx) { if (document.hidden) audioCtx.suspend(); else if (isPlaying) audioCtx.resume(); } } catch (e) {}
@@ -1120,24 +1131,15 @@ document.addEventListener('visibilitychange', () => {
 (function loop(now) {
   requestAnimationFrame(loop);
   if (document.hidden || window.GamePaused) return;
-  // frame-rate cap (60, or 30 on Low / Battery saver): 120 Hz screens and laptops don't render twice as much for nothing.
+  // frame-rate cap (60, or 30 on Efficient / Low / Battery saver): 120 Hz screens and laptops don't render twice as much for nothing.
   // Idle (start screen, parked with no input, standing on foot) drops to Quality.idleFps; walking caps at 45.
   let cap = (window.Quality && Quality.fpsCap) || 60;
   const t = now || performance.now();
   const idle = !isPlaying || (Math.abs(carSpeed) < 0.3 && t - lastInputAt > 2500 && !Object.values(keyState).some(Boolean));
   if (idle) cap = Math.min(cap, Quality.idleFps || 30); else if (isPlaying && Player.mode === 'foot') cap = Math.min(cap, 45);
   if (now && now - lastFrameAt < 1000 / cap - 2) return;
-  // dynamic resolution: when rendered frames arrive late vs the cap (GPU-bound), drop the pixel ratio in 0.125 steps
-  // (never below 1); climb back when there is headroom. Keeps the High look while stopping the GPU from pegging.
-  if (lastFrameAt && !idle && cap >= 45) {
-    const iv = t - lastFrameAt, tgt = 1000 / cap;
-    if (iv < 250) { dynRes.ema += (iv - dynRes.ema) * 0.1; }
-    const maxPr = Math.min(devicePixelRatio || 1, (Quality.TIERS[Quality.tier] || {}).pixelRatio || 1);
-    if (dynRes.ema > tgt * 1.3) { dynRes.slow += iv; dynRes.fast = 0; } else if (dynRes.ema < tgt * 1.08) { dynRes.fast += iv; dynRes.slow = 0; } else { dynRes.slow = dynRes.fast = 0; }
-    const pr = renderer.getPixelRatio();
-    if (dynRes.slow > 1500 && pr > 1) { renderer.setPixelRatio(Math.max(1, pr - 0.125)); renderer.setSize(innerWidth, innerHeight); dynRes.slow = 0; dynRes.ema = tgt; }
-    else if (dynRes.fast > 5000 && pr < maxPr) { renderer.setPixelRatio(Math.min(maxPr, pr + 0.125)); renderer.setSize(innerWidth, innerHeight); dynRes.fast = 0; }
-  }
+  // dynamic resolution (quality.js): late frames lower the render scale in small steps, headroom raises it again
+  if (lastFrameAt) Quality.frame(t - lastFrameAt, cap, idle);
   lastFrameAt = t; frameNo++;
   const dt = Math.min(0.05, clock.getDelta());
   if (isPlaying) {
@@ -1168,11 +1170,25 @@ document.addEventListener('visibilitychange', () => {
     GameHooks.update.forEach(f => { try { f(dt, GAME); } catch (e) { console.error('feature update failed', e); } });
     updateHUD(dt);
   } else {
-    carRot += dt * 0.25; playerCarGroup.rotation.y = carRot;        // showroom spin
+    startT += dt;                                                   // start screen: the car stands still, the camera drifts (below)
   }
   if (Player.mode === 'crysta' || !isPlaying) updateCamera(dt); else Player.updateCam(dt);
   if (isPlaying) { Player.freeLook(dt); Player.tick(dt); }
-  if (!isPlaying) { camera.position.set(carPos.x + 6, 2.4, carPos.z + 6); camera.lookAt(carPos.x, 1, carPos.z); }
+  if (!isPlaying) {
+    // start screen: a slow drone pass over the lane in front of the house (gate, cars, bikes, the village behind);
+    // the view is aimed a little left of the house so it sits in the open right-hand side, clear of the start card
+    const SH = window.SafeHouse2;
+    if (SH && SH.W) {
+      const a = -7 + Math.sin(startT * 0.07) * 9, b = -21 - Math.cos(startT * 0.05) * 3, h = 6.2 + Math.sin(startT * 0.045 + 1) * 1.4;
+      const p = SH.W(a, b), q = SH.W(-13 + Math.sin(startT * 0.07) * 3, 2), gy = carPos.y || 0;
+      camera.position.set(p.x, gy + h, p.z); camera.lookAt(q.x, gy + 1.6, q.z);
+    } else { camera.position.set(carPos.x + 6, 2.4, carPos.z + 6); camera.lookAt(carPos.x, 1, carPos.z); }
+  }
+  if (startBlend && isPlaying) {
+    startBlend.t += dt / 1.8; const u = Math.min(1, startBlend.t), k = u * u * (3 - 2 * u);
+    if (u >= 1) startBlend = null;
+    else { camera.position.lerpVectors(startBlend.p, camera.position, k); _sbQ.copy(startBlend.q).slerp(camera.quaternion, k); camera.quaternion.copy(_sbQ); }
+  }
   updateDayNight(isPlaying ? dt : 0); if (window.Weather) Weather.frame(dt); sunLight.target.position.set(carPos.x, 0, carPos.z);
   beacon.rotation.y += dt;
   sky.position.copy(camera.position); stars.position.copy(camera.position);

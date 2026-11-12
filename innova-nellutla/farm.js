@@ -195,7 +195,7 @@
     if (on) { P.c0 = P.c0 === undefined ? f.c : P.c0; P.crop0 = P.crop0 === undefined ? f.crop : P.crop0; f.c = 1; f.crop = null; }
     else if (P.c0 !== undefined) { f.c = P.c0; f.crop = P.crop0; }
     if (P.sign) P.sign.visible = true; if (P.board) P.board.visible = !on;
-    try { world.setDetail(window.Quality ? Quality.tier : 'high'); } catch (e) {}
+    try { world.setDetail(window.Quality ? Quality.level : 'high'); } catch (e) {}
   }
 
   // ---------------------------------------------------------------- rules

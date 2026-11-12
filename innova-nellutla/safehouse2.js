@@ -661,7 +661,7 @@
   // The lane runs wall to drain with no shoulder, so they stand nose to tail hard against the front wall west of the
   // pedestrian gate (as the village cars further along do), noses toward the gates, leaving the far half of the lane and
   // both gateways free. [TrafficModels kind, paint, a (centre), b (centre), half width]. F drives them (Player.addParked).
-  const STREET_CARS = [['hilux', 0x8a8a68, -13.4, -6.72, 0.95], ['crysta2023', 0xf4f4f0, -19.05, -6.72, 0.95]];
+  const STREET_CARS = [['hilux', 0x8a8a68, 0.7, -6.72, 0.95], ['crysta2023', 0xf4f4f0, -19.05, -6.72, 0.95]];
   const streetCars = [];
   function spawnStreetCars() {
     const P = PL(), TMs = TM(); if (!P || !TMs || !P.addParked || streetCars.length) return;

@@ -2180,7 +2180,7 @@
       },
     };
     let vLevel = 'high';
-    const V_R = { low: { trim: 0, green: 0, bou: 0, grass: 0, clutter: 0 }, medium: { trim: 110, green: 110, bou: 110, grass: 60, clutter: 0 }, high: { trim: 90, green: 90, bou: 90, grass: 70, clutter: 90 } };
+    const V_R = { efficient: { trim: 0, green: 0, bou: 0, grass: 0, clutter: 0 }, low: { trim: 0, green: 0, bou: 0, grass: 0, clutter: 0 }, medium: { trim: 110, green: 110, bou: 110, grass: 60, clutter: 0 }, high: { trim: 90, green: 90, bou: 90, grass: 70, clutter: 90 } };
     function updateVillage(cp) {
       const R = V_R[vLevel] || V_R.high, pad = VC * 0.71;
       for (const e of vCells.values()) {
@@ -2415,9 +2415,9 @@
           }
       for (const k in CROP) { const c = CROP[k]; c.im.count = c.n; c.im.instanceMatrix.needsUpdate = true; }
     }
-    // quality hook: 'low' | 'medium' | 'high'
+    // quality hook: 'efficient' | 'low' | 'medium' | 'high'
     function setDetail(level) {
-      const L2 = { low: [0, 0, 300], medium: [55, 25, 450], high: [85, 45, 600] }[level] || [85, 45, 600];
+      const L2 = { efficient: [0, 0, 220], low: [0, 0, 300], medium: [55, 25, 450], high: [85, 45, 600] }[level] || [85, 45, 600];
       [cropR, tuftR, bundLod] = L2; cropX = 1e9;
       vLevel = V_R[level] ? level : 'high';
       chunkX = 1e9;
@@ -2429,7 +2429,7 @@
     // Each chunk also gets a per-tier distance rule (hide / low-poly swap) applied in updateChunks().
     // per-tier distances (m, from the chunk's sphere surface): [low, medium, high]
     const CH_DIST = { shrub: [110, 180, 240], prop: [120, 200, 260], crownLo: [140, 200, 280], trunk: [220, 360, 480], palm: [280, 450, 600] };
-    const chDist = (k) => { const t = CH_DIST[k]; return vLevel === 'low' ? t[0] : vLevel === 'medium' ? t[1] : t[2]; };
+    const chDist = (k) => { const t = CH_DIST[k]; return vLevel === 'efficient' ? t[0] * 0.8 : vLevel === 'low' ? t[0] : vLevel === 'medium' ? t[1] : t[2]; };
     function shallowGeo(base, sphere) {          // shares GPU buffers with base; only the bounding sphere differs
       const g = new THREE.BufferGeometry(); g.index = base.index;
       for (const n in base.attributes) g.attributes[n] = base.attributes[n];
@@ -3366,7 +3366,7 @@
       peopleT += dt;
       const M = people.meshes, QUIET = window.NELLUTLA_QUIET || [];
       // quality.js lowers mesh.count to drop the tail of the crowd: pick that up as a slot limit
-      const QL = people.qLim, NX = {}, NF = {}, MF = people.far, PR2 = Math.pow(vLevel === 'low' ? 160 : vLevel === 'medium' ? 230 : 300, 2), SH2 = PEOPLE_SH * PEOPLE_SH;
+      const QL = people.qLim, NX = {}, NF = {}, MF = people.far, PR2 = Math.pow(vLevel === 'efficient' ? 120 : vLevel === 'low' ? 160 : vLevel === 'medium' ? 230 : 300, 2), SH2 = PEOPLE_SH * PEOPLE_SH;
       const BN = [1e9, 1e9, -1e9, -1e9], BF = [1e9, 1e9, -1e9, -1e9];
       for (const k in M) { if (M[k].count !== people.lastN[k]) QL[k] = M[k].count; NX[k] = NF[k] = 0; }
       const meshOf = (k) => k === 'armL' || k === 'armR' ? 'arm' : k === 'legL' || k === 'legR' ? 'leg' : k;

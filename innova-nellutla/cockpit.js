@@ -27,8 +27,8 @@ window.Cockpit = (function () {
   // true planar reflection: the camera is the eye reflected in the mirror plane, looking through the mirror rectangle
   // (off-axis frustum, near plane on the glass). k widens a mirror's view about its centre, like convex glass.
   // [w, h, frames between passes, far]. Only one region is drawn per pass, so the cost is one reduced scene.
-  const QS = { low: [360, 212, 4, 90], medium: [512, 300, 3, 115] }, QHI = [720, 424, 2, 140];   // a mirror is a few centimetres of glass: past ~140 m nothing in it is a pixel tall
-  const qual = () => QS[(window.Quality && Quality.tier) || 'high'] || QHI;
+  const QS = { efficient: [256, 150, 6, 60], low: [360, 212, 4, 90], medium: [512, 300, 3, 115] }, QHI = [720, 424, 2, 140];   // a mirror is a few centimetres of glass: past ~140 m nothing in it is a pixel tall
+  const qual = () => QS[(window.Quality && Quality.level) || 'high'] || QHI;
   const SLOT = { C: [0, 0.5, 1, 0.5], L: [0, 0, 0.495, 0.5], R: [0.505, 0, 0.495, 0.5] };
   let rt = null, rtRead = false, mirrorCam = null, turn = 0;
   const mirrorMats = [];
@@ -565,7 +565,7 @@ window.Cockpit = (function () {
   function reverseFrame(r, scene) {
     if (revMat && revMat !== revWant) { revMat.map = revMap; revMat = null; }
     if (!revWant) return;
-    if ((revTurn++ % 3) === 0 || !revRT) try { renderReverse(r, scene); } catch (e) { console.warn('reverse cam', e); r.setRenderTarget(null); }
+    if ((revTurn++ % (qual()[2] >= 6 ? 5 : 3)) === 0 || !revRT) try { renderReverse(r, scene); } catch (e) { console.warn('reverse cam', e); r.setRenderTarget(null); }
     if (revRT && !revMat) { revMat = revWant; revMap = revMat.map; revMat.map = revRT.texture; }
     revWant = null;
   }

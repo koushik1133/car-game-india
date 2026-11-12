@@ -47,7 +47,7 @@
   // ------------------------------------------------------------------ scene handles (lazy: the scene is built after this file loads)
   let G = null, pts = null, U = null, mats = null, flash = 0, flash2 = 0, boltT = 8, indoor = 0, indoorT = 0, tSec = 0, maxPts = 0;
   let col = null, colN = null, colF = null;
-  const MAXN = { low: 1200, medium: 2400, high: 4000 };
+  const MAXN = { low: 1200, medium: 2400, high: 4000 };   // fallback when quality.js is absent; the tier's weatherPts otherwise
   function ready() {
     if (G) return true;
     try { if (typeof scene === 'undefined' || !scene || typeof skyU === 'undefined' || !sunLight || !hemiLight || !camera) return false; } catch (e) { return false; }
@@ -96,7 +96,7 @@
     pts.onBeforeRender = function (r, s, cam) { const h = cam === G.camera ? 0 : 1; if (U.uHide.value !== h) { U.uHide.value = h; m.uniformsNeedUpdate = true; } };
     G.scene.add(pts); setCount();
   }
-  function setCount() { maxPts = MAXN[(window.Quality && Quality.tier) || 'medium'] || 2400; }
+  function setCount() { maxPts = (window.Quality && Quality.T && Quality.T.weatherPts) || MAXN[(window.Quality && Quality.tier) || 'medium'] || 2400; }
   // road, ground and outer-field materials: remembered with their original colours
   function collectMats() {
     mats = []; const seen = new Set();
@@ -120,7 +120,7 @@
     }
   }
   function restoreMats() { if (mats) for (const o of mats) { o.m.color.copy(o.c); o.m.emissive.copy(o.e); o.tint = -1; } }
-  function baseFog() { const T = window.Quality && Quality.TIERS[Quality.tier]; return T || { fogNear: 250, fogFar: 1500 }; }
+  function baseFog() { const T = window.Quality && Quality.TIERS[Quality.level]; return T || { fogNear: 250, fogFar: 1500 }; }
 
   // ------------------------------------------------------------------ sound: rain bed and thunder, synthesised
   let ac = null, aOut = null, aRain = null, aLow = null, aSrc = null, aBuf = null, aLast = -1, aT = 0;

@@ -5,9 +5,18 @@
 // is met, so anything that reads its position still gets a correct one.
 (function () {
   const base = THREE.Object3D.prototype.updateMatrixWorld;
-  const stats = { skipped: 0, on: true };
+  const stats = { skipped: 0, still: 0, on: true, lazy: true };
   function walk(o, force) {
-    if (o.matrixAutoUpdate) o.updateMatrix();
+    // An object that has not moved, turned or been resized since the last frame keeps the matrix it has: rebuilding it
+    // would give the same numbers. Most of the scene (buildings, parked things, parts of models) is like that.
+    if (o.matrixAutoUpdate) {
+      const p = o.position, q = o.quaternion, s = o.scale;
+      if (!stats.lazy || o._px !== p.x || o._py !== p.y || o._pz !== p.z || o._qx !== q._x || o._qy !== q._y || o._qz !== q._z || o._qw !== q._w
+          || o._sx !== s.x || o._sy !== s.y || o._sz !== s.z || o._mp !== o.parent) {   // a new parent moves it too
+        o._px = p.x; o._py = p.y; o._pz = p.z; o._qx = q._x; o._qy = q._y; o._qz = q._z; o._qw = q._w; o._sx = s.x; o._sy = s.y; o._sz = s.z; o._mp = o.parent;
+        o.updateMatrix();
+      } else stats.still++;
+    }
     if (o.matrixWorldNeedsUpdate || force) {
       if (o.parent === null) o.matrixWorld.copy(o.matrix); else o.matrixWorld.multiplyMatrices(o.parent.matrixWorld, o.matrix);
       o.matrixWorldNeedsUpdate = false; force = true;
@@ -43,7 +52,7 @@
     const scene = G.scene;
     scene.updateMatrixWorld = function (force) {
       if (force || !stats.on) return base.call(this, force);
-      stats.skipped = 0; walk(this, false);
+      stats.skipped = 0; stats.still = 0; walk(this, false);
     };
     window.Perf = stats;
   });
